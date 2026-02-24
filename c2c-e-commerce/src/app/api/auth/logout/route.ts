@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { authenticate, AuthError } from "@/lib/middleware";
+import { jsonError, jsonOk } from "@/lib/response";
 
 // JWTs are stateless — the canonical logout is client-side token discard.
 // This endpoint authenticates the request (so an invalid/expired token gets a
@@ -11,20 +12,19 @@ import { authenticate, AuthError } from "@/lib/middleware";
 export async function POST(request: NextRequest) {
   try {
     const payload = authenticate(request);
-
     // Placeholder for server-side blocklist:
     // await blocklist.add(payload.sub, payload.exp);
 
-    return NextResponse.json({
+    return jsonOk({
       message: "Logged out successfully",
       hint: "Discard the token on the client side",
       sub: payload.sub,
     });
   } catch (err) {
     if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.statusCode });
+      return jsonError(err.message, err.statusCode);
     }
     console.error("[POST /api/auth/logout]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }

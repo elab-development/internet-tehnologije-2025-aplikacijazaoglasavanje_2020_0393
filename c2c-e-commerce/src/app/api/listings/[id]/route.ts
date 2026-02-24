@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { listings } from "@/db/schema";
+import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
 
@@ -28,7 +28,24 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         400 );
     }
 
-    const [listing] = await db.select().from(listings).where(eq(listings.id, id)).limit(1);
+    const [listing] = await db
+      .select({
+        id: listings.id,
+        title: listings.title,
+        description: listings.description,
+        price: listings.price,
+        status: listings.status,
+        sellerId: listings.sellerId,
+        categoryId: listings.categoryId,
+        createdAt: listings.createdAt,
+        sellerName: users.name,
+        categoryName: categories.name,
+      })
+      .from(listings)
+      .leftJoin(users, eq(users.id, listings.sellerId))
+      .leftJoin(categories, eq(categories.id, listings.categoryId))
+      .where(eq(listings.id, id))
+      .limit(1);
 
     if (!listing) {
       return jsonError(

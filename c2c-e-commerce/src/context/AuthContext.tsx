@@ -53,20 +53,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Rehydrate from localStorage on mount
+  // Rehydrate current user from localStorage token on mount
   useEffect(() => {
     const stored = localStorage.getItem("token");
     if (!stored) {
-      setLoading(false);
+      Promise.resolve().then(() => setLoading(false));
       return;
     }
-    setToken(stored);
+
+    Promise.resolve().then(() => setToken(stored));
+
     api
       .get<{ user: AuthUser }>("/api/auth/me")
       .then(({ user }) => setUser(user))
       .catch(() => {
         localStorage.removeItem("token");
         setToken(null);
+        setUser(null);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -89,11 +92,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("token");
-    setToken(null);
-    setUser(null);
-    // fire-and-forget server-side session cleanup
-    api.post("/api/auth/logout").catch(() => {});
+    // Fire-and-forget server-side session cleanup, then always clear client auth.
+    api
+      .post("/api/auth/logout")
+      .catch(() => {})
+      .finally(() => {
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+      });
   }, []);
 
   return (
