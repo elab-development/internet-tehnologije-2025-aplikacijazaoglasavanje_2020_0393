@@ -31,16 +31,14 @@ export default function Navbar() {
   const { user, logout, loading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  // Derive open state from pathname so the menu closes automatically on navigation
+  // without needing a setState call inside a useEffect.
+  const [openedForPath, setOpenedForPath] = useState<string | null>(null);
+  const mobileOpen = openedForPath === pathname;
 
   const avatarUrl = user
     ? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.name)}`
     : "";
-
-  // Close mobile menu on route change
-  useEffect(() => {
-    if (mobileOpen) setMobileOpen(false);
-  }, [pathname]);
 
   // Lock body scroll while mobile menu is open
   useEffect(() => {
@@ -170,7 +168,7 @@ export default function Navbar() {
             aria-label={mobileOpen ? "Close menu" : "Open menu"}
             aria-expanded={mobileOpen}
             className="flex sm:hidden items-center justify-center rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 transition-colors"
-            onClick={() => setMobileOpen((v) => !v)}
+            onClick={() => setOpenedForPath((prev) => prev === null ? pathname : null)}
           >
             {mobileOpen ? <RiCloseLine size={22} /> : <RiMenuLine size={22} />}
           </button>
