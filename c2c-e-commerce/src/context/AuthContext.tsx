@@ -23,6 +23,7 @@ type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
   loading: boolean;
+  isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterPayload) => Promise<void>;
   logout: () => void;
@@ -96,7 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, isAuthenticated: !!user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );
