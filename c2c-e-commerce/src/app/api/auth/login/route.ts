@@ -1,25 +1,26 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
+import { jsonError, jsonOk } from "@/lib/response";
 
 export async function POST(request: NextRequest) {
   try {
     const body: unknown = await request.json();
 
     if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      return jsonError("Invalid request body", 400);
     }
 
     const { email, password } = body as Record<string, unknown>;
 
     // ── Validation ────────────────────────────────────────────────────────────
     if (!email || typeof email !== "string") {
-      return NextResponse.json({ error: "email is required" }, { status: 400 });
+      return jsonError("email is required", 400);
     }
     if (!password || typeof password !== "string") {
-      return NextResponse.json({ error: "password is required" }, { status: 400 });
+      return jsonError("password is required", 400);
     }
 
     // ── Look up user ──────────────────────────────────────────────────────────
@@ -30,10 +31,7 @@ export async function POST(request: NextRequest) {
       .limit(1);
 
     // Use a consistent error message to avoid user enumeration
-    const invalidCredentials = NextResponse.json(
-      { error: "Invalid email or password" },
-      { status: 401 }
-    );
+    const invalidCredentials = jsonError("Invalid email or password", 401);
 
     if (!user) return invalidCredentials;
 
@@ -43,9 +41,9 @@ export async function POST(request: NextRequest) {
     // ── Issue token ───────────────────────────────────────────────────────────
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
-    return NextResponse.json({ user: sanitizeUser(user), token });
+    return jsonOk({ user: sanitizeUser(user), token });
   } catch (err) {
     console.error("[POST /api/auth/login]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }

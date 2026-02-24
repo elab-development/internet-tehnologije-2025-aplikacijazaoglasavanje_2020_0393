@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { sanitizeUser } from "@/lib/auth";
 import { authenticate, AuthError } from "@/lib/middleware";
+import { jsonError, jsonOk } from "@/lib/response";
 
 export async function GET(request: NextRequest) {
   try {
@@ -17,15 +18,15 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return jsonError("User not found", 404);
     }
 
-    return NextResponse.json({ user: sanitizeUser(user) });
+    return jsonOk({ user: sanitizeUser(user) });
   } catch (err) {
     if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message }, { status: err.statusCode });
+      return jsonError(err.message, err.statusCode);
     }
     console.error("[GET /api/auth/me]", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }
