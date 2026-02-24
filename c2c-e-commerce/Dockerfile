@@ -42,6 +42,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
 
+# Copy migration script and SQL files (used by railway.toml preDeployCommand)
+COPY --from=builder --chown=nextjs:nodejs /app/scripts         ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/drizzle         ./drizzle
+
 USER nextjs
 
 EXPOSE 3000
