@@ -214,7 +214,7 @@ function ListingsPageContent() {
             <RiSearchLine size={32} />
             </span>
             <p className="text-lg font-semibold text-zinc-700">No listings found</p>
-            <p className="text-sm text-zinc-500 max-w-xs">Try adjusting your filters or search terms to find what you're looking for.</p>
+            <p className="text-sm text-zinc-500 max-w-xs">Try adjusting your filters or search terms to find what you&apos;re looking for.</p>
             <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
         </div>
         ) : (
