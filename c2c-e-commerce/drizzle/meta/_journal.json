@@ -22,6 +22,13 @@
       "when": 1771945695215,
       "tag": "0002_add_rating_check_and_description_notnull",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1771945800000,
+      "tag": "0003_add_image_url_to_listings",
+      "breakpoints": true
     }
   ]
 }

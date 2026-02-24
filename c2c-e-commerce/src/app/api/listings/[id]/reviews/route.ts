@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { listings, reviews } from "@/db/schema";
+import { listings, reviews, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 
@@ -30,10 +30,16 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     const rows = await db
       .select()
       .from(reviews)
+      .leftJoin(users, eq(users.id, reviews.reviewerId))
       .where(eq(reviews.listingId, listingId))
       .orderBy(reviews.createdAt);
 
-    return jsonOk(rows);
+    return jsonOk(
+      rows.map((row) => ({
+        ...row.reviews,
+        reviewerName: row.users?.name ?? null,
+      }))
+    );
   } catch (err) {
     console.error("[GET /api/listings/[id]/reviews]", err);
     return jsonError("Internal server error");

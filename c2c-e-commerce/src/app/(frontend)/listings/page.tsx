@@ -3,9 +3,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Metadata } from "next";
+import toast from "react-hot-toast";
+import { RiSearchLine } from "@remixicon/react";
 import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import InputField from "@/components/ui/InputField";
+import { ListingCardSkeleton } from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
 
 export const _metadata: Pick<Metadata, "title"> = {
@@ -89,7 +92,9 @@ export default function ListingsPage() {
     setTotalPages(Math.max(1, response.totalPages || 1));
     })
     .catch((err: unknown) => {
-    setError(err instanceof Error ? err.message : "Failed to load listings");
+    const msg = err instanceof Error ? err.message : "Failed to load listings";
+    setError(msg);
+    toast.error(msg);
     setListings([]);
     setTotalPages(1);
     })
@@ -191,17 +196,29 @@ export default function ListingsPage() {
         </section>
 
         {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span>{error}</span>
         </div>
         )}
 
         {loading ? (
-        <p className="text-sm text-zinc-500">Loading listings...</p>
+        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" aria-label="Loading listings">
+            {Array.from({ length: 8 }).map((_, i) => (
+            <ListingCardSkeleton key={i} />
+            ))}
+        </section>
         ) : listings.length === 0 ? (
-        <p className="text-sm text-zinc-500">No listings match your filters.</p>
+        <div className="flex flex-col items-center gap-4 py-20 text-center">
+            <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
+            <RiSearchLine size={32} />
+            </span>
+            <p className="text-lg font-semibold text-zinc-700">No listings found</p>
+            <p className="text-sm text-zinc-500 max-w-xs">Try adjusting your filters or search terms to find what you're looking for.</p>
+            <Button variant="secondary" onClick={clearFilters}>Clear filters</Button>
+        </div>
         ) : (
-        <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {listings.map((listing) => (
             <Card
                 key={listing.id}

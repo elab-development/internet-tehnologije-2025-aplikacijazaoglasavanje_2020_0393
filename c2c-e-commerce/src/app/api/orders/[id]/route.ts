@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { orderItems, orders } from "@/db/schema";
+import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 
@@ -31,9 +31,19 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       return jsonError("Forbidden", 403);
     }
 
-    const items = await db.select().from(orderItems).where(eq(orderItems.orderId, id));
+    const items = await db
+      .select()
+      .from(orderItems)
+      .leftJoin(listings, eq(listings.id, orderItems.listingId))
+      .where(eq(orderItems.orderId, id));
 
-    return jsonOk({ ...order, items });
+    return jsonOk({
+      ...order,
+      items: items.map((row) => ({
+        ...row.order_items,
+        listingTitle: row.listings?.title ?? `Listing #${row.order_items.listingId}`,
+      })),
+    });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     console.error("[GET /api/orders/[id]]", err);

@@ -2,10 +2,13 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import InputField from "@/components/ui/InputField";
 import Modal from "@/components/ui/Modal";
+import { ListingDetailSkeleton } from "@/components/ui/Skeleton";
 import { useAuth } from "@/context/AuthContext";
+import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { api } from "@/lib/api";
 
 type Listing = {
@@ -31,7 +34,12 @@ type Review = {
   listingId: number;
   rating: number;
   comment: string | null;
+  reviewerName: string | null;
   createdAt: string;
+};
+
+type CreatedOrder = {
+  id: number;
 };
 
 type Props = {
@@ -52,11 +60,22 @@ export default function ListingDetailPage({ params }: Props) {
 
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buying, setBuying] = useState(false);
+  const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
 
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [comment, setComment] = useState("");
-  const [rating, setRating] = useState("5");
+  const [rating, setRating] = useState(5);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
+
+  const {
+    selectedCurrency,
+    setSelectedCurrency,
+    loadingRates,
+    ratesError,
+    availableCurrencies,
+    formatConverted,
+  } = useCurrencyConversion();
 
   const canReview = isAuthenticated && user?.role === "buyer";
 
@@ -66,6 +85,11 @@ export default function ListingDetailPage({ params }: Props) {
     const category = categories.find((item) => item.id === listing.categoryId);
     return category?.name ?? "Uncategorized";
   }, [categories, listing]);
+
+  async function fetchReviews(idNum: number) {
+    const reviewData = await api.get<Review[]>(`/api/listings/${idNum}/reviews`);
+    setReviews(reviewData);
+  }
 
   useEffect(() => {
     let alive = true;
@@ -88,17 +112,16 @@ export default function ListingDetailPage({ params }: Props) {
         setLoading(true);
         setError(null);
 
-        const [listingData, reviewData, categoryData] = await Promise.all([
+        const [listingData, categoryData] = await Promise.all([
           api.get<Listing>(`/api/listings/${idNum}`),
-          api.get<Review[]>(`/api/listings/${idNum}/reviews`),
           api.get<Category[]>("/api/categories"),
         ]);
 
         if (!alive) return;
 
         setListing(listingData);
-        setReviews(reviewData);
         setCategories(categoryData);
+        await fetchReviews(idNum);
       } catch (err: unknown) {
         if (!alive) return;
         setError(err instanceof Error ? err.message : "Failed to load listing");
@@ -131,12 +154,17 @@ export default function ListingDetailPage({ params }: Props) {
     setError(null);
 
     try {
-      await api.post("/api/orders", {
-        items: [{ listingId, quantity: 1 }],
+      const order = await api.post<CreatedOrder>("/api/orders", {
+        items: [{ listingId }],
       });
+
+      setOrderSuccessId(order.id);
       setIsBuyModalOpen(false);
+      toast.success(`Order #${order.id} placed successfully! 🎉`);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create order");
+      const msg = err instanceof Error ? err.message : "Failed to create order";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setBuying(false);
     }
@@ -150,44 +178,57 @@ export default function ListingDetailPage({ params }: Props) {
     setReviewSubmitting(true);
 
     try {
-      const ratingValue = Number(rating);
-      if (!Number.isInteger(ratingValue) || ratingValue < 1 || ratingValue > 5) {
+      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
         setReviewError("Rating must be between 1 and 5");
         return;
       }
 
-      const created = await api.post<Review>(`/api/listings/${listingId}/reviews`, {
+      await api.post<Review>(`/api/listings/${listingId}/reviews`, {
         comment: comment.trim(),
-        rating: ratingValue,
+        rating,
       });
 
-      setReviews((prev) => [...prev, created]);
+      await fetchReviews(listingId);
+      setIsReviewModalOpen(false);
       setComment("");
-      setRating("5");
+      setRating(5);
+      toast.success("Review submitted!");
     } catch (err: unknown) {
-      setReviewError(err instanceof Error ? err.message : "Failed to submit review");
+      const msg = err instanceof Error ? err.message : "Failed to submit review";
+      setReviewError(msg);
+      toast.error(msg);
     } finally {
       setReviewSubmitting(false);
     }
   }
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Loading listing...</p>;
+    return <ListingDetailSkeleton />;
   }
-
   if (error || !listing) {
     return (
       <div className="space-y-4">
-        <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error ?? "Listing not found"}
-        </p>
-        <Button variant="secondary" onClick={() => router.push("/")}>Back to listings</Button>
+        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <span>{error ?? "Listing not found"}</span>
+        </div>
+        <Button variant="secondary" onClick={() => router.push("/listings")}>Back to listings</Button>
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
+      {orderSuccessId && (
+        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <span className="shrink-0 text-base">✅</span>
+          <div className="flex flex-col gap-1">
+            <p className="font-semibold">Order placed successfully!</p>
+            <p>Order ID: <span className="font-mono font-bold">#{orderSuccessId}</span></p>
+          </div>
+        </div>
+      )}
+
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4">
           <span className="inline-flex w-fit rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
@@ -201,13 +242,41 @@ export default function ListingDetailPage({ params }: Props) {
               <span className="font-medium text-zinc-900">Price:</span> ${Number(listing.price).toFixed(2)}
             </p>
             <p>
+              <span className="font-medium text-zinc-900">Converted:</span> {formatConverted(Number(listing.price))}
+            </p>
+            <p>
               <span className="font-medium text-zinc-900">Seller:</span>{" "}
               {listing.sellerName ?? `Seller #${listing.sellerId}`}
             </p>
           </div>
 
-          <div className="pt-2">
+          <div className="flex flex-col gap-1 sm:max-w-xs">
+            <label className="text-sm font-medium text-zinc-700" htmlFor="listing-currency">
+              Convert price
+            </label>
+            <select
+              id="listing-currency"
+              value={selectedCurrency}
+              onChange={(event) => setSelectedCurrency(event.target.value)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              disabled={loadingRates}
+            >
+              {availableCurrencies.map((currency) => (
+                <option key={currency} value={currency}>
+                  {currency}
+                </option>
+              ))}
+            </select>
+            {ratesError && <p className="text-xs text-red-500">{ratesError}</p>}
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2">
             <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
+            {orderSuccessId && (
+              <Button variant="secondary" onClick={() => router.push(`/orders/${orderSuccessId}`)}>
+                View order
+              </Button>
+            )}
           </div>
         </div>
       </section>
@@ -221,6 +290,21 @@ export default function ListingDetailPage({ params }: Props) {
           <div className="space-y-3">
             {reviews.map((review) => (
               <article key={review.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                <div className="mb-2 flex items-center gap-2">
+                  <img
+                    src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(review.reviewerName ?? `user-${review.reviewerId}`)}`}
+                    alt={review.reviewerName ?? `User ${review.reviewerId}`}
+                    className="h-8 w-8 rounded-full border border-zinc-200 bg-zinc-50"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-zinc-900">
+                      {review.reviewerName ?? `Buyer #${review.reviewerId}`}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      {new Date(review.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
                 <p className="text-sm font-medium text-zinc-900">Rating: {review.rating}/5</p>
                 <p className="mt-1 text-sm text-zinc-600">{review.comment || "No comment."}</p>
               </article>
@@ -229,41 +313,9 @@ export default function ListingDetailPage({ params }: Props) {
         )}
 
         {canReview && (
-          <form onSubmit={handleSubmitReview} className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-            <h3 className="mb-4 text-lg font-semibold text-zinc-900">Leave a review</h3>
-
-            {reviewError && (
-              <p className="mb-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {reviewError}
-              </p>
-            )}
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <InputField
-                label="Comment"
-                type="text"
-                value={comment}
-                onChange={(event) => setComment(event.target.value)}
-                placeholder="Share your experience"
-              />
-
-              <InputField
-                label="Star rating"
-                type="number"
-                value={rating}
-                onChange={(event) => setRating(event.target.value)}
-                min={1}
-                max={5}
-                step={1}
-              />
-            </div>
-
-            <div className="mt-4">
-              <Button type="submit" loading={reviewSubmitting}>
-                Submit review
-              </Button>
-            </div>
-          </form>
+          <Button variant="secondary" onClick={() => setIsReviewModalOpen(true)}>
+            Write a review
+          </Button>
         )}
       </section>
 
@@ -287,6 +339,54 @@ export default function ListingDetailPage({ params }: Props) {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        title="Submit review"
+      >
+        <form onSubmit={handleSubmitReview} className="space-y-4">
+          {reviewError && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {reviewError}
+            </p>
+          )}
+
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-zinc-700">Star rating</p>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRating(value)}
+                  className="text-2xl leading-none"
+                  aria-label={`Set rating to ${value}`}
+                >
+                  {value <= rating ? "★" : "☆"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <InputField
+            label="Comment"
+            type="text"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+            placeholder="Share your experience"
+          />
+
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="secondary" onClick={() => setIsReviewModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={reviewSubmitting}>
+              Submit review
+            </Button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       .select()
       .from(orders)
       .where(payload.role === "admin" ? undefined : eq(orders.buyerId, payload.sub))
-      .orderBy(orders.createdAt);
+      .orderBy(desc(orders.createdAt));
 
     return jsonOk(rows);
   } catch (err) {

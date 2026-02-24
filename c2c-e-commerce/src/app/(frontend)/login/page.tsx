@@ -4,6 +4,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
+import toast from "react-hot-toast";
 import { RiStoreLine, RiLoginBoxLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
@@ -55,9 +56,12 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
+      toast.success("Welcome back!");
       router.push("/");
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      const msg = err instanceof Error ? err.message : "Login failed";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -82,9 +86,10 @@ export default function LoginPage() {
           {error && (
             <div
               role="alert"
-              className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
             >
-              {error}
+              <span className="shrink-0 mt-0.5">⚠️</span>
+              <span>{error}</span>
             </div>
           )}
 

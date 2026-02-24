@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import InputField from "@/components/ui/InputField";
 import { useAuth } from "@/context/AuthContext";
@@ -68,16 +69,31 @@ export default function CreateListingPage() {
         categoryId: categoryId ? Number(categoryId) : null,
       });
 
+      toast.success("Listing created successfully!");
       router.push(`/listings/${created.id}`);
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to create listing");
+      const msg = err instanceof Error ? err.message : "Failed to create listing";
+      setError(msg);
+      toast.error(msg);
     } finally {
       setSubmitting(false);
     }
   }
 
   if (loading) {
-    return <p className="text-sm text-zinc-500">Checking permissions...</p>;
+    return (
+      <div className="mx-auto w-full max-w-2xl space-y-4" aria-hidden="true">
+        <div className="h-8 w-40 skeleton-shimmer rounded-lg" />
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm space-y-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <div className="h-4 w-20 skeleton-shimmer rounded" />
+              <div className="h-10 w-full skeleton-shimmer rounded-lg" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
 
   if (!isAuthenticated || (user?.role !== "seller" && user?.role !== "admin")) {
@@ -89,9 +105,10 @@ export default function CreateListingPage() {
       <h1 className="mb-6 text-2xl font-bold text-zinc-900">Create listing</h1>
 
       {error && (
-        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
+        <div role="alert" className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span className="shrink-0 mt-0.5">⚠️</span>
+          <span>{error}</span>
+        </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
