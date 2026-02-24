@@ -93,9 +93,15 @@ export default function Card({
         )}
       </div>
 
-      {/* Footer slot */}
+      {/* Footer slot – stop propagation so interactive elements don't trigger card onClick */}
       {footer && (
-        <div className="border-t border-zinc-100 px-4 py-3">{footer}</div>
+        <div
+          className="border-t border-zinc-100 px-4 py-3"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {footer}
+        </div>
       )}
     </div>
   );

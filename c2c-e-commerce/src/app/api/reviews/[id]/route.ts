@@ -15,6 +15,64 @@ function parseId(raw: string): number | null {
 // ─── DELETE /api/reviews/[id] ─────────────────────────────────────────────────
 // Authenticated. Owner (reviewer) or admin.
 
+/**
+ * @swagger
+ * /api/reviews/{id}:
+ *   delete:
+ *     tags: [Reviews]
+ *     summary: Delete a review
+ *     description: Permanently removes a review. Only the reviewer or an admin can delete.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Review ID
+ *     responses:
+ *       200:
+ *         description: Review deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Review deleted successfully
+ *       400:
+ *         description: Invalid review id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not the reviewer or admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Review not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);

@@ -1,2 +1,2 @@
 ALTER TABLE "listings" ALTER COLUMN "description" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "reviews" ADD CONSTRAINT "rating_range" CHECK ("reviews"."rating" >= 1 AND "reviews"."rating" <= 5);
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM information_schema.table_constraints WHERE constraint_name = 'rating_range') THEN ALTER TABLE "reviews" ADD CONSTRAINT "rating_range" CHECK ("reviews"."rating" >= 1 AND "reviews"."rating" <= 5); END IF; END $$;

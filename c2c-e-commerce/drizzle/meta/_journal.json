@@ -29,6 +29,13 @@
       "when": 1771945800000,
       "tag": "0003_add_image_url_to_listings",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1771945900000,
+      "tag": "0004_add_approved_rejected_order_status",
+      "breakpoints": true
     }
   ]
 }

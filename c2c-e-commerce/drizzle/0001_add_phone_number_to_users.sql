@@ -1,1 +1,1 @@
-ALTER TABLE "users" ADD COLUMN "phone_number" text;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "phone_number" text;

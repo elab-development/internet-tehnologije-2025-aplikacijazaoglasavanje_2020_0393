@@ -14,7 +14,7 @@ import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 type Order = {
   id: number;
   totalPrice: string;
-  status: "pending" | "paid" | "shipped" | "completed" | "cancelled";
+  status: "pending" | "paid" | "shipped" | "completed" | "cancelled" | "approved" | "rejected";
   createdAt: string;
 };
 
@@ -24,6 +24,18 @@ const statusClasses: Record<Order["status"], string> = {
   shipped: "bg-indigo-100 text-indigo-700",
   completed: "bg-emerald-100 text-emerald-700",
   cancelled: "bg-red-100 text-red-700",
+  approved: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+
+const statusLabels: Record<Order["status"], string> = {
+  pending: "Awaiting seller approval",
+  paid: "Paid",
+  shipped: "Shipped",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  approved: "Approved by seller",
+  rejected: "Rejected by seller",
 };
 
 function OrdersPageContent() {
@@ -136,7 +148,7 @@ function OrdersPageContent() {
                         statusClasses[order.status],
                       ].join(" ")}
                     >
-                      {order.status}
+                      {statusLabels[order.status]}
                     </span>
                   </div>
                   <Button size="sm" onClick={() => router.push(`/orders/${order.id}`)}>

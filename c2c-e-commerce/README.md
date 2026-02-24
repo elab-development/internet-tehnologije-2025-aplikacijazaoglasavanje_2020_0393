@@ -18,6 +18,22 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Docker development (with live reload)
+
+From the workspace root, run:
+
+```bash
+docker compose -f docker-compose.dev.yml up --build
+```
+
+This starts Next.js in development mode with polling enabled, which is more reliable for file watching on Windows bind mounts.
+
+If you previously started production compose (`docker-compose.yml`), stop it first:
+
+```bash
+docker compose down
+```
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

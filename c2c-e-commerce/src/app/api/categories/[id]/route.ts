@@ -15,6 +15,83 @@ function parseId(raw: string): number | null {
 // ─── PUT /api/categories/[id] ─────────────────────────────────────────────────
 // Admin only.
 
+/**
+ * @swagger
+ * /api/categories/{id}:
+ *   put:
+ *     tags: [Categories]
+ *     summary: Update a category
+ *     description: Updates an existing category. Admin only. Partial updates supported.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Category ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Gadgets
+ *               slug:
+ *                 type: string
+ *                 example: gadgets
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Updated description
+ *     responses:
+ *       200:
+ *         description: Category updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Category'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Category not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Slug already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
@@ -73,6 +150,58 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // ─── DELETE /api/categories/[id] ─────────────────────────────────────────────
 // Admin only.
 
+/**
+ * @swagger
+ * /api/categories/{id}:
+ *   delete:
+ *     tags: [Categories]
+ *     summary: Delete a category
+ *     description: Permanently removes a category. Admin only.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Category ID
+ *     responses:
+ *       200:
+ *         description: Category deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Category deleted successfully
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Category not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);

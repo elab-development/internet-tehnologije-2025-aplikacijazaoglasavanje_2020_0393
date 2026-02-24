@@ -75,6 +75,13 @@ export const CreateListingSchema = z.object({
   title: z.string().min(1, "title is required"),
   description: z.string().min(1, "description is required"),
   price: priceField,
+  imageUrl: z
+    .string()
+    .trim()
+    .url("imageUrl must be a valid URL")
+    .startsWith("http", "imageUrl must start with http or https")
+    .nullable()
+    .optional(),
   categoryId: z.number().int().nullable().optional(),
 });
 
@@ -86,6 +93,13 @@ export const UpdateListingSchema = z
       .min(1, "description must be a non-empty string")
       .optional(),
     price: priceField.optional(),
+    imageUrl: z
+      .string()
+      .trim()
+      .url("imageUrl must be a valid URL")
+      .startsWith("http", "imageUrl must start with http or https")
+      .nullable()
+      .optional(),
     categoryId: z.number().int().nullable().optional(),
     status: z.enum(["active", "sold", "removed"], {
       error: "status must be one of: active, sold, removed",

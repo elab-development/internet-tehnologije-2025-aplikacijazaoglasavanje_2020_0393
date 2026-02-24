@@ -15,6 +15,55 @@ function parseId(raw: string): number | null {
 // ─── GET /api/listings/[id]/reviews ──────────────────────────────────────────
 // Public.
 
+/**
+ * @swagger
+ * /api/listings/{id}/reviews:
+ *   get:
+ *     tags: [Reviews]
+ *     summary: List reviews for a listing
+ *     description: Returns all reviews for a specific listing, including the reviewer name.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Listing ID
+ *     responses:
+ *       200:
+ *         description: Array of reviews
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 allOf:
+ *                   - $ref: '#/components/schemas/Review'
+ *                   - type: object
+ *                     properties:
+ *                       reviewerName:
+ *                         type: string
+ *                         nullable: true
+ *                         example: Jane Smith
+ *       400:
+ *         description: Invalid listing id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Listing not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const listingId = parseId((await params).id);
@@ -50,6 +99,85 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 // Authenticated. Role: buyer.
 // Body: { rating: number (1-5); comment?: string }
 
+/**
+ * @swagger
+ * /api/listings/{id}/reviews:
+ *   post:
+ *     tags: [Reviews]
+ *     summary: Create a review for a listing
+ *     description: |
+ *       Adds a review to a listing. Only buyers can review.
+ *       A user can only submit one review per listing.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Listing ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [rating]
+ *             properties:
+ *               rating:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 5
+ *                 example: 4
+ *               comment:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Great product!
+ *     responses:
+ *       201:
+ *         description: Review created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Review'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not a buyer
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Listing not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Already reviewed this listing
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);

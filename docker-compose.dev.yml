@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: c2c-e-commerce-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-c2c_ecommerce}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-c2c_ecommerce}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  migrate:
+    build:
+      context: ./c2c-e-commerce
+      dockerfile: Dockerfile
+      target: migrator
+    container_name: c2c-e-commerce-migrate-dev
+    command: ["npm", "run", "db:migrate"]
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-c2c_ecommerce}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure
+
+  app:
+    build:
+      context: ./c2c-e-commerce
+      dockerfile: Dockerfile
+      target: deps
+    container_name: c2c-e-commerce-app-dev
+    working_dir: /app
+    command: ["sh", "-c", "npm ci && npm run dev -- --hostname 0.0.0.0 --port 3000"]
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-c2c_ecommerce}
+      NODE_ENV: development
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./c2c-e-commerce:/app
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  postgres_data_dev:

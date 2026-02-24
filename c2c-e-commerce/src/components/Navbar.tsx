@@ -11,6 +11,8 @@ import {
   RiMenuLine,
   RiCloseLine,
   RiAddCircleLine,
+  RiDashboardLine,
+  RiCodeLine,
 } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui";
@@ -20,6 +22,7 @@ import { Button } from "@/components/ui";
 const NAV_LINKS = [
   { href: "/listings", label: "Listings", icon: <RiStoreLine size={18} /> },
   { href: "/orders", label: "My Orders", icon: <RiShoppingBagLine size={18} /> },
+  { href: "/api-docs", label: "API Docs", icon: <RiCodeLine size={18} /> },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -86,6 +89,22 @@ export default function Navbar() {
               </li>
             );
           })}
+          {isSeller && (
+            <li>
+              <Link
+                href="/seller"
+                className={[
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  pathname === "/seller"
+                    ? "bg-indigo-50 text-indigo-700"
+                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+                ].join(" ")}
+              >
+                <RiDashboardLine size={18} />
+                Seller Dashboard
+              </Link>
+            </li>
+          )}
           {isSeller && (
             <li>
               <Link
@@ -179,6 +198,20 @@ export default function Navbar() {
               </Link>
             );
           })}
+          {isSeller && (
+            <Link
+              href="/seller"
+              className={[
+                "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                pathname === "/seller"
+                  ? "bg-indigo-50 text-indigo-700"
+                  : "text-zinc-700 hover:bg-zinc-100",
+              ].join(" ")}
+            >
+              <RiDashboardLine size={18} />
+              Seller Dashboard
+            </Link>
+          )}
           {isSeller && (
             <Link
               href="/listings/new"

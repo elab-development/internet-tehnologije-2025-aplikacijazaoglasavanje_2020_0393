@@ -17,6 +17,58 @@ function parseId(raw: string): number | null {
 // ─── GET /api/listings/[id] ───────────────────────────────────────────────────
 // Public. Returns a single active listing.
 
+/**
+ * @swagger
+ * /api/listings/{id}:
+ *   get:
+ *     tags: [Listings]
+ *     summary: Get a listing by ID
+ *     description: |
+ *       Returns a single listing with seller and category names.
+ *       Only active listings are visible publicly; the owner or admin can see any status.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Listing ID
+ *     responses:
+ *       200:
+ *         description: Listing details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Listing'
+ *                 - type: object
+ *                   properties:
+ *                     sellerName:
+ *                       type: string
+ *                       example: John Doe
+ *                     categoryName:
+ *                       type: string
+ *                       nullable: true
+ *                       example: Electronics
+ *       400:
+ *         description: Invalid listing id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Listing not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { id: rawId } = await params;
@@ -54,8 +106,19 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       );
     }
 
+    // Allow the owner seller or admin to view their own non-active listings
+    let isOwnerOrAdmin = false;
+    try {
+      const payload = authenticate(_request);
+      if (payload.role === "admin" || payload.sub === listing.sellerId) {
+        isOwnerOrAdmin = true;
+      }
+    } catch {
+      // Not authenticated – treat as public visitor
+    }
+
     // Only active listings are publicly visible
-    if (listing.status !== "active") {
+    if (listing.status !== "active" && !isOwnerOrAdmin) {
       return jsonError(
         "Listing not found",
         404 
@@ -72,6 +135,90 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 // ─── PUT /api/listings/[id] ───────────────────────────────────────────────────
 // Authenticated. Role: owner seller or admin.
 
+/**
+ * @swagger
+ * /api/listings/{id}:
+ *   put:
+ *     tags: [Listings]
+ *     summary: Update a listing
+ *     description: Updates an existing listing. Only the owner seller or an admin may update. Partial updates supported.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Listing ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *                 example: iPhone 15 Pro Max
+ *               description:
+ *                 type: string
+ *                 example: Updated description
+ *               price:
+ *                 oneOf:
+ *                   - type: number
+ *                   - type: string
+ *                 example: 1099.99
+ *               imageUrl:
+ *                 type: string
+ *                 nullable: true
+ *                 example: https://images.unsplash.com/photo-xyz
+ *               categoryId:
+ *                 type: integer
+ *                 nullable: true
+ *                 example: 3
+ *               status:
+ *                 type: string
+ *                 enum: [active, sold, removed]
+ *                 example: active
+ *     responses:
+ *       200:
+ *         description: Listing updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Listing'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not the owner or admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Listing not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
@@ -103,7 +250,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       return jsonError("Invalid request body", 400);
     }
 
-    const { title, description, price, categoryId, status } = body as Record<string, unknown>;
+    const { title, description, price, imageUrl, categoryId, status } = body as Record<string, unknown>;
 
     // ── Build update payload (only provided fields) ───────────────────────────
     const updates: Partial<typeof listings.$inferInsert> = {};
@@ -128,6 +275,31 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         return jsonError("price must be a non-negative number", 400);
       }
       updates.price = String(priceNum);
+    }
+
+    if (imageUrl !== undefined) {
+      if (imageUrl === null) {
+        updates.imageUrl = null;
+      } else {
+        if (typeof imageUrl !== "string") {
+          return jsonError("imageUrl must be a string", 400);
+        }
+
+        const trimmed = imageUrl.trim();
+        if (!trimmed) {
+          updates.imageUrl = null;
+        } else {
+          try {
+            const parsed = new URL(trimmed);
+            if (!["http:", "https:"].includes(parsed.protocol)) {
+              return jsonError("imageUrl must be a valid http or https URL", 400);
+            }
+            updates.imageUrl = parsed.toString();
+          } catch {
+            return jsonError("imageUrl must be a valid URL", 400);
+          }
+        }
+      }
     }
 
     if (categoryId !== undefined) {
@@ -165,6 +337,58 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // ─── DELETE /api/listings/[id] ────────────────────────────────────────────────
 // Authenticated. Role: owner seller or admin.
 
+/**
+ * @swagger
+ * /api/listings/{id}:
+ *   delete:
+ *     tags: [Listings]
+ *     summary: Delete a listing
+ *     description: Permanently removes a listing. Only the owner seller or an admin may delete.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Listing ID
+ *     responses:
+ *       200:
+ *         description: Listing deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Listing deleted successfully
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not the owner or admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Listing not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);

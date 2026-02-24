@@ -7,8 +7,43 @@ import { jsonOk, jsonError } from "@/lib/response";
 
 // ─── GET /api/users ───────────────────────────────────────────────────────────
 // Admin only. Returns all users (without passwordHash).
-
-export async function GET(request: NextRequest) {
+/**
+ * @swagger
+ * /api/users:
+ *   get:
+ *     tags: [Users]
+ *     summary: List all users
+ *     description: Returns all users sorted by creation date. Admin only. Passwords are excluded.
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */export async function GET(request: NextRequest) {
   try {
     const payload = authenticate(request);
     authorize("admin")(payload);

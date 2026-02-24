@@ -24,6 +24,7 @@ export default function CreateListingPage() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
 
   const [categories, setCategories] = useState<Category[]>([]);
@@ -66,6 +67,7 @@ export default function CreateListingPage() {
         title: title.trim(),
         description: description.trim(),
         price: Number(price),
+        imageUrl: imageUrl.trim() || null,
         categoryId: categoryId ? Number(categoryId) : null,
       });
 
@@ -139,6 +141,14 @@ export default function CreateListingPage() {
           step={0.01}
           placeholder="0.00"
           required
+        />
+
+        <InputField
+          label="Image URL"
+          type="text"
+          value={imageUrl}
+          onChange={(event) => setImageUrl(event.target.value)}
+          placeholder="https://example.com/image.jpg"
         />
 
         <div className="flex flex-col gap-1">

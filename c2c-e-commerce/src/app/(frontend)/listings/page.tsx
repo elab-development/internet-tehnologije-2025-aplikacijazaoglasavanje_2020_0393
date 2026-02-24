@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Metadata } from "next";
 import toast from "react-hot-toast";
@@ -38,7 +38,7 @@ type ListingsResponse = {
 
 type SortOption = "newest" | "price_asc" | "price_desc";
 
-export default function ListingsPage() {
+function ListingsPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -266,4 +266,12 @@ export default function ListingsPage() {
         </div>
     </div>
     );
+}
+
+export default function ListingsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-20 text-zinc-400">Loading listings...</div>}>
+      <ListingsPageContent />
+    </Suspense>
+  );
 }

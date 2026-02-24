@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
@@ -15,6 +15,73 @@ function parseId(raw: string): number | null {
 // ─── GET /api/orders/[id] ─────────────────────────────────────────────────────
 // Owner buyer or admin.
 
+/**
+ * @swagger
+ * /api/orders/{id}:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Get an order by ID
+ *     description: Returns a single order with its items. Only the buyer who placed it or an admin can view.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Order ID
+ *     responses:
+ *       200:
+ *         description: Order details with items
+ *         content:
+ *           application/json:
+ *             schema:
+ *               allOf:
+ *                 - $ref: '#/components/schemas/Order'
+ *                 - type: object
+ *                   properties:
+ *                     items:
+ *                       type: array
+ *                       items:
+ *                         allOf:
+ *                           - $ref: '#/components/schemas/OrderItem'
+ *                           - type: object
+ *                             properties:
+ *                               listingTitle:
+ *                                 type: string
+ *                                 example: iPhone 15 Pro
+ *       400:
+ *         description: Invalid order id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Order not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
@@ -52,13 +119,84 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 // ─── PUT /api/orders/[id] ─────────────────────────────────────────────────────
-// Admin only – update order status.
-// Body: { status: "pending" | "paid" | "shipped" | "completed" | "cancelled" }
+// Admin – any status change.
+// Seller – can approve/reject orders that contain their listings (only from pending).
+// Body: { status: "pending" | "paid" | "shipped" | "completed" | "cancelled" | "approved" | "rejected" }
 
+/**
+ * @swagger
+ * /api/orders/{id}:
+ *   put:
+ *     tags: [Orders]
+ *     summary: Update order status
+ *     description: |
+ *       Updates the status of an order.
+ *       - **Admin**: can change to any status.
+ *       - **Seller**: can only approve/reject pending orders that contain their listings.
+ *       When a seller approves, their listings in the order are marked as "sold".
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Order ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [pending, paid, shipped, completed, cancelled, approved, rejected]
+ *                 example: approved
+ *     responses:
+ *       200:
+ *         description: Order updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Order'
+ *       400:
+ *         description: Validation error or invalid status transition
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Forbidden
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Order not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
-    authorize("admin")(payload);
+    authorize("admin", "seller")(payload);
 
     const id = parseId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
@@ -71,9 +209,39 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const { status } = body as Record<string, unknown>;
 
-    const allowed = ["pending", "paid", "shipped", "completed", "cancelled"] as const;
+    const allowed = ["pending", "paid", "shipped", "completed", "cancelled", "approved", "rejected"] as const;
     if (!status || !allowed.includes(status as (typeof allowed)[number])) {
       return jsonError(`status must be one of: ${allowed.join(", ")}`, 400);
+    }
+
+    // Seller-specific authorization: can only approve/reject their own orders
+    if (payload.role === "seller") {
+      const sellerAllowed = ["approved", "rejected"] as const;
+      if (!sellerAllowed.includes(status as (typeof sellerAllowed)[number])) {
+        return jsonError("Sellers can only approve or reject orders", 403);
+      }
+
+      if (order.status !== "pending") {
+        return jsonError("Only pending orders can be approved or rejected", 400);
+      }
+
+      // Verify the order contains at least one listing owned by the seller
+      const items = await db
+        .select({ listingId: orderItems.listingId })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, id));
+
+      const sellerListings = await db
+        .select({ id: listings.id })
+        .from(listings)
+        .where(eq(listings.sellerId, payload.sub));
+
+      const sellerListingIds = new Set(sellerListings.map((l) => l.id));
+      const hasSellerItem = items.some((i) => sellerListingIds.has(i.listingId));
+
+      if (!hasSellerItem) {
+        return jsonError("Forbidden: this order does not contain your listings", 403);
+      }
     }
 
     const [updated] = await db
@@ -81,6 +249,31 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       .set({ status: status as (typeof allowed)[number] })
       .where(eq(orders.id, id))
       .returning();
+
+    // When a seller approves an order, mark their listings in that order as "sold"
+    if (status === "approved" && payload.role === "seller") {
+      const items = await db
+        .select({ listingId: orderItems.listingId })
+        .from(orderItems)
+        .where(eq(orderItems.orderId, id));
+
+      const sellerOwnedListings = await db
+        .select({ id: listings.id })
+        .from(listings)
+        .where(eq(listings.sellerId, payload.sub));
+
+      const sellerListingIds = new Set(sellerOwnedListings.map((l) => l.id));
+      const listingIdsToMark = items
+        .map((i) => i.listingId)
+        .filter((lid) => sellerListingIds.has(lid));
+
+      if (listingIdsToMark.length > 0) {
+        await db
+          .update(listings)
+          .set({ status: "sold" })
+          .where(inArray(listings.id, listingIdsToMark));
+      }
+    }
 
     return jsonOk(updated);
   } catch (err) {
@@ -93,6 +286,58 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // ─── DELETE /api/orders/[id] ──────────────────────────────────────────────────
 // Admin only.
 
+/**
+ * @swagger
+ * /api/orders/{id}:
+ *   delete:
+ *     tags: [Orders]
+ *     summary: Delete an order
+ *     description: Permanently removes an order and its items. Admin only.
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Order ID
+ *     responses:
+ *       200:
+ *         description: Order deleted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: Order deleted successfully
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Order not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);

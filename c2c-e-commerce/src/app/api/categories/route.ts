@@ -8,6 +8,29 @@ import { eq } from "drizzle-orm";
 // ─── GET /api/categories ──────────────────────────────────────────────────────
 // Public.
 
+/**
+ * @swagger
+ * /api/categories:
+ *   get:
+ *     tags: [Categories]
+ *     summary: List all categories
+ *     description: Returns all categories sorted alphabetically by name. Public endpoint.
+ *     responses:
+ *       200:
+ *         description: Array of categories
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Category'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function GET() {
   try {
     const rows = await db.select().from(categories).orderBy(categories.name);
@@ -22,6 +45,71 @@ export async function GET() {
 // Admin only.
 // Body: { name: string; slug: string; description?: string }
 
+/**
+ * @swagger
+ * /api/categories:
+ *   post:
+ *     tags: [Categories]
+ *     summary: Create a category
+ *     description: Creates a new product category. Admin only.
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, slug]
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: Electronics
+ *               slug:
+ *                 type: string
+ *                 example: electronics
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *                 example: Gadgets & devices
+ *     responses:
+ *       201:
+ *         description: Category created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Category'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Missing or invalid token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not an admin
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Slug already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 export async function POST(request: NextRequest) {
   try {
     const payload = authenticate(request);
