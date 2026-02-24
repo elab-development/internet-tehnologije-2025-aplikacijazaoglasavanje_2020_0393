@@ -18,8 +18,7 @@ export const metadata: Metadata = {
     default: "C2C Market",
     template: "%s | C2C Market",
   },
-  description:
-    "C2C Market — your peer-to-peer marketplace to buy and sell anything.",
+  description: "Community marketplace for listings, orders, and reviews",
 };
 
 export default function RootLayout({
