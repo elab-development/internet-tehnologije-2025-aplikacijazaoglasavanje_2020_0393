@@ -28,12 +28,26 @@ async function runMigrations() {
       console.log("Migrations complete.");
       return;
     } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException).code;
+      // Drizzle wraps pg errors in DrizzleQueryError — the network code lives on .cause
+      const cause = (err as { cause?: NodeJS.ErrnoException }).cause;
+      const code =
+        (err as NodeJS.ErrnoException).code ?? cause?.code;
+
       const isRetryable =
         code === "ENOTFOUND" ||
         code === "ECONNREFUSED" ||
         code === "ETIMEDOUT" ||
         code === "ECONNRESET";
+
+      if (code === "ENOTFOUND") {
+        const hostname = cause?.hostname ?? (err as NodeJS.ErrnoException & { hostname?: string }).hostname;
+        if (hostname === "db") {
+          console.error(
+            `\nERROR: DATABASE_URL resolves to hostname "db", which is the Docker Compose internal hostname.\n` +
+            `On Railway, set DATABASE_URL to the Railway Postgres plugin URL (check your service's Variables tab).\n`
+          );
+        }
+      }
 
       if (isRetryable && attempt < MAX_RETRIES) {
         console.warn(
