@@ -40,7 +40,10 @@ async function runMigrations() {
         code === "ECONNRESET";
 
       if (code === "ENOTFOUND") {
-        const hostname = cause?.hostname ?? (err as NodeJS.ErrnoException & { hostname?: string }).hostname;
+        type WithHostname = { hostname?: string };
+        const hostname =
+          (cause as WithHostname | undefined)?.hostname ??
+          (err as WithHostname).hostname;
         if (hostname === "db") {
           console.error(
             `\nERROR: DATABASE_URL resolves to hostname "db", which is the Docker Compose internal hostname.\n` +
