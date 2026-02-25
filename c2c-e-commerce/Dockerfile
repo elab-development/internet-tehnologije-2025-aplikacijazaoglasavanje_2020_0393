@@ -46,6 +46,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
 COPY --from=builder --chown=nextjs:nodejs /app/scripts         ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle         ./drizzle
 
+# Copy full node_modules so migrate.mjs can resolve drizzle-orm and pg
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules       ./node_modules
+
 USER nextjs
 
 EXPOSE 3000
