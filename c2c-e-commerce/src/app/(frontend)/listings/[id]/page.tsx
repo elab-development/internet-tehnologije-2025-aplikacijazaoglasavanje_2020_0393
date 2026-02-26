@@ -15,6 +15,7 @@ type Listing = {
   id: number;
   title: string;
   description: string;
+  imageUrl: string | null;
   price: string;
   sellerId: number;
   categoryId: number | null;
@@ -231,6 +232,17 @@ export default function ListingDetailPage({ params }: Props) {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4">
+          {listing.imageUrl ? (
+            <img
+              src={listing.imageUrl}
+              alt={listing.title}
+              className="w-full rounded-xl object-cover max-h-80 border border-zinc-100 bg-zinc-50"
+            />
+          ) : (
+            <div className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none">
+              🖼️
+            </div>
+          )}
           <span className="inline-flex w-fit rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
             {categoryName}
           </span>

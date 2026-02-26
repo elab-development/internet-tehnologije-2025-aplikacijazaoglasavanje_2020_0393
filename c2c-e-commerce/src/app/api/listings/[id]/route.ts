@@ -85,6 +85,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         id: listings.id,
         title: listings.title,
         description: listings.description,
+        imageUrl: listings.imageUrl,
         price: listings.price,
         status: listings.status,
         sellerId: listings.sellerId,
