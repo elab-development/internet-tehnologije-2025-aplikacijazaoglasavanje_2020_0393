@@ -1,6 +1,24 @@
+#!/usr/bin/env node
+/**
+ * generate-swagger.mjs
+ * --------------------
+ * Runs swagger-jsdoc against the route handler sources and writes the result
+ * to src/lib/swagger-spec.json so the static JSON can be imported at runtime
+ * without needing the TypeScript source files (important for the standalone
+ * production build).
+ *
+ * Called automatically via the "prebuild" npm script.
+ */
+
+import { writeFileSync } from "node:fs";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import swaggerJsdoc from "swagger-jsdoc";
 
-const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(__dirname, "..");
+
+const swaggerDefinition = {
   openapi: "3.0.0",
   info: {
     title: "C2C E-Commerce API",
@@ -8,9 +26,7 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
     description:
       "RESTful API for the C2C (consumer-to-consumer) e-commerce marketplace. " +
       "Supports user authentication, listings management, orders, reviews, and categories.",
-    contact: {
-      name: "C2C Market",
-    },
+    contact: { name: "C2C Market" },
   },
   servers: [
     {
@@ -28,7 +44,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
       },
     },
     schemas: {
-      // ─── Reusable error response ────────────────────────────────────────
       ErrorResponse: {
         type: "object",
         properties: {
@@ -36,8 +51,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           status: { type: "integer", example: 400 },
         },
       },
-
-      // ─── User ───────────────────────────────────────────────────────────
       User: {
         type: "object",
         properties: {
@@ -50,8 +63,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
-
-      // ─── Category ──────────────────────────────────────────────────────
       Category: {
         type: "object",
         properties: {
@@ -62,8 +73,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           createdAt: { type: "string", format: "date-time" },
         },
       },
-
-      // ─── Listing ───────────────────────────────────────────────────────
       Listing: {
         type: "object",
         properties: {
@@ -79,8 +88,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
-
-      // ─── Order ─────────────────────────────────────────────────────────
       Order: {
         type: "object",
         properties: {
@@ -96,8 +103,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
-
-      // ─── OrderItem ─────────────────────────────────────────────────────
       OrderItem: {
         type: "object",
         properties: {
@@ -108,8 +113,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           priceAtPurchase: { type: "string", example: "999.99" },
         },
       },
-
-      // ─── Review ────────────────────────────────────────────────────────
       Review: {
         type: "object",
         properties: {
@@ -122,8 +125,6 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
-
-      // ─── Pagination wrapper ────────────────────────────────────────────
       Pagination: {
         type: "object",
         properties: {
@@ -145,10 +146,12 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
   ],
 };
 
-const options: swaggerJsdoc.Options = {
+const spec = swaggerJsdoc({
   swaggerDefinition,
-  // Glob patterns pointing to files with @swagger JSDoc annotations
-  apis: ["./src/app/api/**/*.ts"],
-};
+  apis: [resolve(ROOT, "src/app/api/**/*.ts")],
+});
 
-export const swaggerSpec = swaggerJsdoc(options);
+const outPath = resolve(ROOT, "src/lib/swagger-spec.json");
+writeFileSync(outPath, JSON.stringify(spec, null, 2) + "\n", "utf-8");
+
+console.log(`✓ Swagger spec written to ${outPath}`);

@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "next-swagger-doc": "^0.4.1",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-react": "^5.31.2"
   },
