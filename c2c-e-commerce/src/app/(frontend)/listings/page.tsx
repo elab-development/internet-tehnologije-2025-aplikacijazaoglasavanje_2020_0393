@@ -22,6 +22,7 @@ type Listing = {
   description: string;
   price: string;
   categoryId: number | null;
+  imageUrl : string | null;
 };
 
 type Category = {

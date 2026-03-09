@@ -20,8 +20,6 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type SellerOrderItem = {
   id: number;
   listingId: number;
@@ -172,19 +170,6 @@ function SellerDashboardContent() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
       );
-
-      // When approving, mark the order's listings as sold in local state
-      if (newStatus === "approved") {
-        const order = orders.find((o) => o.id === orderId);
-        if (order) {
-          const soldIds = new Set(order.items.map((i) => i.listingId));
-          setListings((prev) =>
-            prev.map((l) =>
-              soldIds.has(l.id) ? { ...l, status: "sold" } : l
-            )
-          );
-        }
-      }
 
       toast.success(
         `Order #${orderId} ${newStatus === "approved" ? "approved" : "rejected"}`
@@ -457,7 +442,7 @@ function SellerDashboardContent() {
                         ? listing.description.slice(0, 80) + "…"
                         : listing.description
                     }
-                    onClick={() => router.push(`/listings/${listing.id}`)}
+                    onClick={() => router.push(`/listings/new?id=${listing.id}`)}
                     footer={
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2 text-sm">
