@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
 import InputField from "@/components/ui/InputField";
@@ -17,18 +17,40 @@ type CreatedListing = {
   id: number;
 };
 
+const listingStatuses = ["active", "sold", "removed"] as const;
+
+type ListingStatus = (typeof listingStatuses)[number];
+
+type ListingDetail = {
+  id: number;
+  title: string;
+  description: string;
+  price: string;
+  imageUrl: string | null;
+  categoryId: number | null;
+  sellerId: number;
+  status: ListingStatus;
+};
+
 export default function CreateListingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, loading, isAuthenticated } = useAuth();
+
+  const rawEditId = searchParams.get("id");
+  const editId = rawEditId ? parseInt(rawEditId, 10) : null;
+  const isEditMode = editId !== null && !isNaN(editId) && editId > 0;
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState<ListingStatus>("active");
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [fetchingListing, setFetchingListing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,6 +73,29 @@ export default function CreateListingPage() {
       .catch(() => setCategories([]));
   }, []);
 
+  // Fetch existing listing data when in edit mode
+  useEffect(() => {
+    if (!isEditMode || loading) return;
+
+    setFetchingListing(true);
+    api
+      .get<ListingDetail>(`/api/listings/${editId}`)
+      .then((listing) => {
+        setTitle(listing.title);
+        setDescription(listing.description);
+        setPrice(String(Number(listing.price)));
+        setImageUrl(listing.imageUrl ?? "");
+        setCategoryId(listing.categoryId ? String(listing.categoryId) : "");
+        setStatus(listing.status);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : "Failed to load listing";
+        setError(msg);
+        toast.error(msg);
+      })
+      .finally(() => setFetchingListing(false));
+  }, [isEditMode, editId, loading]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -63,18 +108,37 @@ export default function CreateListingPage() {
     setSubmitting(true);
 
     try {
-      const created = await api.post<CreatedListing>("/api/listings", {
-        title: title.trim(),
-        description: description.trim(),
-        price: Number(price),
-        imageUrl: imageUrl.trim() || null,
-        categoryId: categoryId ? Number(categoryId) : null,
-      });
+      if (isEditMode) {
+        await api.put(`/api/listings/${editId}`, {
+          title: title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          imageUrl: imageUrl.trim() || null,
+          categoryId: categoryId ? Number(categoryId) : null,
+          status,
+        });
 
-      toast.success("Listing created successfully!");
-      router.push(`/listings/${created.id}`);
+        toast.success("Listing updated successfully!");
+        router.push(`/listings/${editId}`);
+      } else {
+        const created = await api.post<CreatedListing>("/api/listings", {
+          title: title.trim(),
+          description: description.trim(),
+          price: Number(price),
+          imageUrl: imageUrl.trim() || null,
+          categoryId: categoryId ? Number(categoryId) : null,
+        });
+
+        toast.success("Listing created successfully!");
+        router.push(`/listings/${created.id}`);
+      }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to create listing";
+      const msg =
+        err instanceof Error
+          ? err.message
+          : isEditMode
+          ? "Failed to update listing"
+          : "Failed to create listing";
       setError(msg);
       toast.error(msg);
     } finally {
@@ -82,7 +146,7 @@ export default function CreateListingPage() {
     }
   }
 
-  if (loading) {
+  if (loading || fetchingListing) {
     return (
       <div className="mx-auto w-full max-w-2xl space-y-4" aria-hidden="true">
         <div className="h-8 w-40 skeleton-shimmer rounded-lg" />
@@ -104,7 +168,9 @@ export default function CreateListingPage() {
 
   return (
     <div className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <h1 className="mb-6 text-2xl font-bold text-zinc-900">Create listing</h1>
+      <h1 className="mb-6 text-2xl font-bold text-zinc-900">
+        {isEditMode ? "Edit listing" : "Create listing"}
+      </h1>
 
       {error && (
         <div role="alert" className="mb-4 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -170,9 +236,41 @@ export default function CreateListingPage() {
           </select>
         </div>
 
-        <div className="pt-2">
+        {isEditMode && (
+          <div className="flex flex-col gap-1">
+            <label
+              className="text-sm font-medium text-zinc-700"
+              htmlFor="listing-status"
+            >
+              Status
+            </label>
+            <select
+              id="listing-status"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as ListingStatus)}
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            >
+              {listingStatuses.map((listingStatus) => (
+                <option key={listingStatus} value={listingStatus}>
+                  {listingStatus.charAt(0).toUpperCase() + listingStatus.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          {isEditMode && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => router.push(`/listings/${editId}`)}
+            >
+              Cancel
+            </Button>
+          )}
           <Button type="submit" loading={submitting}>
-            Create listing
+            {isEditMode ? "Save changes" : "Create listing"}
           </Button>
         </div>
       </form>

@@ -10,6 +10,7 @@ import {
   RiShoppingBagLine,
   RiEyeLine,
   RiEyeOffLine,
+  RiPencilLine,
 } from "@remixicon/react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -18,8 +19,6 @@ import { OrderCardSkeleton } from "@/components/ui/Skeleton";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type SellerOrderItem = {
   id: number;
@@ -170,19 +169,6 @@ function SellerDashboardContent() {
       setOrders((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
       );
-
-      // When approving, mark the order's listings as sold in local state
-      if (newStatus === "approved") {
-        const order = orders.find((o) => o.id === orderId);
-        if (order) {
-          const soldIds = new Set(order.items.map((i) => i.listingId));
-          setListings((prev) =>
-            prev.map((l) =>
-              soldIds.has(l.id) ? { ...l, status: "sold" } : l
-            )
-          );
-        }
-      }
 
       toast.success(
         `Order #${orderId} ${newStatus === "approved" ? "approved" : "rejected"}`
@@ -441,7 +427,7 @@ function SellerDashboardContent() {
                         ? listing.description.slice(0, 80) + "…"
                         : listing.description
                     }
-                    onClick={() => router.push(`/listings/${listing.id}`)}
+                    onClick={() => router.push(`/listings/new?id=${listing.id}`)}
                     footer={
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2 text-sm">
@@ -463,6 +449,18 @@ function SellerDashboardContent() {
                             {listing.status}
                           </span>
                         </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          fullWidth
+                          icon={<RiPencilLine size={16} />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/listings/new?id=${listing.id}`);
+                          }}
+                        >
+                          Edit
+                        </Button>
                         {canToggle && (
                           <Button
                             variant={

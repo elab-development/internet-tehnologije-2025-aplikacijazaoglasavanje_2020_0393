@@ -47,6 +47,22 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
+function getErrorStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+
+  const candidate = error as {
+    status?: unknown;
+    statusCode?: unknown;
+    response?: { status?: unknown };
+  };
+
+  if (typeof candidate.status === "number") return candidate.status;
+  if (typeof candidate.statusCode === "number") return candidate.statusCode;
+  if (typeof candidate.response?.status === "number") return candidate.response.status;
+
+  return null;
+}
+
 export default function ListingDetailPage({ params }: Props) {
   const router = useRouter();
   const { user, isAuthenticated } = useAuth();
@@ -87,11 +103,20 @@ export default function ListingDetailPage({ params }: Props) {
     return category?.name ?? "Uncategorized";
   }, [categories, listing]);
 
-  async function fetchReviews(idNum: number) {
-    const reviewData = await api.get<Review[]>(`/api/listings/${idNum}/reviews`);
-    setReviews(reviewData);
-  }
+ async function fetchReviews(idNum: number) {
+    try {
+      const reviewData = await api.get<Review[]>(`/api/listings/${idNum}/reviews`);
+      setReviews(reviewData);
+    } catch (err: unknown) {
+      if (getErrorStatus(err) === 404) {
+        console.log("ASD");
+        setReviews([]);
+        return;
+      }
 
+      throw err;
+    }
+  }
   useEffect(() => {
     let alive = true;
 
@@ -161,7 +186,7 @@ export default function ListingDetailPage({ params }: Props) {
 
       setOrderSuccessId(order.id);
       setIsBuyModalOpen(false);
-      toast.success(`Order #${order.id} placed successfully! 🎉`);
+      toast.success(`Order #${order.id} placed successfully!`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create order";
       setError(msg);
