@@ -21,7 +21,11 @@ import { Button } from "@/components/ui";
 
 const NAV_LINKS = [
   { href: "/listings", label: "Listings", icon: <RiStoreLine size={18} /> },
-  { href: "/orders", label: "My Orders", icon: <RiShoppingBagLine size={18} /> },
+  {
+    href: "/orders",
+    label: "My Orders",
+    icon: <RiShoppingBagLine size={18} />,
+  },
   { href: "/api-docs", label: "API Docs", icon: <RiCodeLine size={18} /> },
 ];
 
@@ -39,13 +43,18 @@ export default function Navbar() {
 
   // Close mobile menu on route change
   useEffect(() => {
-    setMobileOpen(false);
+    const timeout = setTimeout(() => {
+      setMobileOpen(false);
+    }, 0);
+    return () => clearTimeout(timeout);
   }, [pathname]);
 
   // Lock body scroll while mobile menu is open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.overflow = "";
+    };
   }, [mobileOpen]);
 
   function handleLogout() {
@@ -58,7 +67,6 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
-
         {/* Logo */}
         <Link
           href="/"
@@ -141,7 +149,9 @@ export default function Navbar() {
                   ) : (
                     <RiUserLine size={16} />
                   )}
-                  <span className="max-w-[140px] truncate font-medium">{user.name}</span>
+                  <span className="max-w-[140px] truncate font-medium">
+                    {user.name}
+                  </span>
                 </span>
                 <Button
                   variant="ghost"
@@ -154,10 +164,18 @@ export default function Navbar() {
               </>
             ) : (
               <>
-                <Button variant="ghost" size="sm" onClick={() => router.push("/login")}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push("/login")}
+                >
                   Login
                 </Button>
-                <Button variant="primary" size="sm" onClick={() => router.push("/register")}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => router.push("/register")}
+                >
                   Register
                 </Button>
               </>
