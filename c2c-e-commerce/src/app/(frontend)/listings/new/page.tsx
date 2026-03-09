@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
 import Button from "@/components/ui/Button";
@@ -32,7 +32,7 @@ type ListingDetail = {
   status: ListingStatus;
 };
 
-export default function CreateListingPage() {
+function CreateListingPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading, isAuthenticated } = useAuth();
@@ -275,5 +275,13 @@ export default function CreateListingPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function CreateListingPageWrapper() {
+  return (
+    <Suspense>
+      <CreateListingPage />
+    </Suspense>
   );
 }
