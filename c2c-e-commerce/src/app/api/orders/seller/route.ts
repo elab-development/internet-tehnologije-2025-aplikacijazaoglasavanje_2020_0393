@@ -88,12 +88,12 @@ export async function GET(request: NextRequest) {
   try {
     const payload = authenticate(request);
     authorize("seller", "admin")(payload);
-
-    // 1. Get the seller's listing IDs
+    const isAdmin = payload.role === "admin";
+    
     const sellerListings = await db
       .select({ id: listings.id })
       .from(listings)
-      .where(eq(listings.sellerId, payload.sub));
+      .where(isAdmin ? undefined : eq(listings.sellerId, payload.sub));
 
     const sellerListingIds = sellerListings.map((l) => l.id);
 

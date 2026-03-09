@@ -10,6 +10,7 @@ import {
   RiShoppingBagLine,
   RiEyeLine,
   RiEyeOffLine,
+  RiDeleteBin2Line,
 } from "@remixicon/react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -77,6 +78,7 @@ type Tab = "listings" | "orders";
 function SellerDashboardContent() {
   const router = useRouter();
   const { user } = useAuth();
+
   const [tab, setTab] = useState<Tab>("orders");
 
   // ── Orders state ──
@@ -192,6 +194,20 @@ function SellerDashboardContent() {
       toast.error(msg);
     } finally {
       setUpdatingOrderId(null);
+    }
+  }
+
+  // ── Delete listing handler (admin only) ──
+  async function handleDeleteListing(listingId: number) {
+    if (!window.confirm("Are you sure you want to delete this listing?")) return;
+    try {
+      await api.delete(`/api/listings/${listingId}`);
+      setListings((prev) => prev.filter((l) => l.id !== listingId));
+      toast.success("Listing deleted");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to delete listing";
+      toast.error(msg);
     }
   }
 
@@ -463,38 +479,53 @@ function SellerDashboardContent() {
                             {listing.status}
                           </span>
                         </div>
-                        {canToggle && (
-                          <Button
-                            variant={
-                              listing.status === "active"
-                                ? "danger"
-                                : "primary"
-                            }
-                            size="sm"
-                            fullWidth
-                            icon={
-                              listing.status === "active" ? (
-                                <RiEyeOffLine size={16} />
-                              ) : (
-                                <RiEyeLine size={16} />
-                              )
-                            }
-                            loading={
-                              updatingListingId === listing.id
-                            }
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleListingStatusToggle(
-                                listing.id,
-                                listing.status
-                              );
-                            }}
-                          >
-                            {listing.status === "active"
-                              ? "Disable"
-                              : "Activate"}
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {canToggle && (
+                            <Button
+                              variant={
+                                listing.status === "active"
+                                  ? "danger"
+                                  : "primary"
+                              }
+                              size="sm"
+                              fullWidth
+                              icon={
+                                listing.status === "active" ? (
+                                  <RiEyeOffLine size={16} />
+                                ) : (
+                                  <RiEyeLine size={16} />
+                                )
+                              }
+                              loading={
+                                updatingListingId === listing.id
+                              }
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleListingStatusToggle(
+                                  listing.id,
+                                  listing.status
+                                );
+                              }}
+                            >
+                              {listing.status === "active"
+                                ? "Disable"
+                                : "Activate"}
+                            </Button>
+                          )}
+                          {user?.role === "admin" && (
+                            <button
+                              type="button"
+                              aria-label="Delete listing"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteListing(listing.id);
+                              }}
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
+                            >
+                              <RiDeleteBin2Line size={15} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     }
                   />
