@@ -22,6 +22,7 @@ type Listing = {
   description: string;
   price: string;
   categoryId: number | null;
+  imageUrl : string | null;
 };
 
 type Category = {
@@ -264,6 +265,7 @@ function ListingsPageContent() {
               key={listing.id}
               title={listing.title}
               description={`$${Number(listing.price).toFixed(2)}`}
+              image={listing.imageUrl}
               badge={
                 listing.categoryId
                   ? (categoryMap.get(listing.categoryId) ?? "Uncategorized")

@@ -24,7 +24,7 @@ export default function Card({
   badge,
 }: CardProps) {
   const isClickable = typeof onClick === "function";
-
+  
   return (
     <div
       role={isClickable ? "button" : undefined}

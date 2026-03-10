@@ -46,7 +46,8 @@ import { jsonOk, jsonError } from "@/lib/response";
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- */export async function GET(request: NextRequest) {
+ */
+export async function GET(request: NextRequest) {
   try {
     const payload = authenticate(request);
     authorize("buyer", "admin")(payload);
@@ -146,7 +147,8 @@ import { jsonOk, jsonError } from "@/lib/response";
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- */export async function POST(request: NextRequest) {
+ */
+export async function POST(request: NextRequest) {
   try {
     const payload = authenticate(request);
     authorize("buyer")(payload);
