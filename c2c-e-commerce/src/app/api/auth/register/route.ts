@@ -99,12 +99,13 @@ export async function POST(request: NextRequest) {
         400 
       );
     }
-    if (role !== "buyer" && role !== "seller") {
-      return jsonError(
-        "role must be 'buyer' or 'seller'" ,
-        400 
-      );
-    }
+
+    // if (role !== "buyer" && role !== "seller") {
+    //   return jsonError(
+    //     "role must be 'buyer' or 'seller'" ,
+    //     400
+    //   );
+    // }
 
     // ── Uniqueness check ──────────────────────────────────────────────────────
     const existing = await db
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
 
     const [user] = await db
       .insert(users)
-      .values({ email, passwordHash, name, role })
+      .values({ email: email as string, passwordHash, name: name as string, role: role as "buyer" | "seller" | "admin" })
       .returning();
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });

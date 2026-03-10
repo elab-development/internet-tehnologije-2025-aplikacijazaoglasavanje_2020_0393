@@ -101,6 +101,10 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  */
 export async function GET(request: NextRequest) {
   try {
+    // ── Authentication ────────────────────────────────────────────────────────
+    const payload = authenticate(request);
+    const isAdmin = payload.role === "admin";
+    
     const { searchParams } = request.nextUrl;
 
     // ── Pagination ────────────────────────────────────────────────────────────
@@ -126,7 +130,7 @@ export async function GET(request: NextRequest) {
       if (!isNaN(id)) conditions.push(eq(listings.categoryId, id));
     }
 
-    if (sellerId) {
+    if (sellerId && !isAdmin) {
       const id = parseInt(sellerId, 10);
       if (!isNaN(id)) conditions.push(eq(listings.sellerId, id));
     }
