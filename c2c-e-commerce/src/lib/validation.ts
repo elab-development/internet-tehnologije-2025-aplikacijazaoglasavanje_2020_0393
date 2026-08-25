@@ -133,16 +133,16 @@ export const LoginBodySchema = z.object({
 // ─── Categories ───────────────────────────────────────────────────────────────
 
 export const CreateCategorySchema = z.object({
-  name: z.string().min(1, "name is required"),
-  slug: z.string().min(1, "slug is required"),
-  description: z.string().nullable().optional(),
+  name: z.string().trim().min(1, "name is required"),
+  slug: z.string().trim().min(1, "slug is required"),
+  description: z.string().trim().nullable().optional(),
 });
 
 export const UpdateCategorySchema = z
   .object({
-    name: z.string().min(1, "name must be a non-empty string").optional(),
-    slug: z.string().min(1, "slug must be a non-empty string").optional(),
-    description: z.string().nullable().optional(),
+    name: z.string().trim().min(1, "name must be a non-empty string").optional(),
+    slug: z.string().trim().min(1, "slug must be a non-empty string").optional(),
+    description: z.string().trim().nullable().optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No updatable fields provided",
@@ -213,20 +213,37 @@ export const UpdateOrderStatusSchema = z.object({
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
 export const CreateReviewSchema = z.object({
+  // Accepts "5" as well as 5: the handler used Number(rating) before, and this
+  // endpoint is driven from Swagger/API clients rather than the UI.
   rating: z
-    .number()
-    .int()
-    .min(1, "rating must be an integer between 1 and 5")
-    .max(5, "rating must be an integer between 1 and 5"),
-  comment: z.string().nullable().optional(),
+    .union([z.string(), z.number()])
+    .transform((val, ctx) => {
+      const num = Number(val);
+      if (!Number.isInteger(num) || num < 1 || num > 5) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "rating must be an integer between 1 and 5",
+        });
+        return z.NEVER;
+      }
+      return num;
+    }),
+  // Blank comments are stored as null rather than an empty string.
+  comment: z
+    .union([z.string(), z.null()])
+    .transform((val) => (val === null || !val.trim() ? null : val.trim()))
+    .optional(),
 });
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const UpdateUserSchema = z
   .object({
-    name: z.string().min(1, "name must be a non-empty string").optional(),
-    phoneNumber: z.string().nullable().optional(),
+    name: z.string().trim().min(1, "name must be a non-empty string").optional(),
+    phoneNumber: z
+      .union([z.string(), z.null()])
+      .transform((val) => (val === null || !val.trim() ? null : val.trim()))
+      .optional(),
     password: z
       .string()
       .min(8, "password must be at least 8 characters")

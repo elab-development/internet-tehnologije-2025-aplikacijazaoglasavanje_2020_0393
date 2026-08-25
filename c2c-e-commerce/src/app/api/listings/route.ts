@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { and, asc, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
 import { resolveListingVisibility } from "@/lib/listing-visibility";
+import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateListingSchema } from "@/lib/validation";
 
 // ─── GET /api/listings ────────────────────────────────────────────────────────
 // Public. Returns paginated active listings with optional filters.
@@ -184,7 +186,7 @@ export async function GET(request: NextRequest) {
       db.select({ total: count() }).from(listings).where(where),
     ]);
 
-    return NextResponse.json({
+    return jsonOk({
       data,
       total,
       page,
@@ -193,7 +195,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("[GET /api/listings]", err);
-    return NextResponse.json({ error: "Internal server error", status: 500 }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }
 
@@ -273,72 +275,29 @@ export async function POST(request: NextRequest) {
     const payload = authenticate(request);
     authorize("seller", "admin")(payload);
 
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body", status: 400 }, { status: 400 });
-    }
-
-    const { title, description, price, imageUrl, categoryId } = body as Record<string, unknown>;
-
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!title || typeof title !== "string" || !title.trim()) {
-      return NextResponse.json({ error: "title is required", status: 400 }, { status: 400 });
-    }
-    if (!description || typeof description !== "string" || !description.trim()) {
-      return NextResponse.json({ error: "description is required", status: 400 }, { status: 400 });
-    }
-    const priceNum = typeof price === "string" ? parseFloat(price) : typeof price === "number" ? price : NaN;
-    if (isNaN(priceNum) || priceNum < 0) {
-      return NextResponse.json(
-        { error: "price must be a non-negative number", status: 400 },
-        { status: 400 }
-      );
-    }
+    const parsed = await parseRequest(request, CreateListingSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    let parsedImageUrl: string | null = null;
-    if (imageUrl !== undefined && imageUrl !== null) {
-      if (typeof imageUrl !== "string") {
-        return NextResponse.json({ error: "imageUrl must be a string", status: 400 }, { status: 400 });
-      }
-
-      const trimmed = imageUrl.trim();
-      if (trimmed) {
-        try {
-          const parsed = new URL(trimmed);
-          if (!["http:", "https:"].includes(parsed.protocol)) {
-            return NextResponse.json(
-              { error: "imageUrl must be a valid http or https URL", status: 400 },
-              { status: 400 }
-            );
-          }
-          parsedImageUrl = parsed.toString();
-        } catch {
-          return NextResponse.json(
-            { error: "imageUrl must be a valid URL", status: 400 },
-            { status: 400 }
-          );
-        }
-      }
-    }
+    const { title, description, price, imageUrl, categoryId } = parsed.data;
 
     const newListing: NewListing = {
-      title: title.trim(),
-      description: description.trim(),
-      price: String(priceNum),
-      imageUrl: parsedImageUrl,
+      title,
+      description,
+      price: String(price),
+      imageUrl: imageUrl ?? null,
       sellerId: payload.sub,
-      ...(categoryId !== undefined && categoryId !== null && { categoryId: Number(categoryId) }),
+      ...(categoryId !== undefined && categoryId !== null && { categoryId }),
     };
 
     const [created] = await db.insert(listings).values(newListing).returning();
 
-    return NextResponse.json(created, { status: 201 });
+    return jsonOk(created, 201);
   } catch (err) {
     if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message, status: err.statusCode }, { status: err.statusCode });
+      return jsonError(err.message, err.statusCode);
     }
     console.error("[POST /api/listings]", err);
-    return NextResponse.json({ error: "Internal server error", status: 500 }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }

@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { sanitizeUser, hashPassword } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, UpdateUserSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -192,39 +193,23 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!user) return jsonError("User not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, UpdateUserSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, phoneNumber, password, role } = body as Record<string, unknown>;
+    const { name, phoneNumber, password, role } = parsed.data;
 
     const updates: Partial<typeof users.$inferInsert> = {};
 
-    if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) return jsonError("name must be a non-empty string", 400);
-      updates.name = name.trim();
-    }
-
-    if (phoneNumber !== undefined) {
-      updates.phoneNumber = phoneNumber === null ? null : String(phoneNumber).trim();
-    }
-
-    if (password !== undefined) {
-      if (typeof password !== "string" || password.length < 8) {
-        return jsonError("password must be at least 8 characters", 400);
-      }
-      updates.passwordHash = await hashPassword(password);
-    }
+    if (name !== undefined) updates.name = name;
+    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
+    if (password !== undefined) updates.passwordHash = await hashPassword(password);
 
     if (role !== undefined) {
+      // The schema permits "admin" because admins may grant it; authorisation,
+      // not validation, is what keeps a self-update from escalating.
       if (payload.role !== "admin") return jsonError("Only admins may change roles", 403);
-      const allowed = ["buyer", "seller", "admin"] as const;
-      if (!allowed.includes(role as (typeof allowed)[number])) {
-        return jsonError(`role must be one of: ${allowed.join(", ")}`, 400);
-      }
-      updates.role = role as (typeof allowed)[number];
+      updates.role = role;
     }
-
-    if (Object.keys(updates).length === 0) return jsonError("No updatable fields provided", 400);
 
     const [updated] = await db
       .update(users)

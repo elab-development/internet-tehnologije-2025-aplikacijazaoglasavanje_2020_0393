@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateOrderSchema } from "@/lib/validation";
 
 // ─── GET /api/orders ──────────────────────────────────────────────────────────
 // Buyer   → own orders only
@@ -153,34 +154,16 @@ export async function POST(request: NextRequest) {
     const payload = authenticate(request);
     authorize("buyer")(payload);
 
-    const body: unknown = await request.json();
+    const parsed = await parseRequest(request, CreateOrderSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const { items } = parsed.data;
 
-    const { items } = body as Record<string, unknown>;
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return jsonError("items must be a non-empty array", 400);
-    }
-
-    // ── Validate & resolve each item ──────────────────────────────────────────
+    // ── Resolve each item ─────────────────────────────────────────────────────
     const resolvedItems: { listingId: number; quantity: number; price: string }[] = [];
     let total = 0;
 
-    for (const item of items) {
-      if (!item || typeof item !== "object") return jsonError("Each item must be an object", 400);
-
-      const { listingId, quantity } = item as Record<string, unknown>;
-
-      if (typeof listingId !== "number" || !Number.isInteger(listingId)) {
-        return jsonError("Each item must have a numeric listingId", 400);
-      }
-
-      const qty = quantity === undefined ? 1 : Number(quantity);
-      if (!Number.isInteger(qty) || qty < 1) {
-        return jsonError("quantity must be a positive integer", 400);
-      }
-
+    for (const { listingId, quantity: qty } of items) {
       const [listing] = await db
         .select()
         .from(listings)
