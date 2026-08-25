@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { categories } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateCategorySchema } from "@/lib/validation";
 import { eq } from "drizzle-orm";
 
 // ─── GET /api/categories ──────────────────────────────────────────────────────
@@ -115,31 +116,22 @@ export async function POST(request: NextRequest) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, CreateCategorySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, slug, description } = body as Record<string, unknown>;
-
-    if (!name || typeof name !== "string" || !name.trim())
-      return jsonError("name is required", 400);
-    if (!slug || typeof slug !== "string" || !slug.trim())
-      return jsonError("slug is required", 400);
+    const { name, slug, description } = parsed.data;
 
     // check uniqueness
     const [existing] = await db
       .select()
       .from(categories)
-      .where(eq(categories.slug, slug.trim()))
+      .where(eq(categories.slug, slug))
       .limit(1);
     if (existing) return jsonError("A category with that slug already exists", 409);
 
     const [created] = await db
       .insert(categories)
-      .values({
-        name: name.trim(),
-        slug: slug.trim(),
-        description: typeof description === "string" ? description.trim() : null,
-      })
+      .values({ name, slug, description: description ?? null })
       .returning();
 
     return jsonOk(created, 201);

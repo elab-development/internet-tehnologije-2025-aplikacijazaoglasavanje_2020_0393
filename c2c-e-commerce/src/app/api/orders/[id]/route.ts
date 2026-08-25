@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -204,15 +205,10 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!order) return jsonError("Order not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, UpdateOrderStatusSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { status } = body as Record<string, unknown>;
-
-    const allowed = ["pending", "paid", "shipped", "completed", "cancelled", "approved", "rejected"] as const;
-    if (!status || !allowed.includes(status as (typeof allowed)[number])) {
-      return jsonError(`status must be one of: ${allowed.join(", ")}`, 400);
-    }
+    const { status } = parsed.data;
 
     // Seller-specific authorization: can only approve/reject their own orders
     if (payload.role === "seller") {
@@ -246,7 +242,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const [updated] = await db
       .update(orders)
-      .set({ status: status as (typeof allowed)[number] })
+      .set({ status })
       .where(eq(orders.id, id))
       .returning();
 

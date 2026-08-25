@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { listings, reviews, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateReviewSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -193,15 +194,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       .limit(1);
     if (!listing) return jsonError("Listing not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, CreateReviewSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { rating, comment } = body as Record<string, unknown>;
-
-    const ratingNum = Number(rating);
-    if (!Number.isInteger(ratingNum) || ratingNum < 1 || ratingNum > 5) {
-      return jsonError("rating must be an integer between 1 and 5", 400);
-    }
+    const { rating, comment } = parsed.data;
 
     // Prevent duplicate review for the same listing
     const [existingReview] = await db
@@ -216,8 +212,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       .values({
         reviewerId: payload.sub,
         listingId,
-        rating: ratingNum,
-        comment: typeof comment === "string" && comment.trim() ? comment.trim() : null,
+        rating,
+        comment: comment ?? null,
       })
       .returning();
 

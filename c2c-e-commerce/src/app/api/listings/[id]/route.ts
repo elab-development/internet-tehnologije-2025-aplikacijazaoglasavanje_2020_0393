@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
+import { parseRequest, UpdateListingSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -245,79 +246,22 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       return jsonError("Forbidden", 403);
     }
 
-    const body: unknown = await request.json();
+    const parsed = await parseRequest(request, UpdateListingSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    if (!body || typeof body !== "object") {
-      return jsonError("Invalid request body", 400);
-    }
-
-    const { title, description, price, imageUrl, categoryId, status } = body as Record<string, unknown>;
+    const { title, description, price, imageUrl, categoryId, status } = parsed.data;
 
     // ── Build update payload (only provided fields) ───────────────────────────
+    // The schema guarantees at least one field is present and that every value
+    // is already validated and normalised; this only maps it onto the row.
     const updates: Partial<typeof listings.$inferInsert> = {};
 
-    if (title !== undefined) {
-      if (typeof title !== "string" || !title.trim()) {
-        return jsonError("title must be a non-empty string", 400);
-      }
-      updates.title = title.trim();
-    }
-
-    if (description !== undefined) {
-      if (typeof description !== "string" || !description.trim()) {
-        return jsonError("description must be a non-empty string", 400);
-      }
-      updates.description = description.trim();
-    }
-
-    if (price !== undefined) {
-      const priceNum = typeof price === "string" ? parseFloat(price) : typeof price === "number" ? price : NaN;
-      if (isNaN(priceNum) || priceNum < 0) {
-        return jsonError("price must be a non-negative number", 400);
-      }
-      updates.price = String(priceNum);
-    }
-
-    if (imageUrl !== undefined) {
-      if (imageUrl === null) {
-        updates.imageUrl = null;
-      } else {
-        if (typeof imageUrl !== "string") {
-          return jsonError("imageUrl must be a string", 400);
-        }
-
-        const trimmed = imageUrl.trim();
-        if (!trimmed) {
-          updates.imageUrl = null;
-        } else {
-          try {
-            const parsed = new URL(trimmed);
-            if (!["http:", "https:"].includes(parsed.protocol)) {
-              return jsonError("imageUrl must be a valid http or https URL", 400);
-            }
-            updates.imageUrl = parsed.toString();
-          } catch {
-            return jsonError("imageUrl must be a valid URL", 400);
-          }
-        }
-      }
-    }
-
-    if (categoryId !== undefined) {
-      updates.categoryId = categoryId === null ? null : Number(categoryId);
-    }
-
-    if (status !== undefined) {
-      const allowed = ["active", "sold", "removed"] as const;
-      if (!allowed.includes(status as (typeof allowed)[number])) {
-        return jsonError(`status must be one of: ${allowed.join(", ")}`, 400);
-      }
-      updates.status = status as (typeof allowed)[number];
-    }
-
-    if (Object.keys(updates).length === 0) {
-      return jsonError("No updatable fields provided", 400);
-    }
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (price !== undefined) updates.price = String(price);
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+    if (categoryId !== undefined) updates.categoryId = categoryId;
+    if (status !== undefined) updates.status = status;
 
     const [updated] = await db
       .update(listings)

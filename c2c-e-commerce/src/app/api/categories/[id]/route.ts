@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { categories } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, UpdateCategorySchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -103,35 +104,27 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const [category] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
     if (!category) return jsonError("Category not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, UpdateCategorySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, slug, description } = body as Record<string, unknown>;
+    const { name, slug, description } = parsed.data;
 
     const updates: Partial<typeof categories.$inferInsert> = {};
 
-    if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) return jsonError("name must be a non-empty string", 400);
-      updates.name = name.trim();
-    }
+    if (name !== undefined) updates.name = name;
 
     if (slug !== undefined) {
-      if (typeof slug !== "string" || !slug.trim()) return jsonError("slug must be a non-empty string", 400);
       // uniqueness check (exclude self)
       const [conflict] = await db
         .select()
         .from(categories)
-        .where(eq(categories.slug, slug.trim()))
+        .where(eq(categories.slug, slug))
         .limit(1);
       if (conflict && conflict.id !== id) return jsonError("A category with that slug already exists", 409);
-      updates.slug = slug.trim();
+      updates.slug = slug;
     }
 
-    if (description !== undefined) {
-      updates.description = description === null ? null : String(description).trim();
-    }
-
-    if (Object.keys(updates).length === 0) return jsonError("No updatable fields provided", 400);
+    if (description !== undefined) updates.description = description;
 
     const [updated] = await db
       .update(categories)
