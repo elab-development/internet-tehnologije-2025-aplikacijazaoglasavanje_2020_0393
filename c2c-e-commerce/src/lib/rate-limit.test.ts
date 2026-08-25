@@ -1,0 +1,161 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import {
+  rateLimit,
+  resetRateLimits,
+  getClientIp,
+  LOGIN_RATE_LIMIT,
+  REGISTER_RATE_LIMIT,
+} from "./rate-limit";
+
+// Minimal NextRequest mock — only the headers we read.
+function createMockRequest(headers: Record<string, string> = {}) {
+  return {
+    headers: {
+      get: (name: string) => headers[name.toLowerCase()] ?? null,
+    },
+  } as unknown as import("next/server").NextRequest;
+}
+
+beforeEach(() => {
+  resetRateLimits();
+});
+
+// ─── rateLimit ────────────────────────────────────────────────────────────────
+
+describe("rateLimit", () => {
+  const policy = { limit: 3, windowMs: 60_000 };
+
+  it("allows requests up to the limit", () => {
+    for (let i = 0; i < 3; i++) {
+      expect(rateLimit("key", policy).allowed).toBe(true);
+    }
+  });
+
+  it("blocks the request that exceeds the limit", () => {
+    for (let i = 0; i < 3; i++) rateLimit("key", policy);
+
+    const result = rateLimit("key", policy);
+    expect(result.allowed).toBe(false);
+    expect(result.remaining).toBe(0);
+  });
+
+  it("counts down remaining", () => {
+    expect(rateLimit("key", policy).remaining).toBe(2);
+    expect(rateLimit("key", policy).remaining).toBe(1);
+    expect(rateLimit("key", policy).remaining).toBe(0);
+  });
+
+  it("tracks keys independently", () => {
+    for (let i = 0; i < 3; i++) rateLimit("a", policy);
+
+    expect(rateLimit("a", policy).allowed).toBe(false);
+    expect(rateLimit("b", policy).allowed).toBe(true);
+  });
+
+  it("reports a positive retryAfterSeconds when blocked", () => {
+    for (let i = 0; i < 3; i++) rateLimit("key", policy);
+
+    const result = rateLimit("key", policy);
+    expect(result.retryAfterSeconds).toBeGreaterThan(0);
+    expect(result.retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
+  it("does not block a blocked key forever — a further attempt still reports retry info", () => {
+    for (let i = 0; i < 5; i++) rateLimit("key", policy);
+
+    const result = rateLimit("key", policy);
+    expect(result.allowed).toBe(false);
+    expect(result.retryAfterSeconds).toBeGreaterThan(0);
+  });
+});
+
+// ─── Window expiry ────────────────────────────────────────────────────────────
+
+describe("rateLimit window expiry", () => {
+  const policy = { limit: 2, windowMs: 60_000 };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("allows again once the window has passed", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+
+    expect(rateLimit("key", policy).allowed).toBe(true);
+    expect(rateLimit("key", policy).allowed).toBe(true);
+    expect(rateLimit("key", policy).allowed).toBe(false);
+
+    // Just past the window — the earlier hits have aged out.
+    vi.setSystemTime(new Date("2026-01-01T00:01:01Z"));
+    expect(rateLimit("key", policy).allowed).toBe(true);
+  });
+
+  it("slides rather than resetting wholesale", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    rateLimit("key", policy);
+
+    // Second hit 30s later, so at T+61s only the first has expired.
+    vi.setSystemTime(new Date("2026-01-01T00:00:30Z"));
+    rateLimit("key", policy);
+
+    vi.setSystemTime(new Date("2026-01-01T00:01:01Z"));
+    expect(rateLimit("key", policy).allowed).toBe(true);
+    // The 00:00:30 hit and the one just recorded still occupy the window.
+    expect(rateLimit("key", policy).allowed).toBe(false);
+  });
+});
+
+// ─── getClientIp ──────────────────────────────────────────────────────────────
+
+describe("getClientIp", () => {
+  it("reads the left-most x-forwarded-for entry", () => {
+    const req = createMockRequest({
+      "x-forwarded-for": "203.0.113.5, 70.41.3.18, 150.172.238.178",
+    });
+    expect(getClientIp(req)).toBe("203.0.113.5");
+  });
+
+  it("trims whitespace", () => {
+    const req = createMockRequest({ "x-forwarded-for": "  203.0.113.5  " });
+    expect(getClientIp(req)).toBe("203.0.113.5");
+  });
+
+  it("falls back to x-real-ip", () => {
+    const req = createMockRequest({ "x-real-ip": "198.51.100.7" });
+    expect(getClientIp(req)).toBe("198.51.100.7");
+  });
+
+  it("prefers x-forwarded-for over x-real-ip", () => {
+    const req = createMockRequest({
+      "x-forwarded-for": "203.0.113.5",
+      "x-real-ip": "198.51.100.7",
+    });
+    expect(getClientIp(req)).toBe("203.0.113.5");
+  });
+
+  it("returns 'unknown' when no proxy headers are present", () => {
+    expect(getClientIp(createMockRequest())).toBe("unknown");
+  });
+
+  it("returns 'unknown' for an empty x-forwarded-for", () => {
+    expect(getClientIp(createMockRequest({ "x-forwarded-for": "" }))).toBe("unknown");
+  });
+});
+
+// ─── Policies ─────────────────────────────────────────────────────────────────
+
+describe("shared policies", () => {
+  it("login allows a human retrying but not a script", () => {
+    expect(LOGIN_RATE_LIMIT.limit).toBe(10);
+    expect(LOGIN_RATE_LIMIT.windowMs).toBe(15 * 60 * 1000);
+  });
+
+  it("register is scoped to an hour", () => {
+    expect(REGISTER_RATE_LIMIT.limit).toBe(10);
+    expect(REGISTER_RATE_LIMIT.windowMs).toBe(60 * 60 * 1000);
+  });
+});

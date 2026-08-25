@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
+import { getClientIp, rateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
 
 /**
  * @swagger
@@ -61,6 +62,17 @@ import { jsonOk, jsonError } from "@/lib/response";
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many registration attempts from this IP
+ *         headers:
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *             description: Seconds to wait before retrying
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -70,6 +82,19 @@ import { jsonOk, jsonError } from "@/lib/response";
  */
 export async function POST(request: NextRequest) {
   try {
+    // ── Rate limit ────────────────────────────────────────────────────────────
+    // Registration runs bcrypt at 12 rounds, so unbounded signups are also a
+    // cheap way to burn CPU. Limit before we touch the DB.
+    const limit = rateLimit(
+      `register:${getClientIp(request)}`,
+      REGISTER_RATE_LIMIT
+    );
+    if (!limit.allowed) {
+      return jsonError("Too many registration attempts. Please try again later.", 429, {
+        "Retry-After": String(limit.retryAfterSeconds),
+      });
+    }
+
     const body: unknown = await request.json();
 
     if (!body || typeof body !== "object") {
@@ -100,12 +125,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // if (role !== "buyer" && role !== "seller") {
-    //   return jsonError(
-    //     "role must be 'buyer' or 'seller'" ,
-    //     400
-    //   );
-    // }
+    // Self-registration may only ever create a buyer or a seller. Admin accounts
+    // are granted by an existing admin via PUT /api/users/[id]; accepting the
+    // client-supplied role verbatim here would let anyone register as admin.
+    const SELF_ASSIGNABLE_ROLES = ["buyer", "seller"] as const;
+    type SelfAssignableRole = (typeof SELF_ASSIGNABLE_ROLES)[number];
+
+    if (!SELF_ASSIGNABLE_ROLES.includes(role as SelfAssignableRole)) {
+      return jsonError("role must be 'buyer' or 'seller'", 400);
+    }
+    const safeRole: SelfAssignableRole = role as SelfAssignableRole;
 
     // ── Uniqueness check ──────────────────────────────────────────────────────
     const existing = await db
@@ -126,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     const [user] = await db
       .insert(users)
-      .values({ email: email as string, passwordHash, name: name as string, role: role as "buyer" | "seller" | "admin" })
+      .values({ email, passwordHash, name, role: safeRole })
       .returning();
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });

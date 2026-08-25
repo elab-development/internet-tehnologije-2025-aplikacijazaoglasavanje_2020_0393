@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/response";
+import { getClientIp, rateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
 
 /**
  * @swagger
@@ -52,6 +53,17 @@ import { jsonError, jsonOk } from "@/lib/response";
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many login attempts from this IP
+ *         headers:
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *             description: Seconds to wait before retrying
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -61,6 +73,15 @@ import { jsonError, jsonOk } from "@/lib/response";
  */
 export async function POST(request: NextRequest) {
   try {
+    // ── Rate limit ────────────────────────────────────────────────────────────
+    // Before any DB or bcrypt work, so a flood costs us as little as possible.
+    const limit = rateLimit(`login:${getClientIp(request)}`, LOGIN_RATE_LIMIT);
+    if (!limit.allowed) {
+      return jsonError("Too many login attempts. Please try again later.", 429, {
+        "Retry-After": String(limit.retryAfterSeconds),
+      });
+    }
+
     const body: unknown = await request.json();
 
     if (!body || typeof body !== "object") {

@@ -10,7 +10,8 @@ export function jsonOk<T>(data: T, status: 200 | 201 = 200): NextResponse {
 
 export function jsonError(
   message: string,
-  status: 400 | 401 | 403 | 404 | 409 | 500 = 500
+  status: 400 | 401 | 403 | 404 | 409 | 429 | 500 = 500,
+  headers?: Record<string, string>
 ): NextResponse {
-  return NextResponse.json({ error: message, status }, { status });
+  return NextResponse.json({ error: message, status }, { status, headers });
 }

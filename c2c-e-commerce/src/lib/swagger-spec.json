@@ -376,6 +376,24 @@
               }
             }
           },
+          "429": {
+            "description": "Too many login attempts from this IP",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -589,6 +607,24 @@
           },
           "409": {
             "description": "Email already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many registration attempts from this IP",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1452,7 +1488,7 @@
           "Listings"
         ],
         "summary": "List listings",
-        "description": "Returns paginated active listings with optional filters.\nWhen `sellerId` is provided, all statuses are returned (for seller dashboard).\n",
+        "description": "Returns paginated active listings with optional filters.\nWhen `sellerId` matches the authenticated seller (or the caller is an\nadmin), non-active listings are included too, for the seller dashboard.\nAll other callers only ever receive active listings.\n",
         "parameters": [
           {
             "in": "query",
@@ -1487,7 +1523,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Filter by seller ID (returns all statuses)"
+            "description": "Filter by seller ID. Returns all statuses only when it is the authenticated seller's own ID; otherwise active listings only.\n"
           },
           {
             "in": "query",
