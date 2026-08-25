@@ -3,6 +3,8 @@ import { and, asc, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import type { TokenPayload } from "@/lib/auth";
+import { resolveListingVisibility } from "@/lib/listing-visibility";
 
 // ─── GET /api/listings ────────────────────────────────────────────────────────
 // Public. Returns paginated active listings with optional filters.
@@ -25,7 +27,9 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *     summary: List listings
  *     description: |
  *       Returns paginated active listings with optional filters.
- *       When `sellerId` is provided, all statuses are returned (for seller dashboard).
+ *       When `sellerId` matches the authenticated seller (or the caller is an
+ *       admin), non-active listings are included too, for the seller dashboard.
+ *       All other callers only ever receive active listings.
  *     parameters:
  *       - in: query
  *         name: page
@@ -49,7 +53,9 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *         name: sellerId
  *         schema:
  *           type: integer
- *         description: Filter by seller ID (returns all statuses)
+ *         description: >
+ *           Filter by seller ID. Returns all statuses only when it is the
+ *           authenticated seller's own ID; otherwise active listings only.
  *       - in: query
  *         name: minPrice
  *         schema:
@@ -102,11 +108,17 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
 export async function GET(request: NextRequest) {
   try {
     // ── Authentication ────────────────────────────────────────────────────────
-    const payload = authenticate(request);
-    const isAdmin = payload.role === "admin";
-    
-    const { searchParams } = request.nextUrl;
+    // This endpoint is public, so a missing or expired token is not an error —
+    // it just means the caller is anonymous. Anything that is *not* an AuthError
+    // (e.g. JWT_SECRET missing) is a real fault and must not be swallowed.
+    let payload: TokenPayload | null = null;
+    try {
+      payload = authenticate(request);
+    } catch (err) {
+      if (!(err instanceof AuthError)) throw err;
+    }
 
+    const { searchParams } = request.nextUrl;
     // ── Pagination ────────────────────────────────────────────────────────────
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
     const limit = Math.min(
@@ -116,23 +128,26 @@ export async function GET(request: NextRequest) {
     const offset = (page - 1) * limit;
 
     // ── Filters ───────────────────────────────────────────────────────────────
-    const sellerId = searchParams.get("sellerId");
+    // See lib/listing-visibility.ts — deciding this from the raw query string
+    // is what previously let `?sellerId=abc` drop every filter and dump the
+    // whole table to anonymous callers.
+    const { includeAllStatuses, sellerFilter } = resolveListingVisibility(
+      searchParams.get("sellerId"),
+      payload
+    );
 
-    // When a sellerId is provided, return all listings (including sold/removed)
-    // so sellers can manage their own inventory. Otherwise only show active.
-    const conditions = sellerId
+    const conditions = includeAllStatuses
       ? []
       : [eq(listings.status, "active")];
+
+    if (sellerFilter !== null) {
+      conditions.push(eq(listings.sellerId, sellerFilter));
+    }
 
     const categoryId = searchParams.get("categoryId");
     if (categoryId) {
       const id = parseInt(categoryId, 10);
       if (!isNaN(id)) conditions.push(eq(listings.categoryId, id));
-    }
-
-    if (sellerId && !isAdmin) {
-      const id = parseInt(sellerId, 10);
-      if (!isNaN(id)) conditions.push(eq(listings.sellerId, id));
     }
 
     const minPrice = searchParams.get("minPrice");
