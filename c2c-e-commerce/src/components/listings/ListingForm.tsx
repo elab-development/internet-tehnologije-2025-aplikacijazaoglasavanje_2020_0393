@@ -1,0 +1,253 @@
+"use client";
+
+import { useEffect, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import toast from "react-hot-toast";
+import { Button, ErrorAlert, InputField } from "@/components/ui";
+import { useFetch } from "@/hooks/useFetch";
+import { api } from "@/lib/api";
+import type {
+  Category,
+  CreatedListing,
+  ListingDetail,
+  ListingStatus,
+} from "@/types/api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type ListingFormProps =
+  | { mode: "create"; listingId?: never }
+  | { mode: "edit"; listingId: number };
+
+const listingStatuses: ListingStatus[] = ["active", "sold", "removed"];
+
+const selectClasses =
+  "rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
+
+// ─── Loading placeholder ──────────────────────────────────────────────────────
+
+function ListingFormSkeleton() {
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-4" aria-hidden="true">
+      <div className="h-8 w-40 skeleton-shimmer rounded-lg" />
+      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm space-y-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="space-y-1.5">
+            <div className="h-4 w-20 skeleton-shimmer rounded" />
+            <div className="h-10 w-full skeleton-shimmer rounded-lg" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+/**
+ * The create/edit listing form, shared by `/listings/new` and
+ * `/listings/[id]/edit`. In edit mode it loads the listing and exposes the
+ * status field; in create mode it starts empty.
+ *
+ * Callers are responsible for the auth and role gate — wrap it in
+ * `<ProtectedRoute allowedRoles={["seller", "admin"]}>`.
+ */
+export default function ListingForm(props: ListingFormProps) {
+  const { mode } = props;
+  const isEdit = mode === "edit";
+  const router = useRouter();
+
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [price, setPrice] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [status, setStatus] = useState<ListingStatus>("active");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const { data: categoryData } = useFetch<Category[]>("/api/categories");
+  const categories = categoryData ?? [];
+
+  const {
+    data: listing,
+    loading: listingLoading,
+    error: loadError,
+  } = useFetch<ListingDetail>(
+    isEdit ? `/api/listings/${props.listingId}` : null,
+  );
+
+  // Prefill once the listing being edited arrives.
+  useEffect(() => {
+    if (!listing) return;
+    setTitle(listing.title);
+    setDescription(listing.description);
+    setPrice(String(Number(listing.price)));
+    setImageUrl(listing.imageUrl ?? "");
+    setCategoryId(listing.categoryId ? String(listing.categoryId) : "");
+    setStatus(listing.status);
+  }, [listing]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSubmitError(null);
+
+    if (!title.trim() || !description.trim() || !price.trim()) {
+      setSubmitError("Title, description, and price are required");
+      return;
+    }
+
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      price: Number(price),
+      imageUrl: imageUrl.trim() || null,
+      categoryId: categoryId ? Number(categoryId) : null,
+    };
+
+    setSubmitting(true);
+
+    try {
+      if (props.mode === "edit") {
+        await api.put(`/api/listings/${props.listingId}`, {
+          ...payload,
+          status,
+        });
+        toast.success("Listing updated successfully!");
+        router.push(`/listings/${props.listingId}`);
+      } else {
+        const created = await api.post<CreatedListing>("/api/listings", payload);
+        toast.success("Listing created successfully!");
+        router.push(`/listings/${created.id}`);
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : isEdit
+            ? "Failed to update listing"
+            : "Failed to create listing";
+      setSubmitError(msg);
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  if (isEdit && listingLoading) return <ListingFormSkeleton />;
+
+  const error = submitError ?? loadError;
+
+  return (
+    <div className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <h1 className="mb-6 text-2xl font-bold text-zinc-900">
+        {isEdit ? "Edit listing" : "Create listing"}
+      </h1>
+
+      {error && <ErrorAlert message={error} className="mb-4" />}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <InputField
+          label="Title"
+          type="text"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Product title"
+          required
+        />
+
+        <InputField
+          label="Description"
+          type="text"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="Product description"
+          required
+        />
+
+        <InputField
+          label="Price"
+          type="number"
+          value={price}
+          onChange={(event) => setPrice(event.target.value)}
+          min={0}
+          step={0.01}
+          placeholder="0.00"
+          required
+        />
+
+        <InputField
+          label="Image URL"
+          type="text"
+          value={imageUrl}
+          onChange={(event) => setImageUrl(event.target.value)}
+          placeholder="https://example.com/image.jpg"
+        />
+
+        <div className="flex flex-col gap-1">
+          <label
+            className="text-sm font-medium text-zinc-700"
+            htmlFor="listing-category"
+          >
+            Category
+          </label>
+          <select
+            id="listing-category"
+            value={categoryId}
+            onChange={(event) => setCategoryId(event.target.value)}
+            className={selectClasses}
+          >
+            <option value="">No category</option>
+            {categories.map((category) => (
+              <option key={category.id} value={String(category.id)}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {isEdit && (
+          <div className="flex flex-col gap-1">
+            <label
+              className="text-sm font-medium text-zinc-700"
+              htmlFor="listing-status"
+            >
+              Status
+            </label>
+            <select
+              id="listing-status"
+              value={status}
+              onChange={(event) =>
+                setStatus(event.target.value as ListingStatus)
+              }
+              className={selectClasses}
+            >
+              {listingStatuses.map((listingStatus) => (
+                <option key={listingStatus} value={listingStatus}>
+                  {listingStatus.charAt(0).toUpperCase() +
+                    listingStatus.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="flex gap-3 pt-2">
+          {props.mode === "edit" && (
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => router.push(`/listings/${props.listingId}`)}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button type="submit" loading={submitting}>
+            {isEdit ? "Save changes" : "Create listing"}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

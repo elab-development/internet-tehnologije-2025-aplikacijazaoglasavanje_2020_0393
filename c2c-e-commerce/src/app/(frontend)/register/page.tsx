@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import { RiStoreLine, RiUserAddLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
+import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -98,15 +99,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Global error banner */}
-          {error && (
-            <div
-              role="alert"
-              className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              <span className="shrink-0 mt-0.5">⚠️</span>
-              <span>{error}</span>
-            </div>
-          )}
+          {error && <ErrorAlert message={error} className="mb-5" />}
 
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <InputField
