@@ -3,39 +3,20 @@
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Metadata } from "next";
-import toast from "react-hot-toast";
-import { RiSearchLine, RiDeleteBin2Line } from "@remixicon/react";
-import Card from "@/components/ui/Card";
-import Button from "@/components/ui/Button";
-import InputField from "@/components/ui/InputField";
-import { ListingCardSkeleton } from "@/components/ui/Skeleton";
-import { api } from "@/lib/api";
-import { useAuth } from "@/context/AuthContext";
+import { RiSearchLine } from "@remixicon/react";
+import {
+  Button,
+  Card,
+  EmptyState,
+  ErrorAlert,
+  InputField,
+  ListingCardSkeleton,
+} from "@/components/ui";
+import { useFetch } from "@/hooks/useFetch";
+import type { Category, ListingsResponse } from "@/types/api";
 
 export const _metadata: Pick<Metadata, "title"> = {
   title: "Listings",
-};
-
-type Listing = {
-  id: number;
-  title: string;
-  description: string;
-  price: string;
-  categoryId: number | null;
-  imageUrl : string | null;
-};
-
-type Category = {
-  id: number;
-  name: string;
-};
-
-type ListingsResponse = {
-  data: Listing[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
 };
 
 type SortOption = "newest" | "price_asc" | "price_desc";
@@ -43,12 +24,6 @@ type SortOption = "newest" | "price_asc" | "price_desc";
 function ListingsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-
-  const [listings, setListings] = useState<Listing[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [page, setPage] = useState(() => {
     const raw = Number(searchParams.get("page") ?? "1");
@@ -64,61 +39,39 @@ function ListingsPageContent() {
     (searchParams.get("sort") as SortOption) ?? "newest",
   );
 
+  const { data: categoryData } = useFetch<Category[]>("/api/categories");
+  const categories = useMemo(() => categoryData ?? [], [categoryData]);
+
   const categoryMap = useMemo(
     () => new Map(categories.map((category) => [category.id, category.name])),
     [categories],
   );
 
+  const query = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", "12");
+    if (search.trim()) params.set("search", search.trim());
+    if (categoryId) params.set("categoryId", categoryId);
+    if (minPrice) params.set("minPrice", minPrice);
+    if (maxPrice) params.set("maxPrice", maxPrice);
+    if (sort) params.set("sort", sort);
+    return params.toString();
+  }, [page, search, categoryId, minPrice, maxPrice, sort]);
+
+  // Keep the address bar in sync so filters survive a reload or a shared link.
   useEffect(() => {
-    api
-      .get<Category[]>("/api/categories")
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
+    router.replace(`/listings?${query}`);
+  }, [query, router]);
 
-  useEffect(() => {
-    const query = new URLSearchParams();
-    query.set("page", String(page));
-    query.set("limit", "12");
-    if (search.trim()) query.set("search", search.trim());
-    if (categoryId) query.set("categoryId", categoryId);
-    if (minPrice) query.set("minPrice", minPrice);
-    if (maxPrice) query.set("maxPrice", maxPrice);
-    if (sort) query.set("sort", sort);
+  const { data, loading, error } = useFetch<ListingsResponse>(
+    `/api/listings?${query}`,
+  );
 
-    router.replace(`/listings?${query.toString()}`);
-
-    api
-      .get<ListingsResponse>(`/api/listings?${query.toString()}`)
-      .then((response) => {
-        setError(null);
-        setListings(response.data);
-        setTotalPages(Math.max(1, response.totalPages || 1));
-      })
-      .catch((err: unknown) => {
-        const msg =
-          err instanceof Error ? err.message : "Failed to load listings";
-        setError(msg);
-        toast.error(msg);
-        setListings([]);
-        setTotalPages(1);
-      })
-      .finally(() => setLoading(false));
-  }, [page, search, categoryId, minPrice, maxPrice, sort, router]);
-
-  async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure you want to delete this listing?"))
-      return;
-    try {
-      await api.delete(`/api/listings/${id}`);
-      setListings((prev) => prev.filter((l) => l.id !== id));
-      toast.success("Listing deleted");
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to delete listing";
-      toast.error(msg);
-    }
-  }
+  // A failed request clears the grid rather than leaving stale results under
+  // the error banner.
+  const listings = error ? [] : (data?.data ?? []);
+  const totalPages = error ? 1 : Math.max(1, data?.totalPages || 1);
 
   function handleFiltersSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -223,15 +176,7 @@ function ListingsPageContent() {
         </form>
       </section>
 
-      {error && (
-        <div
-          role="alert"
-          className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-        >
-          <span className="shrink-0 mt-0.5">⚠️</span>
-          <span>{error}</span>
-        </div>
-      )}
+      {error && <ErrorAlert message={error} />}
 
       {loading ? (
         <section
@@ -243,21 +188,16 @@ function ListingsPageContent() {
           ))}
         </section>
       ) : listings.length === 0 ? (
-        <div className="flex flex-col items-center gap-4 py-20 text-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400">
-            <RiSearchLine size={32} />
-          </span>
-          <p className="text-lg font-semibold text-zinc-700">
-            No listings found
-          </p>
-          <p className="text-sm text-zinc-500 max-w-xs">
-            Try adjusting your filters or search terms to find what you are
-            looking for.
-          </p>
-          <Button variant="secondary" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
+        <EmptyState
+          icon={<RiSearchLine size={32} />}
+          title="No listings found"
+          description="Try adjusting your filters or search terms to find what you are looking for."
+          action={
+            <Button variant="secondary" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          }
+        />
       ) : (
         <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {listings.map((listing) => (
@@ -276,14 +216,12 @@ function ListingsPageContent() {
                   <span className="text-sm font-semibold text-zinc-900">
                     ${Number(listing.price).toFixed(2)}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => router.push(`/listings/${listing.id}`)}
-                    >
-                      View
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => router.push(`/listings/${listing.id}`)}
+                  >
+                    View
+                  </Button>
                 </div>
               }
             />
@@ -304,9 +242,7 @@ function ListingsPageContent() {
         </span>
         <Button
           variant="secondary"
-          onClick={() =>
-            setPage((current) => Math.min(totalPages, current + 1))
-          }
+          onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           disabled={page >= totalPages}
         >
           Next
