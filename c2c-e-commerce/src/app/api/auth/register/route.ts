@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
 import { getClientIp, rateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
+import { parseRequest, RegisterBodySchema } from "@/lib/validation";
 
 /**
  * @swagger
@@ -95,46 +96,13 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
-      return jsonError(
-        "Invalid request body",
-        400 );
-    }
-
-    const { email, password, name, role = "buyer" } = body as Record<string, unknown>;
-
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!email || typeof email !== "string") {
-      return jsonError(
-        "email is required",
-        400
-      );
-    }
-    if (!password || typeof password !== "string" || password.length < 8) {
-      return jsonError(
-        "password is required and must be at least 8 characters",
-         400
-      );
-    }
-    if (!name || typeof name !== "string") {
-      return jsonError(
-        "name is required", 
-        400 
-      );
-    }
+    // RegisterBodySchema's role enum is restricted to buyer/seller, so admin can
+    // never be self-assigned here.
+    const parsed = await parseRequest(request, RegisterBodySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    // Self-registration may only ever create a buyer or a seller. Admin accounts
-    // are granted by an existing admin via PUT /api/users/[id]; accepting the
-    // client-supplied role verbatim here would let anyone register as admin.
-    const SELF_ASSIGNABLE_ROLES = ["buyer", "seller"] as const;
-    type SelfAssignableRole = (typeof SELF_ASSIGNABLE_ROLES)[number];
-
-    if (!SELF_ASSIGNABLE_ROLES.includes(role as SelfAssignableRole)) {
-      return jsonError("role must be 'buyer' or 'seller'", 400);
-    }
-    const safeRole: SelfAssignableRole = role as SelfAssignableRole;
+    const { email, password, name, phoneNumber, role } = parsed.data;
 
     // ── Uniqueness check ──────────────────────────────────────────────────────
     const existing = await db
@@ -155,7 +123,7 @@ export async function POST(request: NextRequest) {
 
     const [user] = await db
       .insert(users)
-      .values({ email, passwordHash, name, role: safeRole })
+      .values({ email, passwordHash, name, phoneNumber: phoneNumber ?? null, role })
       .returning();
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });

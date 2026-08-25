@@ -8,19 +8,95 @@ export function formatZodError(error: z.ZodError): string {
 }
 
 /**
+ * `ok` is the discriminant. Narrowing on `error` alone would not work: its type
+ * is `string`, which includes `""`, so a truthiness test cannot rule out the
+ * failure branch.
+ */
+export type ParseResult<T> =
+  | { ok: true; data: T; error: null }
+  | { ok: false; data: null; error: string };
+
+/**
  * Safely parse `body` against `schema`.
  * Returns `{ data, error: null }` on success, or `{ data: null, error }` on failure.
  */
 export function parseBody<T>(
   schema: z.ZodSchema<T>,
   body: unknown
-): { data: T; error: null } | { data: null; error: string } {
+): ParseResult<T> {
   const result = schema.safeParse(body);
   if (!result.success) {
-    return { data: null, error: formatZodError(result.error) };
+    return { ok: false, data: null, error: formatZodError(result.error) };
   }
-  return { data: result.data, error: null };
+  return { ok: true, data: result.data, error: null };
 }
+
+/**
+ * Read a JSON request body and validate it against `schema` in one step.
+ *
+ * Also covers the malformed-JSON case: `request.json()` throws on invalid
+ * input, which handlers previously let fall through to their catch-all and
+ * answer 500. A body the client got wrong is a 400.
+ *
+ * Keep the result boxed rather than destructuring it, and branch on `ok`:
+ * narrowing `data` to non-null depends on TypeScript correlating it with a
+ * discriminant check on the same object, which destructuring breaks.
+ *
+ * ```ts
+ * const parsed = await parseRequest(request, CreateListingSchema);
+ * if (!parsed.ok) return jsonError(parsed.error, 400);
+ * const listing = parsed.data; // narrowed to T
+ * ```
+ */
+export async function parseRequest<T>(
+  request: Request,
+  schema: z.ZodSchema<T>
+): Promise<ParseResult<T>> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return { ok: false, data: null, error: "Invalid JSON body" };
+  }
+  return parseBody(schema, body);
+}
+
+// ─── Image URL transformer (shared) ───────────────────────────────────────────
+
+/**
+ * Accepts an absolute http(s) URL, normalises it, and maps empty/blank input to
+ * null. Mirrors what the listing routes did by hand: a bare `.startsWith("http")`
+ * check would let `httpx://…` through, so the protocol is checked after parsing.
+ */
+const imageUrlField = z
+  .union([z.string(), z.null()])
+  .transform((val, ctx) => {
+    if (val === null) return null;
+
+    const trimmed = val.trim();
+    if (!trimmed) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "imageUrl must be a valid URL",
+      });
+      return z.NEVER;
+    }
+
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "imageUrl must be a valid http or https URL",
+      });
+      return z.NEVER;
+    }
+
+    return parsed.toString();
+  });
 
 // ─── Price transformer (shared) ───────────────────────────────────────────────
 
@@ -41,6 +117,9 @@ export const RegisterBodySchema = z.object({
   email: z.string().email("email must be a valid email address"),
   password: z.string().min(8, "password must be at least 8 characters"),
   name: z.string().min(1, "name is required"),
+  phoneNumber: z.string().trim().min(1).nullable().optional(),
+  // Deliberately excludes "admin": self-registration must never mint an admin.
+  // Admin is granted by an existing admin via PUT /api/users/[id].
   role: z.enum(["buyer", "seller"], {
     error: "role must be 'buyer' or 'seller'",
   }).default("buyer"),
@@ -72,34 +151,23 @@ export const UpdateCategorySchema = z
 // ─── Listings ─────────────────────────────────────────────────────────────────
 
 export const CreateListingSchema = z.object({
-  title: z.string().min(1, "title is required"),
-  description: z.string().min(1, "description is required"),
+  title: z.string().trim().min(1, "title is required"),
+  description: z.string().trim().min(1, "description is required"),
   price: priceField,
-  imageUrl: z
-    .string()
-    .trim()
-    .url("imageUrl must be a valid URL")
-    .startsWith("http", "imageUrl must start with http or https")
-    .nullable()
-    .optional(),
+  imageUrl: imageUrlField.optional(),
   categoryId: z.number().int().nullable().optional(),
 });
 
 export const UpdateListingSchema = z
   .object({
-    title: z.string().min(1, "title must be a non-empty string").optional(),
+    title: z.string().trim().min(1, "title must be a non-empty string").optional(),
     description: z
       .string()
+      .trim()
       .min(1, "description must be a non-empty string")
       .optional(),
     price: priceField.optional(),
-    imageUrl: z
-      .string()
-      .trim()
-      .url("imageUrl must be a valid URL")
-      .startsWith("http", "imageUrl must start with http or https")
-      .nullable()
-      .optional(),
+    imageUrl: imageUrlField.optional(),
     categoryId: z.number().int().nullable().optional(),
     status: z.enum(["active", "sold", "removed"], {
       error: "status must be one of: active, sold, removed",
@@ -124,13 +192,22 @@ export const CreateOrderSchema = z.object({
   items: z.array(OrderItemSchema).min(1, "items must be a non-empty array"),
 });
 
+// Must stay in sync with orderStatusEnum in db/schema/orders.ts. "approved" and
+// "rejected" were added by migration 0004 for the seller approval flow.
+export const ORDER_STATUSES = [
+  "pending",
+  "paid",
+  "shipped",
+  "completed",
+  "cancelled",
+  "approved",
+  "rejected",
+] as const;
+
 export const UpdateOrderStatusSchema = z.object({
-  status: z.enum(
-    ["pending", "paid", "shipped", "completed", "cancelled"],
-    {
-      error: "status must be one of: pending, paid, shipped, completed, cancelled",
-    }
-  ),
+  status: z.enum(ORDER_STATUSES, {
+    error: `status must be one of: ${ORDER_STATUSES.join(", ")}`,
+  }),
 });
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────

@@ -2,12 +2,16 @@ import { describe, it, expect } from "vitest";
 import {
   formatZodError,
   parseBody,
+  parseRequest,
+  ORDER_STATUSES,
   RegisterBodySchema,
   LoginBodySchema,
   CreateCategorySchema,
   CreateListingSchema,
+  UpdateListingSchema,
   CreateOrderSchema,
   CreateReviewSchema,
+  UpdateOrderStatusSchema,
   UpdateUserSchema,
 } from "./validation";
 import { z } from "zod";
@@ -312,5 +316,138 @@ describe("UpdateUserSchema", () => {
   it("accepts role update", () => {
     const result = UpdateUserSchema.safeParse({ role: "seller" });
     expect(result.success).toBe(true);
+  });
+});
+
+// ─── parseRequest ─────────────────────────────────────────────────────────────
+
+describe("parseRequest", () => {
+  const schema = z.object({ name: z.string().min(1) });
+
+  function jsonRequest(body: string): Request {
+    return new Request("http://localhost/test", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body,
+    });
+  }
+
+  it("returns parsed data for a valid body", async () => {
+    const result = await parseRequest(jsonRequest('{"name":"Test"}'), schema);
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual({ name: "Test" });
+  });
+
+  it("reports schema violations", async () => {
+    const result = await parseRequest(jsonRequest('{"name":""}'), schema);
+    expect(result.data).toBeNull();
+    expect(result.error).toBeTruthy();
+  });
+
+  it("reports malformed JSON instead of throwing", async () => {
+    // Previously request.json() threw and handlers answered 500 for what is a
+    // client mistake.
+    const result = await parseRequest(jsonRequest("{not json"), schema);
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("Invalid JSON body");
+  });
+
+  it("reports an empty body as malformed rather than crashing", async () => {
+    const result = await parseRequest(jsonRequest(""), schema);
+    expect(result.data).toBeNull();
+    expect(result.error).toBe("Invalid JSON body");
+  });
+
+  it("rejects a JSON scalar where an object is required", async () => {
+    const result = await parseRequest(jsonRequest("null"), schema);
+    expect(result.data).toBeNull();
+    expect(result.error).toBeTruthy();
+  });
+});
+
+// ─── imageUrl hardening ───────────────────────────────────────────────────────
+
+describe("imageUrl validation", () => {
+  const base = { title: "Item", description: "Desc", price: 10 };
+
+  it("accepts and normalises an https URL", () => {
+    const result = CreateListingSchema.safeParse({
+      ...base,
+      imageUrl: "  https://example.com/a.jpg  ",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.imageUrl).toBe("https://example.com/a.jpg");
+  });
+
+  it("rejects a non-http protocol", () => {
+    for (const url of ["ftp://example.com/a.jpg", "javascript:alert(1)", "file:///etc/passwd"]) {
+      expect(CreateListingSchema.safeParse({ ...base, imageUrl: url }).success).toBe(false);
+    }
+  });
+
+  it("rejects a protocol that merely starts with 'http'", () => {
+    // The previous `.startsWith("http")` check let this through.
+    expect(
+      CreateListingSchema.safeParse({ ...base, imageUrl: "httpx://example.com/a.jpg" }).success
+    ).toBe(false);
+  });
+
+  it("maps blank input to null rather than failing", () => {
+    const result = CreateListingSchema.safeParse({ ...base, imageUrl: "   " });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.imageUrl).toBeNull();
+  });
+
+  it("accepts an explicit null to clear the image on update", () => {
+    const result = UpdateListingSchema.safeParse({ imageUrl: null });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.imageUrl).toBeNull();
+  });
+});
+
+// ─── UpdateOrderStatusSchema ──────────────────────────────────────────────────
+
+describe("UpdateOrderStatusSchema", () => {
+  it("accepts every status the DB enum allows", () => {
+    for (const status of ORDER_STATUSES) {
+      expect(UpdateOrderStatusSchema.safeParse({ status }).success).toBe(true);
+    }
+  });
+
+  it("accepts approved and rejected", () => {
+    // Added by migration 0004; the schema previously omitted them, so wiring it
+    // up unchanged would have broken the seller approval flow.
+    expect(UpdateOrderStatusSchema.safeParse({ status: "approved" }).success).toBe(true);
+    expect(UpdateOrderStatusSchema.safeParse({ status: "rejected" }).success).toBe(true);
+  });
+
+  it("rejects an unknown status", () => {
+    expect(UpdateOrderStatusSchema.safeParse({ status: "shipped-ish" }).success).toBe(false);
+  });
+});
+
+// ─── Registration role and phone ──────────────────────────────────────────────
+
+describe("RegisterBodySchema role restrictions", () => {
+  const base = { email: "a@example.com", password: "password123", name: "A" };
+
+  it("refuses to mint an admin", () => {
+    expect(RegisterBodySchema.safeParse({ ...base, role: "admin" }).success).toBe(false);
+  });
+
+  it("defaults to buyer", () => {
+    const result = RegisterBodySchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.role).toBe("buyer");
+  });
+
+  it("keeps the phone number the register form sends", () => {
+    const result = RegisterBodySchema.safeParse({ ...base, phoneNumber: " +381601234567 " });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.phoneNumber).toBe("+381601234567");
+  });
+
+  it("requires a valid email", () => {
+    expect(RegisterBodySchema.safeParse({ ...base, email: "not-an-email" }).success).toBe(false);
   });
 });

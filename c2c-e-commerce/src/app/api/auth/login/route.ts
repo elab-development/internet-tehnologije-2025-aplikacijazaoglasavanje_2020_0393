@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/response";
 import { getClientIp, rateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
+import { parseRequest, LoginBodySchema } from "@/lib/validation";
 
 /**
  * @swagger
@@ -82,21 +83,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
-      return jsonError("Invalid request body", 400);
-    }
-
-    const { email, password } = body as Record<string, unknown>;
-
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!email || typeof email !== "string") {
-      return jsonError("email is required", 400);
-    }
-    if (!password || typeof password !== "string") {
-      return jsonError("password is required", 400);
-    }
+    // LoginBodySchema deliberately requires only a non-empty email, not a
+    // well-formed one: login should not reveal anything the credential check
+    // wouldn't.
+    const parsed = await parseRequest(request, LoginBodySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
+
+    const { email, password } = parsed.data;
 
     // ── Look up user ──────────────────────────────────────────────────────────
     const [user] = await db
