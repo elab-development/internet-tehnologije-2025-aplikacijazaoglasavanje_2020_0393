@@ -1,9 +1,13 @@
 // ─── API helper ───────────────────────────────────────────────────────────────
 // Thin fetch wrapper that:
 //   • Prepends the API base URL
-//   • Injects Authorization: Bearer <token> from localStorage
+//   • Sends the httpOnly auth cookie with every request
 //   • Sets Content-Type: application/json
 //   • Throws a plain Error with the server's message on non-2xx responses
+//
+// The JWT is never handled here. It lives in an httpOnly cookie the browser
+// attaches automatically, so no script -- ours or an injected one -- can read
+// it. Do not reintroduce localStorage token storage.
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
@@ -17,14 +21,13 @@ async function request<T>(
   endpoint: string,
   { method = "GET", body, headers = {} }: RequestOptions = {}
 ): Promise<T> {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
   const config: RequestInit = {
     method,
+    // "same-origin" would cover the default deployment, but "include" also
+    // works when NEXT_PUBLIC_API_URL points the client at a separate host.
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
