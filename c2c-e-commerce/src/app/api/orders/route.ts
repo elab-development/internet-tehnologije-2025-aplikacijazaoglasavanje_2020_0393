@@ -1,10 +1,22 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateOrderSchema } from "@/lib/validation";
+
+/**
+ * Raised inside the order transaction so the rollback happens naturally; the
+ * handler translates it into a 404. Not exported: route files may only export
+ * HTTP handlers.
+ */
+class UnavailableListingError extends Error {
+  constructor(public readonly listingId: number) {
+    super(`Listing ${listingId} not found or not active`);
+    this.name = "UnavailableListingError";
+  }
+}
 
 // ─── GET /api/orders ──────────────────────────────────────────────────────────
 // Buyer   → own orders only
@@ -159,29 +171,41 @@ export async function POST(request: NextRequest) {
 
     const { items } = parsed.data;
 
-    // ── Resolve each item ─────────────────────────────────────────────────────
-    const resolvedItems: { listingId: number; quantity: number; price: string }[] = [];
-    let total = 0;
+    // ── Resolve and persist atomically ────────────────────────────────────────
+    // Everything happens inside the transaction, with the listing rows locked
+    // FOR UPDATE. Previously the availability check ran before the transaction
+    // opened, so two buyers ordering the last of a listing could both pass the
+    // "is it active" check and both have their orders accepted.
+    const result = await db.transaction(async (tx) => {
+      const uniqueIds = [...new Set(items.map((i) => i.listingId))];
 
-    for (const { listingId, quantity: qty } of items) {
-      const [listing] = await db
+      // One query for every item instead of one per item.
+      const rows = await tx
         .select()
         .from(listings)
-        .where(and(eq(listings.id, listingId), eq(listings.status, "active")))
-        .limit(1);
+        .where(and(inArray(listings.id, uniqueIds), eq(listings.status, "active")))
+        .for("update");
 
-      if (!listing) return jsonError(`Listing ${listingId} not found or not active`, 404);
+      const byId = new Map(rows.map((row) => [row.id, row]));
 
-      const lineTotal = parseFloat(listing.price) * qty;
-      total += lineTotal;
-      resolvedItems.push({ listingId, quantity: qty, price: String(parseFloat(listing.price)) });
-    }
+      const missing = uniqueIds.find((id) => !byId.has(id));
+      if (missing !== undefined) {
+        throw new UnavailableListingError(missing);
+      }
 
-    // ── Persist order + items in a transaction ────────────────────────────────
-    const result = await db.transaction(async (tx) => {
+      // Money in integer cents: accumulating floats then rounding at the end
+      // lets representation error reach the stored total.
+      let totalCents = 0;
+      const resolvedItems = items.map(({ listingId, quantity }) => {
+        const listing = byId.get(listingId)!;
+        const unitCents = Math.round(parseFloat(listing.price) * 100);
+        totalCents += unitCents * quantity;
+        return { listingId, quantity, price: String(parseFloat(listing.price)) };
+      });
+
       const [order] = await tx
         .insert(orders)
-        .values({ buyerId: payload.sub, totalPrice: String(total.toFixed(2)) })
+        .values({ buyerId: payload.sub, totalPrice: (totalCents / 100).toFixed(2) })
         .returning();
 
       const inserted = await tx
@@ -195,6 +219,9 @@ export async function POST(request: NextRequest) {
     return jsonOk(result, 201);
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
+    if (err instanceof UnavailableListingError) {
+      return jsonError(`Listing ${err.listingId} not found or not active`, 404);
+    }
     console.error("[POST /api/orders]", err);
     return jsonError("Internal server error");
   }
