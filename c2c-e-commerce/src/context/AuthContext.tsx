@@ -21,7 +21,6 @@ export type AuthUser = {
 
 type AuthContextValue = {
   user: AuthUser | null;
-  token: string | null;
   loading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -37,8 +36,9 @@ type RegisterPayload = {
   phoneNumber?: string;
 };
 
+// The endpoints also return a `token` for API clients; the browser client
+// deliberately ignores it and relies on the httpOnly cookie instead.
 type AuthResponse = {
-  token: string;
   user: AuthUser;
 };
 
@@ -50,27 +50,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Rehydrate current user from localStorage token on mount
+  // The session lives in an httpOnly cookie this code cannot read, so the only
+  // way to know whether one exists is to ask the server. A 401 simply means not
+  // logged in.
   useEffect(() => {
-    const stored = localStorage.getItem("token");
-    if (!stored) {
-      Promise.resolve().then(() => setLoading(false));
-      return;
-    }
-
-    Promise.resolve().then(() => setToken(stored));
-
     api
       .get<{ user: AuthUser }>("/api/auth/me")
       .then(({ user }) => setUser(user))
-      .catch(() => {
-        localStorage.removeItem("token");
-        setToken(null);
-        setUser(null);
-      })
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
@@ -79,32 +68,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       email,
       password,
     });
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
     setUser(data.user);
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
     const data = await api.post<AuthResponse>("/api/auth/register", payload);
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
     setUser(data.user);
   }, []);
 
   const logout = useCallback(() => {
-    // Fire-and-forget server-side session cleanup, then always clear client auth.
+    // The server clears the cookie; clear local state regardless so the UI does
+    // not keep showing a signed-in user if that request fails.
     api
       .post("/api/auth/logout")
       .catch(() => {})
-      .finally(() => {
-        localStorage.removeItem("token");
-        setToken(null);
-        setUser(null);
-      });
+      .finally(() => setUser(null));
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isAuthenticated: !!user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated: !!user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

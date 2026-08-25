@@ -6,6 +6,7 @@ import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/response";
 import { getClientIp, rateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
 import { parseRequest, LoginBodySchema } from "@/lib/validation";
+import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
 
 /**
  * @swagger
@@ -110,7 +111,12 @@ export async function POST(request: NextRequest) {
     // ── Issue token ───────────────────────────────────────────────────────────
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
-    return jsonOk({ user: sanitizeUser(user), token });
+    // Browsers authenticate with the httpOnly cookie. The token stays in the
+    // body for API clients (Swagger, Postman) that send it as a Bearer header;
+    // the web client ignores it and never stores it.
+    const response = jsonOk({ user: sanitizeUser(user), token });
+    response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    return response;
   } catch (err) {
     console.error("[POST /api/auth/login]", err);
     return jsonError("Internal server error", 500);

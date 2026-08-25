@@ -6,6 +6,7 @@ import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
 import { getClientIp, rateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
 import { parseRequest, RegisterBodySchema } from "@/lib/validation";
+import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
 
 /**
  * @swagger
@@ -128,7 +129,10 @@ export async function POST(request: NextRequest) {
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
-    return jsonOk({ user: sanitizeUser(user), token }, 201);
+    // Same as login: cookie for the browser, body token for API clients.
+    const response = jsonOk({ user: sanitizeUser(user), token }, 201);
+    response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    return response;
   } catch (err) {
     console.error("[POST /api/auth/register]", err);
     return jsonError("Internal server error");
