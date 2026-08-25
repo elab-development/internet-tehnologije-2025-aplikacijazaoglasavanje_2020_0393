@@ -18,14 +18,20 @@ vi.mock("@/lib/auth", () => ({
   }),
 }));
 
-// Minimal NextRequest mock
-function createMockRequest(authHeader?: string) {
+// Minimal NextRequest mock — headers plus the cookie jar authenticate() reads.
+function createMockRequest(authHeader?: string, cookieToken?: string) {
   return {
     headers: {
       get: (name: string) => {
         if (name === "authorization") return authHeader ?? null;
         return null;
       },
+    },
+    cookies: {
+      get: (name: string) =>
+        name === "auth_token" && cookieToken !== undefined
+          ? { name, value: cookieToken }
+          : undefined,
     },
   } as unknown as import("next/server").NextRequest;
 }
@@ -75,6 +81,44 @@ describe("authenticate", () => {
 
   it("throws AuthError for invalid token", () => {
     const req = createMockRequest("Bearer invalid-token");
+    expect(() => authenticate(req)).toThrow(AuthError);
+  });
+
+  // ── Cookie transport ────────────────────────────────────────────────────────
+
+  it("accepts the token from the auth cookie", () => {
+    const req = createMockRequest(undefined, "valid-token");
+    expect(authenticate(req)).toEqual({
+      sub: 1,
+      email: "user@example.com",
+      role: "buyer",
+    });
+  });
+
+  it("throws AuthError for an invalid cookie token", () => {
+    const req = createMockRequest(undefined, "invalid-token");
+    expect(() => authenticate(req)).toThrow(AuthError);
+  });
+
+  it("prefers an explicit Authorization header over the cookie", () => {
+    // A browser holding a buyer session that also sends an admin bearer token
+    // is stating which identity it means to use.
+    const req = createMockRequest("Bearer admin-token", "valid-token");
+    expect(authenticate(req).role).toBe("admin");
+  });
+
+  it("falls back to the cookie when the header is present but not Bearer", () => {
+    const req = createMockRequest("Basic dXNlcjpwYXNz", "valid-token");
+    expect(authenticate(req).sub).toBe(1);
+  });
+
+  it("falls back to the cookie when the Bearer value is empty", () => {
+    const req = createMockRequest("Bearer   ", "valid-token");
+    expect(authenticate(req).sub).toBe(1);
+  });
+
+  it("throws AuthError when neither transport carries a token", () => {
+    const req = createMockRequest(undefined, undefined);
     expect(() => authenticate(req)).toThrow(AuthError);
   });
 });

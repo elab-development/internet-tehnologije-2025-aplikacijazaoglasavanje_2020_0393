@@ -7,7 +7,14 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
     version: "1.0.0",
     description:
       "RESTful API for the C2C (consumer-to-consumer) e-commerce marketplace. " +
-      "Supports user authentication, listings management, orders, reviews, and categories.",
+      "Supports user authentication, listings management, orders, reviews, and categories.\n\n" +
+      "**Authentication.** Protected endpoints accept the JWT by either transport:\n" +
+      "- `Authorization: Bearer <token>` — for API clients and this Swagger page. " +
+      "Log in via POST /api/auth/login and paste the `token` from the response into Authorize.\n" +
+      "- `auth_token` cookie — set httpOnly by login/register and used automatically " +
+      "by the web app, so page scripts can never read the token.\n\n" +
+      "Endpoints below are annotated with `bearerAuth`, since that is the transport " +
+      "you can exercise from here; the cookie works identically.",
     contact: {
       name: "C2C Market",
     },
@@ -25,6 +32,16 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
         scheme: "bearer",
         bearerFormat: "JWT",
         description: "Enter the JWT token obtained from POST /api/auth/login",
+      },
+      cookieAuth: {
+        type: "apiKey",
+        in: "cookie",
+        name: "auth_token",
+        description:
+          "httpOnly session cookie set by POST /api/auth/login and " +
+          "/api/auth/register. Sent automatically by the browser; cleared by " +
+          "POST /api/auth/logout. Cannot be exercised from this page because " +
+          "the browser will not expose an httpOnly cookie to Swagger UI.",
       },
     },
     schemas: {

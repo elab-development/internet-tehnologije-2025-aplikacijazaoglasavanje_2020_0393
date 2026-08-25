@@ -413,7 +413,7 @@
           "Auth"
         ],
         "summary": "Log out the current user",
-        "description": "Validates the JWT and returns a confirmation. The client should discard\nthe token on its side. JWTs are stateless so server-side invalidation\nis a no-op unless a blocklist is implemented.\n",
+        "description": "Validates the JWT and clears the httpOnly `auth_token` cookie, ending\nthe browser session. The JWT is stateless, so a token held outside the\ncookie stays valid until it expires.\n",
         "security": [
           {
             "bearerAuth": []
@@ -421,7 +421,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Logout confirmed",
+            "description": "Logout confirmed and auth cookie cleared",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Expires the auth_token cookie"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -430,10 +438,6 @@
                     "message": {
                       "type": "string",
                       "example": "Logged out successfully"
-                    },
-                    "hint": {
-                      "type": "string",
-                      "example": "Discard the token on the client side"
                     },
                     "sub": {
                       "type": "integer",
