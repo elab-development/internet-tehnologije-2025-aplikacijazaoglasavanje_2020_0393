@@ -6,6 +6,8 @@ import type { User } from "@/db/schema";
 
 const SALT_ROUNDS = 12;
 const JWT_EXPIRES_IN = "7d";
+/** Pinned so a forged header cannot talk us into a different algorithm. */
+const JWT_ALGORITHM = "HS256" as const;
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
@@ -38,11 +40,16 @@ export async function verifyPassword(
 // ─── Token helpers ────────────────────────────────────────────────────────────
 
 export function signToken(payload: TokenPayload): string {
-  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRES_IN });
+  return jwt.sign(payload, getJwtSecret(), {
+    expiresIn: JWT_EXPIRES_IN,
+    algorithm: JWT_ALGORITHM,
+  });
 }
 
 export function verifyToken(token: string): TokenPayload {
-  const decoded = jwt.verify(token, getJwtSecret());
+  const decoded = jwt.verify(token, getJwtSecret(), {
+    algorithms: [JWT_ALGORITHM],
+  });
   return decoded as unknown as TokenPayload;
 }
 
