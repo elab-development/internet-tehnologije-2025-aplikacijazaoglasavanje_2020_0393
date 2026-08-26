@@ -50,6 +50,13 @@
       "when": 1771946100000,
       "tag": "0006_add_listing_embedding",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1771946200000,
+      "tag": "0007_add_listing_updated_at",
+      "breakpoints": true
     }
   ]
 }

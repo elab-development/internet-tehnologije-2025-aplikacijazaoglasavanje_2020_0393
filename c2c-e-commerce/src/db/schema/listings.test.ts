@@ -68,6 +68,16 @@ describe("C2C-AI-3 — listings schema", () => {
     expect(column("embedding").getSQLType()).toBe(`vector(${EMBEDDING_DIMENSIONS})`);
   });
 
+  it("AC-updated-at: declares a non-null `updated_at` timestamp", () => {
+    // Added by C2C-AI-4. AI-4 AC5's staleness query is
+    // `embedding_updated_at < updated_at`, and no table in this schema had an updated_at
+    // before — the query the backlog specifies could not be written at all.
+    expect(Object.keys(columns)).toContain("updatedAt");
+    expect(column("updatedAt").name).toBe("updated_at");
+    expect(column("updatedAt").getSQLType()).toBe("timestamp");
+    expect(column("updatedAt").notNull).toBe(true);
+  });
+
   it("leaves the pre-existing columns untouched", () => {
     for (const name of [
       "id",

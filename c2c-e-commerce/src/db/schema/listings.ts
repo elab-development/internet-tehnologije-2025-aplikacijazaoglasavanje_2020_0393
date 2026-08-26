@@ -38,6 +38,17 @@ export const listings = pgTable(
     }),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 
+    // Added by C2C-AI-4. The backfill's staleness query is
+    // `embedding_updated_at < updated_at`, and no table in this schema had an updated_at
+    // before — the query AI-4 AC5 specifies could not be written at all.
+    //
+    // $onUpdate stamps it on every Drizzle update, so a route that forgets cannot leave
+    // a listing's text newer than the timestamp that is supposed to track it.
+    updatedAt: timestamp("updated_at")
+      .defaultNow()
+      .notNull()
+      .$onUpdate(() => new Date()),
+
     // Nullable on purpose: a listing must stay creatable when embedding fails (AI-4 AC2),
     // and AI-7 uses `embedding IS NOT NULL` to keep such rows out of the vector arm while
     // leaving them findable by keyword.
