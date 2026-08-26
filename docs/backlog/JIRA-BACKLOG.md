@@ -148,6 +148,24 @@ stories assume them; changing one invalidates specific stories, noted in the las
 | D9 | OAuth account linking requires a **verified** provider email **and** password re-authentication | Auto-linking on unverified email is a well-known account-takeover vector | SEC-8 |
 | D10 | Coverage gate: **70%** lines/functions/statements, **60%** branches, scoped to `src/lib/**` and `src/app/api/**` | Achievable from the current baseline without writing filler tests for UI glue | QA-9 |
 
+> **Open question raised during AI-3 (2026-08-26), blocking AI-4 AC5.** AI-4 specifies the
+> backfill as `embedding IS NULL OR embedding_updated_at < updated_at`, and AI-3's
+> technical note gives `embedding_updated_at` the same purpose. **No table in this schema
+> has an `updated_at` column** — `grep` over `src/db/schema/` and `drizzle/*.sql` finds only
+> `created_at`. That query cannot be written as specified.
+>
+> AI-3 did not fix it: its scope names exactly two columns and the story had to stay
+> independently mergeable. AI-4 must choose one of:
+>
+> 1. **Add `updated_at` to `listings`** in its own migration, with a trigger or an explicit
+>    write in the `PUT` handler. Matches the spec, costs a migration, and gives the thesis a
+>    real audit trail.
+> 2. **Compare against `created_at`** — wrong for any edited listing, which is exactly the
+>    case staleness detection exists for. Not recommended.
+> 3. **Set `embedding_updated_at = NULL` whenever the text changes** and treat NULL as
+>    "needs embedding". No migration, and the backfill collapses to `embedding IS NULL` —
+>    but it discards the record of when a vector was last computed.
+
 > **D1 amended 2026-08-26 (during AI-1).** The original model,
 > `llama-3.3-70b-versatile`, has been decommissioned by Groq: it is absent from
 > `GET /openai/v1/models` on the project's key and a completion request answers 404. This
