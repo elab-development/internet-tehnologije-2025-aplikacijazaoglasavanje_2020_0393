@@ -246,14 +246,21 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     await put(listing.id, { title: "Some other bike" }, authHeaderFor(seller));
     expect(control.embedCalls).toBeGreaterThan(0);
 
+    // The control just re-embedded, so the baseline for "unchanged" is what it left
+    // behind, not the value the factory stamped.
+    const afterControl = await rowById(listing.id);
+    expect(afterControl.embeddingUpdatedAt!.getTime()).toBeGreaterThan(stamped.getTime());
+
     control.embedCalls = 0;
     const response = await put(listing.id, { price: 150 }, authHeaderFor(seller));
     expect(response.status).toBe(200);
 
     expect(control.embedCalls).toBe(0);
     const row = await rowById(listing.id);
-    expect(row.embeddingUpdatedAt!.getTime()).toBe(stamped.getTime());
-    expect(row.embedding?.[0]).toBeCloseTo(1, 5);
+    expect(row.embeddingUpdatedAt!.getTime()).toBe(
+      afterControl.embeddingUpdatedAt!.getTime(),
+    );
+    expect(row.embedding).toEqual(afterControl.embedding);
   });
 
   it("AC4: changing status, imageUrl or categoryId makes no embed call", async () => {
