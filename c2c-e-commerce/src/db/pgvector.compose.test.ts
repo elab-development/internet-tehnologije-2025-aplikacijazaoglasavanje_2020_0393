@@ -48,7 +48,9 @@ describe.skipIf(!enabled)("C2C-AI-3 — AC6: the dev compose stack", () => {
   });
 
   it("AC6: the db service reaches a healthy state", () => {
-    compose(["up", "-d", "db"], 10 * 60_000);
+    // --wait blocks until the healthcheck passes; without it this races the
+    // 10 s healthcheck interval and sees "starting".
+    compose(["up", "-d", "--wait", "db"], 10 * 60_000);
 
     const state = compose(["ps", "--format", "{{.Service}} {{.Health}}"], 60_000);
     expect(state).toMatch(/db\s+healthy/);
@@ -74,7 +76,13 @@ describe.skipIf(!enabled)("C2C-AI-3 — AC6: the dev compose stack", () => {
   }, 2 * 60_000);
 
   it("AC6: the migrate service installs it and exits cleanly", () => {
-    compose(["up", "--exit-code-from", "migrate", "migrate"], 10 * 60_000);
+    // `run --rm`, not `up --exit-code-from`: the latter implies
+    // --abort-on-container-exit, which stops the db service too, leaving nothing for the
+    // psql check below to talk to. `run` still propagates a non-zero exit code, so
+    // "exits cleanly" is covered either way.
+    // --build matters: the migrate image bakes `drizzle/` in via COPY, so without it the
+    // check can pass against migrations from a previous build.
+    compose(["run", "--rm", "--build", "migrate"], 10 * 60_000);
 
     const output = compose(
       [

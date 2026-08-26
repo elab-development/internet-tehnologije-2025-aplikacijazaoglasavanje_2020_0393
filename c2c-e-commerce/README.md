@@ -47,6 +47,40 @@ descriptions is a worse failure than one that refuses to start.
 Set `LLM_PROVIDER=mock` to develop with no key and no network. The mock is deterministic —
 the same prompt always yields the same text — which is what makes the AI tests reproducible.
 
+## Database migrations
+
+Applied in order by `npm run db:migrate`, which reads `drizzle/meta/_journal.json` rather
+than the directory listing — a `.sql` file without a journal entry is silently skipped.
+
+| # | Migration | What it does |
+|---|---|---|
+| 0000 | `initial_schema` | Users, categories, listings, orders, order items, reviews |
+| 0001 | `add_phone_number_to_users` | `users.phone_number` |
+| 0002 | `add_rating_check_and_description_notnull` | Rating 1–5 constraint; `listings.description` NOT NULL |
+| 0003 | `add_image_url_to_listings` | `listings.image_url` |
+| 0004 | `add_approved_rejected_order_status` | `approved` and `rejected` order statuses |
+| 0005 | `enable_pgvector` | `CREATE EXTENSION IF NOT EXISTS vector` |
+| 0006 | `add_listing_embedding` | `listings.embedding vector(384)` (nullable), `listings.embedding_updated_at`, and the HNSW cosine index |
+
+0005 and 0006 are hand-written: `drizzle-kit` emits neither `CREATE EXTENSION` nor an HNSW
+index with an operator class. They are kept apart because installing an extension is a
+database-level privilege operation and adding a column is not — on a managed host that
+withholds the former, an administrator can apply 0005 out-of-band.
+
+### Checking a deployed database for pgvector
+
+Postgres must have the `vector` extension available. The compose files use
+`pgvector/pgvector:pg16`, so local development needs no extra step. Before deploying, check
+the managed database:
+
+```bash
+DATABASE_URL="<production url>" npm run db:check-pgvector
+```
+
+It reports whether the extension is available, whether the connecting role may install it,
+and whether an HNSW index with `vector_cosine_ops` can be created. Exit code 0 means
+migrations 0005 and 0006 will apply.
+
 ## Embeddings
 
 Semantic search, "similar listings" and recommendations are all driven by 384-dimension
