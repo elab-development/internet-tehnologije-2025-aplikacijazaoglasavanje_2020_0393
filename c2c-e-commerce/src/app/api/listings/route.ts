@@ -5,6 +5,7 @@ import { listings, type NewListing } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
 import { resolveListingVisibility } from "@/lib/listing-visibility";
+import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateListingSchema } from "@/lib/validation";
 
@@ -281,6 +282,11 @@ export async function POST(request: NextRequest) {
 
     const { title, description, price, imageUrl, categoryId } = parsed.data;
 
+    // Embed before the insert so the happy path is a single write. The failure cannot be
+    // logged yet — AC2 wants the listing id, which does not exist until the row does — so
+    // the outcome is held and reported below.
+    const outcome = await computeListingEmbedding({ title, description });
+
     const newListing: NewListing = {
       title,
       description,
@@ -288,9 +294,23 @@ export async function POST(request: NextRequest) {
       imageUrl: imageUrl ?? null,
       sellerId: payload.sub,
       ...(categoryId !== undefined && categoryId !== null && { categoryId }),
+      ...(outcome.status === "embedded" && {
+        embedding: outcome.embedding,
+        embeddingUpdatedAt: new Date(),
+      }),
     };
 
     const [created] = await db.insert(listings).values(newListing).returning();
+
+    if (outcome.status === "failed") {
+      // Logged once, with the id, so the row can be found again. The listing is still
+      // created and still fully keyword-searchable; db:backfill-embeddings will fill the
+      // vector in later.
+      console.error(
+        `[POST /api/listings] embedding failed for listing ${created.id}; stored without one`,
+        outcome.error,
+      );
+    }
 
     return jsonOk(created, 201);
   } catch (err) {

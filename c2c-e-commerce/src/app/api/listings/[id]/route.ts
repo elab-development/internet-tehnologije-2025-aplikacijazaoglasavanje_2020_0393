@@ -3,6 +3,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import {
+  computeListingEmbedding,
+  needsReembedding,
+  type EmbeddingOutcome,
+} from "@/lib/ai/listing-embedding";
 import { jsonError, jsonOk } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateListingSchema } from "@/lib/validation";
@@ -260,11 +265,40 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (categoryId !== undefined) updates.categoryId = categoryId;
     if (status !== undefined) updates.status = status;
 
+    // Re-embed only when the embedded *text* actually changed. Comparing values rather
+    // than which fields were sent means a client that PUTs the whole object on every save
+    // does not pay for a new vector on a price edit (AC4).
+    let outcome: EmbeddingOutcome | undefined;
+    if (needsReembedding(listing, parsed.data)) {
+      outcome = await computeListingEmbedding({
+        title: title ?? listing.title,
+        description: description ?? listing.description,
+      });
+
+      if (outcome.status === "embedded") {
+        updates.embedding = outcome.embedding;
+        updates.embeddingUpdatedAt = new Date();
+      } else {
+        // The text moved on but the vector could not follow. Clearing it keeps
+        // `embedding IS NOT NULL` honest — AI-7 must not rank on a vector describing text
+        // that no longer exists — and leaves the row for the backfill.
+        updates.embedding = null;
+        updates.embeddingUpdatedAt = null;
+      }
+    }
+
     const [updated] = await db
       .update(listings)
       .set(updates)
       .where(eq(listings.id, id))
       .returning();
+
+    if (outcome?.status === "failed") {
+      console.error(
+        `[PUT /api/listings/[id]] embedding failed for listing ${updated.id}; stored without one`,
+        outcome.error,
+      );
+    }
 
     return jsonOk(updated);
   } catch (err) {

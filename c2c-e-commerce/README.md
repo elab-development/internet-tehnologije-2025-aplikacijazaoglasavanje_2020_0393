@@ -47,6 +47,41 @@ descriptions is a worse failure than one that refuses to start.
 Set `LLM_PROVIDER=mock` to develop with no key and no network. The mock is deterministic —
 the same prompt always yields the same text — which is what makes the AI tests reproducible.
 
+## Listing embeddings
+
+`POST /api/listings` and `PUT /api/listings/[id]` embed a listing's title and description
+as they write it. The measured cost on this machine, with the local provider warm:
+
+| | |
+|---|---|
+| First embed in a process (model load) | ~1.9 s |
+| p50 added to a write | **17 ms** |
+| p95 added to a write | 27 ms |
+
+The story budgeted 100–300 ms, so the real cost is an order of magnitude smaller. Call
+`warmupEmbeddings()` at server start to move the one-off model load off the first request.
+
+**An embedding failure never fails the write.** The listing is stored with
+`embedding = NULL`, the failure is logged once with the listing id, and the row stays fully
+keyword-searchable until the backfill fills it in. A `PUT` that changes the text but cannot
+re-embed clears the stale vector rather than leaving one that describes text no longer
+there.
+
+`PUT` re-embeds only when the embedded *text* changed — a price, status, image or category
+edit costs nothing, and neither does resubmitting an identical title.
+
+### Backfilling
+
+```bash
+npm run db:backfill-embeddings
+```
+
+Embeds every listing whose vector is missing or older than its text
+(`embedding IS NULL OR embedding_updated_at < updated_at`). Safely re-runnable: a second
+run with nothing stale processes zero rows and exits 0. It prints a
+processed / skipped / failed summary, and exits non-zero only if a row actually failed —
+a listing with no embeddable text is *skipped*, not failed.
+
 ## Database migrations
 
 Applied in order by `npm run db:migrate`, which reads `drizzle/meta/_journal.json` rather
@@ -61,6 +96,7 @@ than the directory listing — a `.sql` file without a journal entry is silently
 | 0004 | `add_approved_rejected_order_status` | `approved` and `rejected` order statuses |
 | 0005 | `enable_pgvector` | `CREATE EXTENSION IF NOT EXISTS vector` |
 | 0006 | `add_listing_embedding` | `listings.embedding vector(384)` (nullable), `listings.embedding_updated_at`, and the HNSW cosine index |
+| 0007 | `add_listing_updated_at` | `listings.updated_at`, seeded from `created_at`, so the backfill can detect stale vectors |
 
 0005 and 0006 are hand-written: `drizzle-kit` emits neither `CREATE EXTENSION` nor an HNSW
 index with an operator class. They are kept apart because installing an extension is a

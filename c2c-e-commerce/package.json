@@ -19,7 +19,8 @@
     "db:push": "drizzle-kit push",
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
-    "db:check-pgvector": "node scripts/check-pgvector.mjs"
+    "db:check-pgvector": "node scripts/check-pgvector.mjs",
+    "db:backfill-embeddings": "tsx src/db/backfill-embeddings.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
