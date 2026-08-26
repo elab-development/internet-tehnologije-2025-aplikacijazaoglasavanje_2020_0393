@@ -1,19 +1,37 @@
 /**
  * C2C-QA-3 — row factories.
  *
- * SPEC PHASE SKELETON. Sensible defaults, everything overridable, and each factory
- * creates whatever parent rows it needs so a test can ask for one listing without
- * spelling out a seller and a category first.
+ * Sensible defaults, everything overridable, and each factory creates whatever parent rows
+ * it needs — so a test that only cares about listings need not spell out a seller and a
+ * category first. Passing an explicit parent id reuses it rather than creating another,
+ * which is what keeps row-counting assertions honest.
  */
-import type {
-  Category,
-  Listing,
-  Order,
-  Review,
-  User,
+import { hashPassword } from "@/lib/auth";
+import {
+  categories,
+  listings,
+  orderItems,
+  orders,
+  reviews,
+  users,
+  type Category,
+  type Listing,
+  type Order,
+  type Review,
+  type User,
 } from "@/db/schema";
 
-const NOT_IMPLEMENTED = "not implemented — C2C-QA-3 is in its spec phase";
+import { getTestDb } from "./db";
+
+/**
+ * Uniqueness for `users.email` and `categories.slug`.
+ *
+ * A counter rather than randomness: a failing run should reproduce. `resetDb()` restarts
+ * identity sequences, so ids stay predictable while these values stay distinct within a
+ * process.
+ */
+let sequence = 0;
+const next = () => ++sequence;
 
 export type MakeUserOptions = Partial<
   Pick<User, "email" | "name" | "role" | "phoneNumber">
@@ -43,22 +61,124 @@ export type MakeReviewOptions = Partial<Pick<Review, "rating" | "comment">> & {
   listingId?: number;
 };
 
-export function makeUser(_options?: MakeUserOptions): Promise<User> {
-  throw new Error(NOT_IMPLEMENTED);
+export async function makeUser(options: MakeUserOptions = {}): Promise<User> {
+  const db = await getTestDb();
+  const n = next();
+
+  const [user] = await db
+    .insert(users)
+    .values({
+      email: options.email ?? `user${n}@example.test`,
+      name: options.name ?? `Test User ${n}`,
+      passwordHash: await hashPassword(options.password ?? "password123"),
+      role: options.role ?? "buyer",
+      phoneNumber: options.phoneNumber ?? null,
+    })
+    .returning();
+
+  return user;
 }
 
-export function makeCategory(_options?: MakeCategoryOptions): Promise<Category> {
-  throw new Error(NOT_IMPLEMENTED);
+export async function makeCategory(options: MakeCategoryOptions = {}): Promise<Category> {
+  const db = await getTestDb();
+  const n = next();
+
+  const [category] = await db
+    .insert(categories)
+    .values({
+      name: options.name ?? `Category ${n}`,
+      slug: options.slug ?? `category-${n}`,
+      description: options.description ?? null,
+    })
+    .returning();
+
+  return category;
 }
 
-export function makeListing(_options?: MakeListingOptions): Promise<Listing> {
-  throw new Error(NOT_IMPLEMENTED);
+export async function makeListing(options: MakeListingOptions = {}): Promise<Listing> {
+  const db = await getTestDb();
+  const n = next();
+
+  // Only create what was not supplied. A factory that created a seller even when given
+  // one would silently break any test counting users.
+  const sellerId = options.sellerId ?? (await makeUser({ role: "seller" })).id;
+  const categoryId = options.categoryId ?? (await makeCategory()).id;
+
+  const [listing] = await db
+    .insert(listings)
+    .values({
+      title: options.title ?? `Test Listing ${n}`,
+      description: options.description ?? `Description for test listing ${n}`,
+      price: options.price ?? "99.99",
+      status: options.status ?? "active",
+      imageUrl: options.imageUrl ?? null,
+      sellerId,
+      categoryId,
+      embedding: options.embedding,
+      // Only meaningful alongside a vector; AI-4 sets both together.
+      embeddingUpdatedAt: options.embeddingUpdatedAt ?? (options.embedding ? new Date() : null),
+    })
+    .returning();
+
+  return listing;
 }
 
-export function makeOrder(_options?: MakeOrderOptions): Promise<Order> {
-  throw new Error(NOT_IMPLEMENTED);
+export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> {
+  const db = await getTestDb();
+
+  const buyerId = options.buyerId ?? (await makeUser({ role: "buyer" })).id;
+  const listingIds = options.listingIds ?? [(await makeListing()).id];
+
+  const rows = await db
+    .select({ id: listings.id, price: listings.price })
+    .from(listings);
+  const priceOf = new Map(rows.map((row) => [row.id, row.price]));
+
+  const total = listingIds.reduce(
+    (sum, id) => sum + Number(priceOf.get(id) ?? 0),
+    0,
+  );
+
+  const [order] = await db
+    .insert(orders)
+    .values({
+      buyerId,
+      totalPrice: options.totalPrice ?? total.toFixed(2),
+      status: options.status ?? "completed",
+    })
+    .returning();
+
+  // AI-10 walks order_items -> orders.buyerId to build a taste vector, so the join rows
+  // have to exist, not merely be implied by the order.
+  await db.insert(orderItems).values(
+    listingIds.map((listingId) => ({
+      orderId: order.id,
+      listingId,
+      price: priceOf.get(listingId) ?? "0.00",
+      quantity: 1,
+    })),
+  );
+
+  return order;
 }
 
-export function makeReview(_options?: MakeReviewOptions): Promise<Review> {
-  throw new Error(NOT_IMPLEMENTED);
+export async function makeReview(options: MakeReviewOptions = {}): Promise<Review> {
+  const db = await getTestDb();
+
+  const reviewerId = options.reviewerId ?? (await makeUser({ role: "buyer" })).id;
+  const listingId = options.listingId ?? (await makeListing()).id;
+
+  const [review] = await db
+    .insert(reviews)
+    .values({
+      reviewerId,
+      listingId,
+      // The reviews table carries CHECK (rating BETWEEN 1 AND 5); a default outside that
+      // range would make the factory unusable.
+      rating: options.rating ?? 5,
+      comment: options.comment ?? "Solid.",
+    })
+    .returning();
+
+  return review;
 }

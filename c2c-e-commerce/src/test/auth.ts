@@ -1,13 +1,22 @@
 /**
  * C2C-QA-3 — auth helper for tests.
- *
- * SPEC PHASE SKELETON.
  */
+import { signToken } from "@/lib/auth";
 import type { User } from "@/db/schema";
 
-const NOT_IMPLEMENTED = "not implemented — C2C-QA-3 is in its spec phase";
-
-/** A request header that authenticates as `user` against the real `authenticate()` guard. */
-export function authHeaderFor(_user: User): Record<string, string> {
-  throw new Error(NOT_IMPLEMENTED);
+/**
+ * A request header that authenticates as `user`.
+ *
+ * Signed with the application's own `signToken`, deliberately. A hand-rolled JWT here
+ * would let tests pass while the production `authenticate()` guard rejected the token —
+ * the one failure AC6 exists to catch.
+ */
+export function authHeaderFor(user: User): Record<string, string> {
+  return {
+    Authorization: `Bearer ${signToken({
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    })}`,
+  };
 }

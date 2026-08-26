@@ -31,6 +31,9 @@ export default defineConfig({
           globals: true,
           environment: "node",
           include: ["src/**/*.integration.test.ts"],
+          // globalSetup starts ONE container per run and publishes its URL; the setup
+          // file then points DATABASE_URL at it before any test module imports @/db.
+          globalSetup: ["src/test/global-setup.ts"],
           setupFiles: ["src/test/setup/integration.ts"],
           fileParallelism: false,
           testTimeout: 60_000,
