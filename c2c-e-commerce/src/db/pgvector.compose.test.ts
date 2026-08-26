@@ -73,8 +73,8 @@ describe.skipIf(!enabled)("C2C-AI-3 — AC6: the dev compose stack", () => {
     expect(output.trim()).toBe("1");
   }, 2 * 60_000);
 
-  it("AC6: the migrator service installs it and exits cleanly", () => {
-    compose(["up", "--exit-code-from", "migrator", "migrator"], 10 * 60_000);
+  it("AC6: the migrate service installs it and exits cleanly", () => {
+    compose(["up", "--exit-code-from", "migrate", "migrate"], 10 * 60_000);
 
     const output = compose(
       [
