@@ -4,13 +4,10 @@ import { db } from "@/db";
 import { reviews } from "@/db/schema";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── DELETE /api/reviews/[id] ─────────────────────────────────────────────────
 // Authenticated. Owner (reviewer) or admin.
@@ -77,7 +74,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid review id", 400);
 
     const [review] = await db.select().from(reviews).where(eq(reviews.id, id)).limit(1);

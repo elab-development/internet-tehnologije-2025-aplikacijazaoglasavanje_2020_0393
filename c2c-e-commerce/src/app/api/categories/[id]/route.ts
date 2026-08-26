@@ -4,14 +4,11 @@ import { db } from "@/db";
 import { categories } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateCategorySchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── PUT /api/categories/[id] ─────────────────────────────────────────────────
 // Admin only.
@@ -98,7 +95,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid category id", 400);
 
     const [category] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);
@@ -200,7 +197,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid category id", 400);
 
     const [category] = await db.select().from(categories).where(eq(categories.id, id)).limit(1);

@@ -5,14 +5,11 @@ import { listings, orderItems, orders, reviews, users } from "@/db/schema";
 import { PURCHASED_ORDER_STATUSES } from "@/lib/review-eligibility";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 import { parseRequest, CreateReviewSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── GET /api/listings/[id]/reviews ──────────────────────────────────────────
 // Public.
@@ -68,7 +65,7 @@ function parseId(raw: string): number | null {
  */
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
-    const listingId = parseId((await params).id);
+    const listingId = parseResourceId((await params).id);
     if (!listingId) return jsonError("Invalid listing id", 400);
 
     const [listing] = await db
@@ -188,7 +185,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("buyer")(payload);
 
-    const listingId = parseId((await params).id);
+    const listingId = parseResourceId((await params).id);
     if (!listingId) return jsonError("Invalid listing id", 400);
 
     const [listing] = await db

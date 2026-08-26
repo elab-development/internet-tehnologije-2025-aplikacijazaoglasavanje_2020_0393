@@ -5,14 +5,11 @@ import { users } from "@/db/schema";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { sanitizeUser, hashPassword } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateUserSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── GET /api/users/[id] ──────────────────────────────────────────────────────
 // Admin or self.
@@ -75,7 +72,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
     if (payload.role !== "admin" && payload.sub !== id) {
@@ -183,7 +180,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
     if (payload.role !== "admin" && payload.sub !== id) {
@@ -286,7 +283,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
 
     if (payload.role !== "admin") return jsonError("Forbidden", 403);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);

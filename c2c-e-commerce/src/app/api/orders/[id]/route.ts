@@ -4,14 +4,11 @@ import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── GET /api/orders/[id] ─────────────────────────────────────────────────────
 // Owner buyer or admin.
@@ -88,7 +85,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("buyer", "admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
@@ -199,7 +196,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("admin", "seller")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
@@ -339,7 +336,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);

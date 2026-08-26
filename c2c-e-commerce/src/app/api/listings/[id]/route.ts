@@ -4,16 +4,13 @@ import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateListingSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function parseId(raw: string): number | null {
-  const id = parseInt(raw, 10);
-  return isNaN(id) ? null : id;
-}
 
 // ─── GET /api/listings/[id] ───────────────────────────────────────────────────
 // Public. Returns a single active listing.
@@ -73,7 +70,7 @@ function parseId(raw: string): number | null {
 export async function GET(_request: NextRequest, { params }: RouteContext) {
   try {
     const { id: rawId } = await params;
-    const id = parseId(rawId);
+    const id = parseResourceId(rawId);
 
     if (!id) {
       return jsonError(
@@ -227,7 +224,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     authorize("seller", "admin")(payload);
 
     const { id: rawId } = await params;
-    const id = parseId(rawId);
+    const id = parseResourceId(rawId);
 
     if (!id) {
       return jsonError("Invalid listing id",
@@ -340,7 +337,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     authorize("seller", "admin")(payload);
 
     const { id: rawId } = await params;
-    const id = parseId(rawId);
+    const id = parseResourceId(rawId);
 
     if (!id) {
       return jsonError("Invalid listing id", 400);
