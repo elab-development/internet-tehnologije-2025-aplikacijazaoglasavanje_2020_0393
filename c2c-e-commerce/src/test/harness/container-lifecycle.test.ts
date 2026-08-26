@@ -15,6 +15,11 @@ import path from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+// Imported statically, not with a dynamic import inside the test: src/test/db.ts pulls in
+// drizzle, pg and Testcontainers, and paying that inside a 5 s unit-test budget made this
+// flaky under a full-suite run.
+import { stopTestDatabase } from "../db";
+
 const crashEnabled = process.env.RUN_TEARDOWN_TESTS === "1";
 const APP_ROOT = path.resolve(__dirname, "../../..");
 
@@ -36,8 +41,7 @@ describe("C2C-QA-3 — AC9: the reaper is left enabled", () => {
     expect(process.env.TESTCONTAINERS_RYUK_DISABLED).not.toBe("true");
   });
 
-  it("AC9: the harness exposes a teardown for the ordinary path", async () => {
-    const { stopTestDatabase } = await import("../db");
+  it("AC9: the harness exposes a teardown for the ordinary path", () => {
     expect(stopTestDatabase).toBeTypeOf("function");
   });
 });
