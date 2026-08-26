@@ -1,10 +1,13 @@
 name: CI
 
 on:
+  # main/master are covered by Deploy, which calls this workflow as a gate
+  # before shipping; listing them here too would run lint and tests twice.
   push:
-    branches: [main, master, develop]
+    branches: [develop]
   pull_request:
     branches: [main, master, develop]
+  workflow_call:
 
 jobs:
   lint-and-test:
@@ -30,6 +33,9 @@ jobs:
 
       - name: Run ESLint
         run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Run tests
         run: npm run test
