@@ -86,7 +86,18 @@ function fnv1a(input: string): number {
   return hash >>> 0;
 }
 
-const BAND = Math.floor(EMBEDDING_DIMENSIONS / SEMANTIC_CLUSTERS.length);
+/**
+ * Dimensions per cluster, dividing by clusters + 1.
+ *
+ * The extra slot is deliberately left unclaimed. AI-7 AC4 needs a query that is close to
+ * *nothing* in the catalogue, so its `MIN_SIMILARITY` floor can be shown to hold; if the
+ * three clusters tiled the whole space, every possible query would land near one of them
+ * and the floor could never be observed doing its job.
+ */
+const BAND = Math.floor(EMBEDDING_DIMENSIONS / (SEMANTIC_CLUSTERS.length + 1));
+
+/** The unclaimed band, where "unrelated to anything" lives. */
+const UNRELATED_BAND_START = SEMANTIC_CLUSTERS.length * BAND;
 
 /**
  * A unit vector that lies in `cluster`'s band, nudged by a title-seeded perturbation.
@@ -149,4 +160,41 @@ export async function loadSemanticCatalogue(): Promise<CatalogueEntry[]> {
   }
 
   return entries;
+}
+
+/** Words that place a query in a cluster, for tests that search the catalogue. */
+const CLUSTER_KEYWORDS: Record<SemanticCluster, string[]> = {
+  cycling: ["bike", "bicycle", "cycling", "wheels", "ride", "riding", "pedal", "trail"],
+  phones: ["phone", "smartphone", "iphone", "android", "handset", "charger", "mobile"],
+  furniture: ["chair", "table", "sofa", "desk", "shelf", "furniture", "cabinet", "seat"],
+};
+
+/** Which cluster a query belongs to, or null when it belongs to none. */
+export function clusterFor(text: string): SemanticCluster | null {
+  const lower = text.toLowerCase();
+  for (const cluster of SEMANTIC_CLUSTERS) {
+    if (CLUSTER_KEYWORDS[cluster].some((word) => lower.includes(word))) return cluster;
+  }
+  return null;
+}
+
+/**
+ * Embeds a *query* into the same space as the catalogue.
+ *
+ * Stands in for the real model in ranking tests: what is under test is the ranking, the
+ * fusion and the similarity floor, not whether MiniLM understands English — AI-2's
+ * `embeddings.model.test.ts` already covers that, against the real model.
+ *
+ * A query matching no cluster lands in the unclaimed band, far from everything, which is
+ * what lets AI-7 AC4 observe the floor rejecting a bad match.
+ */
+export function queryEmbedding(text: string): number[] {
+  const cluster = clusterFor(text);
+  if (cluster) return clusterEmbedding(cluster, `query:${text}`);
+
+  const vector: number[] = Array.from({ length: EMBEDDING_DIMENSIONS }, (_, i) =>
+    i >= UNRELATED_BAND_START ? 1 : 0,
+  );
+  const norm = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0));
+  return vector.map((value) => value / norm);
 }
