@@ -16,6 +16,35 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Environment variables
+
+Copy `.env.example` to `.env.local` and fill it in. `.env.local` is never committed.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_URL` | yes | — | Postgres connection string |
+| `JWT_SECRET` | yes | — | Signing key for access tokens (HS256) |
+| `LLM_PROVIDER` | no | `mock` under `NODE_ENV=test`, otherwise `groq` | Which language-model provider to use: `groq` or `mock` |
+| `GROQ_API_KEY` | when `LLM_PROVIDER=groq` | — | Groq API key |
+| `GROQ_MODEL` | no | `qwen/qwen3.8-27b` | Open-weights model to call |
+| `LLM_TIMEOUT_MS` | no | `15000` | Abort a completion that takes longer than this |
+
+### Getting a free Groq API key
+
+1. Sign up at [console.groq.com](https://console.groq.com) — the free tier needs no card.
+2. Open [console.groq.com/keys](https://console.groq.com/keys) and create an API key.
+3. Put it in `.env.local` as `GROQ_API_KEY=gsk_…` and set `LLM_PROVIDER=groq`.
+
+The free tier allows roughly 30 requests per minute, which is why `LLM_TIMEOUT_MS`
+exists and why AI endpoints are rate-limited.
+
+A missing or blank `GROQ_API_KEY` makes the provider throw when it is constructed. It
+does **not** fall back to the mock: a deployment that quietly serves fabricated
+descriptions is a worse failure than one that refuses to start.
+
+Set `LLM_PROVIDER=mock` to develop with no key and no network. The mock is deterministic —
+the same prompt always yields the same text — which is what makes the AI tests reproducible.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 ## Docker development (with live reload)

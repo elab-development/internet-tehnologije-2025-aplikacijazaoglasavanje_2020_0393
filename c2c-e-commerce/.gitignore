@@ -43,3 +43,5 @@ next-env.d.ts
 
 # env
 .env
+# .env.example carries placeholders only and is meant to be committed.
+!.env.example
