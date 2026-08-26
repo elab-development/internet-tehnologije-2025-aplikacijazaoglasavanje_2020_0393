@@ -19,7 +19,7 @@ import {
 const FAKE_KEY = "gsk_spec_sentinel_NEVER_LEAK_0123456789";
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-function chatCompletion(content: string, model = "llama-3.3-70b-versatile") {
+function chatCompletion(content: string, model = "qwen/qwen3.8-27b") {
   return new Response(
     JSON.stringify({
       id: "chatcmpl-spec",
@@ -197,26 +197,26 @@ describe("C2C-AI-1 — GroqProvider", () => {
     expect(body.messages[1]).toEqual({ role: "user", content: "hello" });
   });
 
-  it("AC2: defaults the model to llama-3.3-70b-versatile", async () => {
+  it("AC2: defaults the model to qwen/qwen3.8-27b", async () => {
     vi.stubEnv("GROQ_MODEL", undefined);
     const spy = stubFetch(async () => chatCompletion("ok"));
 
     const provider = new GroqProvider();
     await provider.generate("hello");
 
-    expect(sentBody(spy).model).toBe("llama-3.3-70b-versatile");
-    expect(provider.model).toBe("llama-3.3-70b-versatile");
+    expect(sentBody(spy).model).toBe("qwen/qwen3.8-27b");
+    expect(provider.model).toBe("qwen/qwen3.8-27b");
   });
 
   it("AC2: honours GROQ_MODEL when it is set", async () => {
-    vi.stubEnv("GROQ_MODEL", "llama-3.1-8b-instant");
-    const spy = stubFetch(async () => chatCompletion("ok", "llama-3.1-8b-instant"));
+    vi.stubEnv("GROQ_MODEL", "openai/gpt-oss-120b");
+    const spy = stubFetch(async () => chatCompletion("ok", "openai/gpt-oss-120b"));
 
     const provider = new GroqProvider();
     await provider.generate("hello");
 
-    expect(sentBody(spy).model).toBe("llama-3.1-8b-instant");
-    expect(provider.model).toBe("llama-3.1-8b-instant");
+    expect(sentBody(spy).model).toBe("openai/gpt-oss-120b");
+    expect(provider.model).toBe("openai/gpt-oss-120b");
   });
 
   it("AC2: forwards temperature and maxTokens so AI-5 can cap a runaway generation", async () => {
