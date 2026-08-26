@@ -34,6 +34,10 @@ function docker(args: string[], timeoutMs: number): string {
  */
 const PROBE = `
 const { pipeline, env } = require("@huggingface/transformers");
+// Configure the cache exactly as src/lib/ai/embeddings.ts does. Transformers.js does not
+// read TRANSFORMERS_CACHE by itself — that is a Python-transformers convention — so a
+// probe that skipped this would look in node_modules, a path the app never uses.
+env.cacheDir = process.env.TRANSFORMERS_CACHE;
 env.allowRemoteModels = false;
 (async () => {
   const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");

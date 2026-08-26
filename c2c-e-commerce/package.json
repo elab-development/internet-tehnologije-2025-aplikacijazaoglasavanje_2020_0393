@@ -21,6 +21,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.2.0",
     "@remixicon/react": "^4.9.0",
     "bcrypt": "^6.0.0",
     "drizzle-orm": "^0.45.1",

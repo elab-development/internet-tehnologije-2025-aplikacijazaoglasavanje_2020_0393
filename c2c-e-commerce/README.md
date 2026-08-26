@@ -28,6 +28,8 @@ Copy `.env.example` to `.env.local` and fill it in. `.env.local` is never commit
 | `GROQ_API_KEY` | when `LLM_PROVIDER=groq` | — | Groq API key |
 | `GROQ_MODEL` | no | `qwen/qwen3.8-27b` | Open-weights model to call |
 | `LLM_TIMEOUT_MS` | no | `15000` | Abort a completion that takes longer than this |
+| `EMBEDDING_PROVIDER` | no | `mock` under `NODE_ENV=test`, otherwise `local` | `local` runs the embedding model in-process; `mock` is deterministic and offline |
+| `TRANSFORMERS_CACHE` | no | package-internal | Directory holding the embedding model files |
 
 ### Getting a free Groq API key
 
@@ -44,6 +46,31 @@ descriptions is a worse failure than one that refuses to start.
 
 Set `LLM_PROVIDER=mock` to develop with no key and no network. The mock is deterministic —
 the same prompt always yields the same text — which is what makes the AI tests reproducible.
+
+## Embeddings
+
+Semantic search, "similar listings" and recommendations are all driven by 384-dimension
+vectors produced by [`Xenova/all-MiniLM-L6-v2`](https://huggingface.co/Xenova/all-MiniLM-L6-v2),
+run **in-process** through Transformers.js. There is no API key and no per-request cost.
+
+The model is ~87 MB on disk and is downloaded on first use. Measured on this project:
+
+| | |
+|---|---|
+| Cold load (download + init) | ~4.5 s |
+| Warm load (cached on disk) | ~620 ms |
+| Single embed, warm | ~7 ms |
+| Batch of 8 vs. 8 sequential | 20 ms vs. 47 ms (2.4×) |
+
+To avoid paying the download at runtime, the Docker image bakes the model in at build time:
+
+```bash
+TRANSFORMERS_CACHE=/app/.cache/transformers node scripts/prefetch-embedding-model.mjs
+```
+
+Run the same command locally before an offline demo. Set `EMBEDDING_PROVIDER=mock` to skip
+the model entirely — the mock returns deterministic unit vectors of the same width, which
+is what keeps the AI tests reproducible.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
