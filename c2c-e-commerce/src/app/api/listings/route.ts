@@ -1,11 +1,10 @@
 import { NextRequest } from "next/server";
-import { and, asc, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
-import { resolveListingVisibility } from "@/lib/listing-visibility";
 import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
+import { buildListingQuery, runListingQuery } from "@/lib/listings-query";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateListingSchema } from "@/lib/validation";
 
@@ -73,7 +72,37 @@ import { parseRequest, CreateListingSchema } from "@/lib/validation";
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by title (case-insensitive contains)
+ *         description: >
+ *           Search term. In `keyword` mode it matches the title
+ *           (case-insensitive contains); in `semantic` and `hybrid` mode it is
+ *           embedded and compared against listing vectors.
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [keyword, semantic, hybrid]
+ *           default: keyword
+ *         description: >
+ *           How `search` is interpreted.
+ *
+ *           `keyword` (default) is the original behaviour and is unchanged.
+ *
+ *           `semantic` embeds the query and ranks by cosine similarity,
+ *           returning only matches at or above a similarity floor of 0.25.
+ *           Listings whose embedding has not been computed are excluded.
+ *
+ *           `hybrid` runs the keyword and semantic arms independently and
+ *           fuses them with reciprocal rank fusion (k = 60), so a listing
+ *           matching both outranks one matching either alone. A listing with
+ *           no embedding is still reachable through the keyword arm.
+ *
+ *           **`total` differs by mode.** In `keyword` mode it counts every row
+ *           matching the filters. In `semantic` and `hybrid` mode it counts
+ *           only ranked candidates — rows above the similarity floor, or the
+ *           fused candidate set — so it is not the size of the table.
+ *
+ *           With no `search` term, `semantic` and `hybrid` behave as `keyword`:
+ *           there is nothing to embed.
  *       - in: query
  *         name: sort
  *         schema:
@@ -101,6 +130,24 @@ import { parseRequest, CreateListingSchema } from "@/lib/validation";
  *                   type: integer
  *                 totalPages:
  *                   type: integer
+ *             examples:
+ *               semantic:
+ *                 summary: Semantic mode adds a similarity to each row
+ *                 value:
+ *                   data:
+ *                     - id: 12
+ *                       title: "Insulated parka, size L"
+ *                       similarity: 0.61
+ *                   total: 1
+ *                   page: 1
+ *                   limit: 20
+ *                   totalPages: 1
+ *       400:
+ *         description: Invalid `mode` value
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -121,79 +168,13 @@ export async function GET(request: NextRequest) {
       if (!(err instanceof AuthError)) throw err;
     }
 
-    const { searchParams } = request.nextUrl;
-    // ── Pagination ────────────────────────────────────────────────────────────
-    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
-    const limit = Math.min(
-      100,
-      Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10) || 20)
-    );
-    const offset = (page - 1) * limit;
+    // Filters, visibility, mode and sorting all live in lib/listings-query.ts. The
+    // visibility rules in particular are a security fix that predates this endpoint's
+    // search modes — see resolveListingVisibility, and AC12's regression tests.
+    const parsed = buildListingQuery(request.nextUrl.searchParams, payload);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    // ── Filters ───────────────────────────────────────────────────────────────
-    // See lib/listing-visibility.ts — deciding this from the raw query string
-    // is what previously let `?sellerId=abc` drop every filter and dump the
-    // whole table to anonymous callers.
-    const { includeAllStatuses, sellerFilter } = resolveListingVisibility(
-      searchParams.get("sellerId"),
-      payload
-    );
-
-    const conditions = includeAllStatuses
-      ? []
-      : [eq(listings.status, "active")];
-
-    if (sellerFilter !== null) {
-      conditions.push(eq(listings.sellerId, sellerFilter));
-    }
-
-    const categoryId = searchParams.get("categoryId");
-    if (categoryId) {
-      const id = parseInt(categoryId, 10);
-      if (!isNaN(id)) conditions.push(eq(listings.categoryId, id));
-    }
-
-    const minPrice = searchParams.get("minPrice");
-    if (minPrice) {
-      const val = parseFloat(minPrice);
-      if (!isNaN(val)) conditions.push(gte(listings.price, String(val)));
-    }
-
-    const maxPrice = searchParams.get("maxPrice");
-    if (maxPrice) {
-      const val = parseFloat(maxPrice);
-      if (!isNaN(val)) conditions.push(lte(listings.price, String(val)));
-    }
-
-    const search = searchParams.get("search");
-    if (search?.trim()) conditions.push(ilike(listings.title, `%${search.trim()}%`));
-
-    // ── Sorting ───────────────────────────────────────────────────────────────
-    const sortParam = searchParams.get("sort") ?? "newest";
-    const orderBy =
-      sortParam === "oldest"
-        ? asc(listings.createdAt)
-        : sortParam === "price_asc"
-          ? asc(listings.price)
-          : sortParam === "price_desc"
-            ? desc(listings.price)
-            : desc(listings.createdAt); // default: newest
-
-    const where = and(...conditions);
-
-    // ── Queries ───────────────────────────────────────────────────────────────
-    const [data, [{ total }]] = await Promise.all([
-      db.select().from(listings).where(where).orderBy(orderBy).limit(limit).offset(offset),
-      db.select({ total: count() }).from(listings).where(where),
-    ]);
-
-    return jsonOk({
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
+    return jsonOk(await runListingQuery(parsed.query));
   } catch (err) {
     console.error("[GET /api/listings]", err);
     return jsonError("Internal server error", 500);

@@ -1551,7 +1551,21 @@
             "schema": {
               "type": "string"
             },
-            "description": "Search by title (case-insensitive contains)"
+            "description": "Search term. In `keyword` mode it matches the title (case-insensitive contains); in `semantic` and `hybrid` mode it is embedded and compared against listing vectors.\n"
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "keyword",
+                "semantic",
+                "hybrid"
+              ],
+              "default": "keyword"
+            },
+            "description": "How `search` is interpreted.\n`keyword` (default) is the original behaviour and is unchanged.\n`semantic` embeds the query and ranks by cosine similarity, returning only matches at or above a similarity floor of 0.25. Listings whose embedding has not been computed are excluded.\n`hybrid` runs the keyword and semantic arms independently and fuses them with reciprocal rank fusion (k = 60), so a listing matching both outranks one matching either alone. A listing with no embedding is still reachable through the keyword arm.\n**`total` differs by mode.** In `keyword` mode it counts every row matching the filters. In `semantic` and `hybrid` mode it counts only ranked candidates — rows above the similarity floor, or the fused candidate set — so it is not the size of the table.\nWith no `search` term, `semantic` and `hybrid` behave as `keyword`: there is nothing to embed.\n"
           },
           {
             "in": "query",
@@ -1596,6 +1610,34 @@
                       "type": "integer"
                     }
                   }
+                },
+                "examples": {
+                  "semantic": {
+                    "summary": "Semantic mode adds a similarity to each row",
+                    "value": {
+                      "data": [
+                        {
+                          "id": 12,
+                          "title": "Insulated parka, size L",
+                          "similarity": 0.61
+                        }
+                      ],
+                      "total": 1,
+                      "page": 1,
+                      "limit": 20,
+                      "totalPages": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid `mode` value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
