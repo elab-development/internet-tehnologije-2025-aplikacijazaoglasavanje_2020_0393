@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { listings, reviews, users } from "@/db/schema";
+import { listings, orderItems, orders, reviews, users } from "@/db/schema";
+import { PURCHASED_ORDER_STATUSES } from "@/lib/review-eligibility";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateReviewSchema } from "@/lib/validation";
@@ -97,7 +98,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 }
 
 // ─── POST /api/listings/[id]/reviews ─────────────────────────────────────────
-// Authenticated. Role: buyer.
+// Authenticated. Role: buyer, and only for a listing they have purchased.
 // Body: { rating: number (1-5); comment?: string }
 
 /**
@@ -108,7 +109,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *     summary: Create a review for a listing
  *     description: |
  *       Adds a review to a listing. Only buyers can review.
- *       A user can only submit one review per listing.
+ *       A user can only submit one review per listing, and only for a listing
+ *       they have actually purchased.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -155,7 +157,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Not a buyer
+ *         description: >
+ *           Not a buyer, or the buyer has no completed order containing this
+ *           listing (statuses paid, shipped, completed or approved).
  *         content:
  *           application/json:
  *             schema:
@@ -198,6 +202,25 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { rating, comment } = parsed.data;
+
+    // Only buyers who actually bought this listing may review it. Without this
+    // any buyer account could rate any listing it had never touched.
+    const [purchase] = await db
+      .select({ orderId: orders.id })
+      .from(orderItems)
+      .innerJoin(orders, eq(orders.id, orderItems.orderId))
+      .where(
+        and(
+          eq(orderItems.listingId, listingId),
+          eq(orders.buyerId, payload.sub),
+          inArray(orders.status, [...PURCHASED_ORDER_STATUSES])
+        )
+      )
+      .limit(1);
+
+    if (!purchase) {
+      return jsonError("You can only review a listing you have purchased", 403);
+    }
 
     // Prevent duplicate review for the same listing
     const [existingReview] = await db

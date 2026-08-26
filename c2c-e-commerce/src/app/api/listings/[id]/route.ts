@@ -103,7 +103,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 
     if (!listing) {
       return jsonError(
-        "Invalid listing id ,Listing not found",
+        "Listing not found",
         404
       );
     }
