@@ -43,7 +43,7 @@ its implementation has not met its Definition of Done, no matter how green the s
 | Phase | Produces | Leaves the working tree | Done when |
 |---|---|---|---|
 | **1. Spec** | The behaviour, restated as failing tests | Red | Every AC in the story maps to at least one named test, and each one fails **for the right reason** — asserting real behaviour, not a missing import |
-| **2. Plan** | The implementation approach, written down before code | Still red | The files to add/change, the chosen design and the rejected alternative, and any AC that needs a design decision are recorded in the story's comments or a scratch note |
+| **2. Plan** | The implementation approach, written down before code — **outside the repo** | Still red | The files to add/change, the chosen design and the rejected alternative, and any AC that needs a design decision are recorded in the Jira story's comments or an untracked scratch file |
 | **3. Implementation** | The smallest code that turns the spec green | Green | The whole suite passes, and no test was weakened, skipped, or deleted to get there |
 
 Rules that make the three phases mean something:
@@ -59,6 +59,49 @@ Rules that make the three phases mean something:
 Where a story's own **Definition of Done** or **Test notes** name specific tests, those are
 the minimum spec-phase output, not the total.
 
+### Commit hygiene
+
+Rules for anyone — human or AI assistant — producing commits against this backlog.
+
+**Process documents are never committed.** The plan from phase 2, spec write-ups, story
+breakdowns, session notes, status reports, migration checklists and any similar scratch
+output stay **out of the repository**. They belong in the Jira story's comments, or in an
+untracked local file. The repository records *what the software is*, not the working notes
+of how it got there — a reviewer reading `git log` should see behaviour changing, not a
+parallel narrative about the work.
+
+Do not confuse this with the **spec phase**, which is failing *tests*. Those are source
+code and are always committed — committing them red is the entire point (see the rules
+above). "Don't commit the spec" means the prose document, never the test file.
+
+The exception is documentation the backlog names as a **deliverable of a story**, which is
+product output and is committed like any other artefact:
+
+| Committed — it is the deliverable | Not committed — it is process |
+|---|---|
+| `docs/security/rbac-matrix.md` (SEC-10) | The plan for how to audit the routes |
+| `docs/security/threat-model.md` (SEC-12) | A summary of what changed this session |
+| `README.md`, `.env.example`, `@swagger` JSDoc | A checklist of remaining stories |
+| This backlog | A spec write-up restating a story's AC in prose |
+
+If it is not listed in a story's **Scope — in**, it is not a deliverable.
+
+**Commit authorship is the human's alone.** An AI assistant working on this repository
+must **not** add itself as an author or co-author of any commit:
+
+- No `Co-Authored-By:` trailer naming Claude, an assistant, or a tool
+- No "Generated with…" or "🤖" attribution line in commit messages or PR bodies
+- `git config user.name` / `user.email` stay set to the human author throughout
+
+The commit history is a thesis artefact and part of its authorship record; it names the
+person accountable for the change. Where an assistant's involvement is worth stating, it
+belongs in the thesis methodology chapter — described honestly and in full — not
+distributed one line at a time across several hundred commit trailers.
+
+Commit messages themselves stay conventional and scoped to the story:
+`test(sec-3): spec for rotation and reuse detection`, then
+`feat(sec-3): rotating refresh tokens with reuse detection`.
+
 ### Global Definition of Done
 
 Applies to **every** story below. Story-level "Definition of Done" sections list only
@@ -73,6 +116,8 @@ the *additional* items on top of this.
 - [ ] New/changed API routes have updated `@swagger` JSDoc and `/api-docs` renders them
 - [ ] New environment variables are added to `.env.example` **and** documented in `README.md`
 - [ ] No secret is committed; new secrets are registered as GitHub Actions secrets
+- [ ] No process documents (plans, spec write-ups, session notes) were committed — only the deliverables named in **Scope — in**
+- [ ] Every commit is authored by the human alone: no AI co-author trailer, no generated-by attribution
 - [ ] Reviewed by at least one other person, squash-merged into `develop`
 - [ ] Anything worth citing in the thesis is noted in the story's comments
 
@@ -91,7 +136,7 @@ stories assume them; changing one invalidates specific stories, noted in the las
 
 | # | Decision | Rationale | Invalidates if changed |
 |---|---|---|---|
-| D1 | **LLM = Groq API**, open-source weights (`llama-3.3-70b-versatile`), OpenAI-compatible endpoint | Open-source model without shipping a 4 GB container; free tier is sufficient for a thesis demo | AI-1, AI-5 |
+| D1 | **LLM = Groq API**, open-source weights (`qwen/qwen3.8-27b`), OpenAI-compatible endpoint | Open-source model without shipping a 4 GB container; free tier is sufficient for a thesis demo | AI-1, AI-5 |
 | D2 | **Embeddings = Transformers.js in-process**, `Xenova/all-MiniLM-L6-v2`, **384 dimensions**, mean-pooled + L2-normalised | No API key, works offline, demo runs anywhere. Fixes the pgvector column width at 384 | AI-2, AI-3, AI-4 |
 | D3 | **OAuth2 = hand-rolled authorization-code flow**, not Auth.js | Keeps the existing custom JWT layer and `authenticate()`/`authorize()` guards intact; the protocol itself becomes a thesis chapter | SEC-5 … SEC-9 |
 | D4 | **Recommendations use existing data only** — orders + reviews. No `listing_views` table | Zero new tracking, works with seeded data. Cold-start falls back to category popularity | AI-9 |
@@ -101,6 +146,27 @@ stories assume them; changing one invalidates specific stories, noted in the las
 | D8 | Semantic search is **additive**: `GET /api/listings` gains a `mode` parameter defaulting to `keyword`, so existing clients are unaffected | Backwards compatibility; lets A/B comparison of keyword vs. semantic go in the thesis evaluation chapter | AI-6, AI-7 |
 | D9 | OAuth account linking requires a **verified** provider email **and** password re-authentication | Auto-linking on unverified email is a well-known account-takeover vector | SEC-8 |
 | D10 | Coverage gate: **70%** lines/functions/statements, **60%** branches, scoped to `src/lib/**` and `src/app/api/**` | Achievable from the current baseline without writing filler tests for UI glue | QA-9 |
+
+> **D1 amended 2026-08-26 (during AI-1).** The original model,
+> `llama-3.3-70b-versatile`, has been decommissioned by Groq: it is absent from
+> `GET /openai/v1/models` on the project's key and a completion request answers 404. This
+> is **risk R3 materialising**, and the mitigation held — `LLM_PROVIDER` / `GROQ_MODEL`
+> confined the change to one constant and one spec assertion.
+>
+> `qwen/qwen3.8-27b` replaces it, chosen over the two other viable open-weights candidates
+> the account serves:
+>
+> | Model | Latency | Words | Note |
+> |---|---|---|---|
+> | `qwen/qwen3.8-27b` | 473 ms | 56 | Plain completion; kept to the brief |
+> | `openai/gpt-oss-120b` | 671 ms | 57 | Reasoning model; invented specifications |
+> | `openai/gpt-oss-20b` | 609 ms | 60 | Reasoning model; 246 of 325 tokens on reasoning |
+>
+> Both `gpt-oss` models return **empty `content`** at `max_tokens: 300`, having spent the
+> budget in the reasoning channel; they need `reasoning_effort: "low"` and a far larger
+> cap. That conflicts directly with AI-5's requirement to cap `max_tokens` against runaway
+> generation, which would have silently produced blank descriptions. `qwen` needs no such
+> special case. Both models named in AI-1's spec are ones the account can actually serve.
 
 ---
 
@@ -168,7 +234,7 @@ variable. This is the seam that makes the whole epic testable.
 **Scope — in**
 
 - `src/lib/ai/llm.ts`: `LlmProvider` interface with `generate(prompt: string, opts): Promise<string>`
-- `GroqProvider` — `POST https://api.groq.com/openai/v1/chat/completions`, model from `GROQ_MODEL` (default `llama-3.3-70b-versatile`), `AbortSignal` timeout, typed error on non-2xx
+- `GroqProvider` — `POST https://api.groq.com/openai/v1/chat/completions`, model from `GROQ_MODEL` (default `qwen/qwen3.8-27b` — see the D1 amendment), `AbortSignal` timeout, typed error on non-2xx
 - `MockProvider` — returns a deterministic string derived from the prompt; no network
 - `getLlmProvider()` factory reading `LLM_PROVIDER` (`groq` | `mock`)
 - Env: `LLM_PROVIDER`, `GROQ_API_KEY`, `GROQ_MODEL`, `LLM_TIMEOUT_MS`
@@ -2046,7 +2112,7 @@ in the backlog with no sprint assigned, so the deferral is on the board.
 |---|---|---|---|---|
 | R1 | Railway's managed Postgres cannot install `pgvector` | Medium | **High** — blocks the thesis core | AI-3 opens with a 2-hour spike; fallback is a self-hosted `pgvector/pgvector:pg16` container on Railway |
 | R2 | Transformers.js inflates cold start or the Docker image beyond Railway's limits | Medium | Medium | Bake the model at build time (AI-2); measure image size in the same story; fallback is a hosted embedding API, which only changes `EmbeddingProvider` |
-| R3 | Groq free-tier limits or model deprecation mid-project | Medium | Low | `LLM_PROVIDER` abstraction (AI-1) makes the swap a one-file change; `GROQ_MODEL` is configurable |
+| R3 | Groq free-tier limits or model deprecation mid-project | **Occurred 2026-08-26** | Low | `LLM_PROVIDER` abstraction (AI-1) makes the swap a one-file change; `GROQ_MODEL` is configurable. **Realised during AI-1**: `llama-3.3-70b-versatile` was decommissioned and returned 404. Cost of the swap was one constant plus one spec assertion, as predicted — see the D1 amendment in §1 |
 | R4 | SEC-4 collides with the parallel frontend refactor | **High** | Medium | Sequence SEC-4 after the refactor merges; the file-ownership boundary in `FRONTEND-TASKS.md` §2 already anticipates this |
 | R5 | E2E tests turn flaky and get skipped | Medium | Medium | Role-based selectors, per-spec data isolation, `retries: 1`, and QA-8 AC13's explicit 3-run stability check |
 | R6 | Coverage threshold set aspirationally, fails immediately, gets disabled | Medium | Medium | QA-9 sets thresholds to the *measured* baseline, and only after the test stories land |
