@@ -14,7 +14,7 @@
  *     that needs a Vitest `globalSetup`, not a module-level promise.
  *   - teardown here is registered per file; QA-3 AC9 wants it global.
  */
-import { drizzle } from "drizzle-orm/node-postgres";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import path from "node:path";
 import { Pool } from "pg";
@@ -22,6 +22,11 @@ import {
   PostgreSqlContainer,
   type StartedPostgreSqlContainer,
 } from "@testcontainers/postgresql";
+
+import * as schema from "@/db/schema";
+
+/** The Drizzle client the factories and tests share. */
+export type TestDatabase = NodePgDatabase<typeof schema>;
 
 /** The image is not negotiable: plain `postgres:16` has no `vector` extension to enable. */
 export const TEST_DB_IMAGE = "pgvector/pgvector:pg16";
@@ -76,4 +81,39 @@ export async function stopTestDatabase(): Promise<void> {
     container = undefined;
   }
   urlPromise = undefined;
+}
+
+// ─── C2C-QA-3 additions (spec phase skeletons) ────────────────────────────────
+
+const NOT_IMPLEMENTED = "not implemented — C2C-QA-3 is in its spec phase";
+
+export type TestDatabaseSource =
+  | { kind: "external"; url: string }
+  | { kind: "container"; image: string };
+
+/**
+ * Decides where the test database comes from, without side effects.
+ *
+ * Separated from the starting of it so AC1 and AC2 are fast unit tests rather than two
+ * more integration cases.
+ */
+export function resolveTestDatabaseSource(
+  _env: Record<string, string | undefined>,
+): TestDatabaseSource {
+  throw new Error(NOT_IMPLEMENTED);
+}
+
+/** A Drizzle client bound to the migrated test database. */
+export function getTestDb(): Promise<TestDatabase> {
+  throw new Error(NOT_IMPLEMENTED);
+}
+
+/**
+ * Empties every table and restarts identity sequences.
+ *
+ * TRUNCATE rather than a transaction rollback: route handlers open their own connections
+ * from the pool, so a transaction held open by the test would be invisible to them.
+ */
+export function resetDb(): Promise<void> {
+  throw new Error(NOT_IMPLEMENTED);
 }
