@@ -1073,7 +1073,7 @@
           "Reviews"
         ],
         "summary": "Create a review for a listing",
-        "description": "Adds a review to a listing. Only buyers can review.\nA user can only submit one review per listing.\n",
+        "description": "Adds a review to a listing. Only buyers can review.\nA user can only submit one review per listing, and only for a listing\nthey have actually purchased.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1148,7 +1148,7 @@
             }
           },
           "403": {
-            "description": "Not a buyer",
+            "description": "Not a buyer, or the buyer has no completed order containing this listing (statuses paid, shipped, completed or approved).\n",
             "content": {
               "application/json": {
                 "schema": {
