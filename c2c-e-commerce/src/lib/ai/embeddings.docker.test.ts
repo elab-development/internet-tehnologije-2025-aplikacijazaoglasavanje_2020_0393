@@ -28,12 +28,12 @@ function docker(args: string[], timeoutMs: number): string {
 }
 
 /**
- * Runs inside the container. Deliberately talks to @xenova/transformers directly rather
+ * Runs inside the container. Deliberately talks to @huggingface/transformers directly rather
  * than to our own module: the standalone bundle is not importable as a library, and what
  * AC7 is actually about is whether the model files are on disk.
  */
 const PROBE = `
-const { pipeline, env } = require("@xenova/transformers");
+const { pipeline, env } = require("@huggingface/transformers");
 env.allowRemoteModels = false;
 (async () => {
   const extract = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
