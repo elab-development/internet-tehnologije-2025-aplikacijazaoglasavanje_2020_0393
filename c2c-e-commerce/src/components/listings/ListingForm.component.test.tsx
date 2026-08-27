@@ -32,10 +32,12 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/api", () => ({ api: { post, get: vi.fn(), put: vi.fn() } }));
 
-// Categories only; the form renders fine with an empty list.
+// URL-aware, not blanket: the form calls useFetch twice — once for categories and once,
+// in edit mode, for the listing itself. A mock returning [] for both makes the edit-mode
+// effect read `.description` off an array.
 vi.mock("@/hooks/useFetch", () => ({
-  useFetch: () => ({
-    data: [],
+  useFetch: (endpoint: string | null) => ({
+    data: endpoint === "/api/categories" ? [] : null,
     setData: vi.fn(),
     loading: false,
     error: null,
