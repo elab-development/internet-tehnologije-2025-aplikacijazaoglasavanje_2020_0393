@@ -11,7 +11,7 @@ import { eq, inArray } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { listings } from "@/db/schema";
+import { listings, orderItems, orders, reviews } from "@/db/schema";
 import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
 import { makeListing, makeOrder, makeReview, makeUser } from "@/test/factories";
@@ -330,5 +330,62 @@ describe("C2C-AI-10 — the embedding never leaves the server", () => {
     expect(body.strategy).toBe("personalised");
     expect(body.data[0]).not.toHaveProperty("embedding");
     expect(body.data[0]).not.toHaveProperty("embeddingUpdatedAt");
+  });
+});
+
+describe("C2C-AI-10 — the interaction cap is about recency", () => {
+  /**
+   * The cap exists so taste stays responsive: 50 interactions, the most recent ones. That
+   * only holds if the two arms are merged into one timeline before it is applied. Fetching
+   * 50 orders and 50 reviews and concatenating them gives 100 rows, and any cap over that
+   * concatenation cuts on arm boundaries rather than on dates.
+   */
+  it("builds taste from the newest interactions, not the ones the cap should drop", async () => {
+    const db = await getTestDb();
+    const buyer = await makeUser({ role: "buyer" });
+
+    const cycling = inCluster("cycling")[0];
+    const furniture = inCluster("furniture")[0];
+
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+
+    // 50 orders of a bicycle, all from the last fortnight.
+    for (let i = 0; i < 50; i++) {
+      const [order] = await db
+        .insert(orders)
+        .values({
+          buyerId: buyer.id,
+          totalPrice: "10.00",
+          status: "completed",
+          createdAt: new Date(now - i * day * 0.25),
+        })
+        .returning();
+      await db.insert(orderItems).values({
+        orderId: order.id,
+        listingId: cycling.id,
+        price: "10.00",
+        quantity: 1,
+      });
+    }
+
+    // 50 reviews of a sofa, all from more than a year ago.
+    await db.insert(reviews).values(
+      Array.from({ length: 50 }, (_, i) => ({
+        reviewerId: buyer.id,
+        listingId: furniture.id,
+        rating: 5,
+        comment: "Solid.",
+        createdAt: new Date(now - (400 + i) * day),
+      })),
+    );
+
+    const { body } = await recommend(authHeaderFor(buyer));
+    const clusterById = new Map(catalogue.map((entry) => [entry.id, entry.cluster]));
+
+    expect(body.strategy).toBe("personalised");
+    // Under a concatenated cap the whole order arm falls off the end and the top result is
+    // the year-old sofa itself, which is an exact vector match.
+    expect(clusterById.get(body.data[0].id)).toBe("cycling");
   });
 });

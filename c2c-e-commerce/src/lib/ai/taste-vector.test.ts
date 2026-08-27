@@ -126,15 +126,28 @@ describe("C2C-AI-10 — buildTasteVector", () => {
     expect(buildTasteVector([reviewed(axis(0), 1), reviewed(axis(1), 1)])).toBeNull();
   });
 
-  it("uses only the most recent MAX_INTERACTIONS", () => {
-    // Oldest first, so the tail is what should survive the cap.
+  it("keeps the newest interactions when history exceeds the cap", () => {
+    // Callers order newest first — both arms of GET /api/recommendations select
+    // `desc(createdAt)` — so the HEAD is what has to survive the cap. Dropping the head
+    // instead would build taste out of exactly the history the cap exists to age out.
+    const history: Interaction[] = [
+      ordered(axis(0)),
+      ...Array.from({ length: MAX_INTERACTIONS }, () => ordered(axis(1))),
+    ];
+
+    const vector = buildTasteVector(history)!;
+    expect(cosineSimilarity(vector, axis(0))).toBeGreaterThan(0);
+  });
+
+  it("drops the oldest interactions when history exceeds the cap", () => {
     const history: Interaction[] = [
       ...Array.from({ length: MAX_INTERACTIONS }, () => ordered(axis(1))),
       ordered(axis(0)),
     ];
 
+    // The lone axis-0 interaction is the oldest, so it must not reach the vector at all.
     const vector = buildTasteVector(history)!;
-    expect(cosineSimilarity(vector, axis(0))).toBeGreaterThan(0);
+    expect(cosineSimilarity(vector, axis(0))).toBeCloseTo(0, 10);
   });
 
   it("is deterministic for the same history", () => {
@@ -142,7 +155,7 @@ describe("C2C-AI-10 — buildTasteVector", () => {
     expect(buildTasteVector(history)).toEqual(buildTasteVector(history));
   });
 
-  it("does not depend on the order interactions are supplied in", () => {
+  it("does not depend on the order interactions are supplied in, below the cap", () => {
     const a = buildTasteVector([ordered(axis(0)), reviewed(axis(1), 5)])!;
     const b = buildTasteVector([reviewed(axis(1), 5), ordered(axis(0))])!;
 
