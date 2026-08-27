@@ -1,3 +1,4 @@
+import { sql, type SQL } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
@@ -268,7 +269,12 @@ export async function POST(request: NextRequest) {
     // the outcome is held and reported below.
     const outcome = await computeListingEmbedding({ title, description });
 
-    const newListing: NewListing = {
+    // `embeddingUpdatedAt` is stamped by Postgres rather than Node, so the field holds a
+    // SQL expression that Drizzle's inferred insert type does not model. Widening one
+    // property beats casting the whole object and losing the rest of the checking.
+    const newListing: Omit<NewListing, "embeddingUpdatedAt"> & {
+      embeddingUpdatedAt?: NewListing["embeddingUpdatedAt"] | SQL;
+    } = {
       title,
       description,
       price: String(price),
@@ -277,7 +283,7 @@ export async function POST(request: NextRequest) {
       ...(categoryId !== undefined && categoryId !== null && { categoryId }),
       ...(outcome.status === "embedded" && {
         embedding: outcome.embedding,
-        embeddingUpdatedAt: new Date(),
+        embeddingUpdatedAt: sql`now()`,
       }),
     };
 

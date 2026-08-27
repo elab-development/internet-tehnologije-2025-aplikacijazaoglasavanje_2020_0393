@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
@@ -257,7 +257,11 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     // ── Build update payload (only provided fields) ───────────────────────────
     // The schema guarantees at least one field is present and that every value
     // is already validated and normalised; this only maps it onto the row.
-    const updates: Partial<typeof listings.$inferInsert> = {};
+    // embeddingUpdatedAt is stamped with SQL now() rather than a JS Date, so that it
+    // shares a clock with updated_at; the inferred insert type does not model that.
+    const updates: Partial<
+      Omit<typeof listings.$inferInsert, "embeddingUpdatedAt">
+    > & { embeddingUpdatedAt?: Date | null | SQL } = {};
 
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
@@ -278,7 +282,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
       if (outcome.status === "embedded") {
         updates.embedding = outcome.embedding;
-        updates.embeddingUpdatedAt = new Date();
+        updates.embeddingUpdatedAt = sql`now()`;
       } else {
         // The text moved on but the vector could not follow. Clearing it keeps
         // `embedding IS NOT NULL` honest — AI-7 must not rank on a vector describing text

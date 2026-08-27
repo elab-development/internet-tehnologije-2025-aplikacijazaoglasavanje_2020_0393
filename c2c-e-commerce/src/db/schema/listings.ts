@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   index,
   integer,
@@ -44,10 +45,16 @@ export const listings = pgTable(
     //
     // $onUpdate stamps it on every Drizzle update, so a route that forgets cannot leave
     // a listing's text newer than the timestamp that is supposed to track it.
+    //
+    // The stamp comes from `now()` -- Postgres's clock -- not `new Date()`. defaultNow()
+    // already uses the database clock at insert, so stamping updates from Node mixes two
+    // clocks in one column: where the container runs behind the host (Docker Desktop on
+    // Windows), updated_at can go *backwards* on update. The backfill's staleness test
+    // (embedding_updated_at < updated_at) then silently misreads which rows are stale.
     updatedAt: timestamp("updated_at")
       .defaultNow()
       .notNull()
-      .$onUpdate(() => new Date()),
+      .$onUpdate(() => sql`now()`),
 
     // Nullable on purpose: a listing must stay creatable when embedding fails (AI-4 AC2),
     // and AI-7 uses `embedding IS NOT NULL` to keep such rows out of the vector arm while
