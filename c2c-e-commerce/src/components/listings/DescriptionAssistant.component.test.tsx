@@ -7,7 +7,7 @@
  * half that only makes sense in the form — the textarea being filled and the edited text
  * being what gets saved.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -201,7 +201,8 @@ describe("C2C-AI-6 — AC2: overwriting an existing description", () => {
     const { user, onGenerated } = setup({ hasDescription: true });
     await user.click(generateButton());
 
-    await user.click(await screen.findByRole("button", { name: /cancel|keep/i }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /cancel/i }));
 
     expect(post).not.toHaveBeenCalled();
     expect(onGenerated).not.toHaveBeenCalled();
@@ -211,7 +212,10 @@ describe("C2C-AI-6 — AC2: overwriting an existing description", () => {
     const { user, onGenerated } = setup({ hasDescription: true });
     await user.click(generateButton());
 
-    await user.click(await screen.findByRole("button", { name: /replace|generate/i }));
+    // Scoped to the dialog: "Generate with AI" is still on the page behind it, and an
+    // unscoped /replace|generate/ matches both.
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: /replace it/i }));
 
     await waitFor(() => expect(onGenerated).toHaveBeenCalledWith(generated.description));
   });
