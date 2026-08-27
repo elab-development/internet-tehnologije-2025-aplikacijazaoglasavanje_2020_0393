@@ -108,8 +108,9 @@ describe("C2C-AI-6 — AC1: the generated text lands in the form", () => {
     await user.click(generateButton());
 
     // The seller should be able to see that a draft came from a model — it is their name
-    // on the listing.
-    expect(await screen.findByText(/ai/i, { selector: "p,span,small" })).toBeInTheDocument();
+    // on the listing. Matched on the note's own wording: a bare /ai/ also hits the
+    // "Generate with AI" button label.
+    expect(await screen.findByText(/drafted with ai/i)).toBeInTheDocument();
   });
 
   it("shows no AI-assisted note before anything is generated", () => {
