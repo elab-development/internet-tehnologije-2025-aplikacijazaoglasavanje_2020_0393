@@ -3,6 +3,7 @@ import { categories } from "./categories";
 import { listings } from "./listings";
 import { orderItems } from "./order-items";
 import { orders } from "./orders";
+import { refreshTokens } from "./refresh-tokens";
 import { reviews } from "./reviews";
 import { users } from "./users";
 
@@ -11,6 +12,7 @@ export * from "./categories";
 export * from "./listings";
 export * from "./order-items";
 export * from "./orders";
+export * from "./refresh-tokens";
 export * from "./reviews";
 export * from "./users";
 
@@ -20,6 +22,14 @@ export const usersRelations = relations(users, ({ many }) => ({
   listings: many(listings),
   orders: many(orders),
   reviews: many(reviews),
+  refreshTokens: many(refreshTokens),
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, {
+    fields: [refreshTokens.userId],
+    references: [users.id],
+  }),
 }));
 
 export const categoriesRelations = relations(categories, ({ many }) => ({

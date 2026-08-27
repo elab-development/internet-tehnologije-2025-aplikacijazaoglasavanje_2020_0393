@@ -20,7 +20,8 @@
     "db:seed": "tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "db:check-pgvector": "node scripts/check-pgvector.mjs",
-    "db:backfill-embeddings": "tsx src/db/backfill-embeddings.ts"
+    "db:backfill-embeddings": "tsx src/db/backfill-embeddings.ts",
+    "db:prune-tokens": "tsx src/db/prune-tokens.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
