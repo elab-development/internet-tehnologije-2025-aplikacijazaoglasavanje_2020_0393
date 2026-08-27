@@ -141,7 +141,8 @@ stories assume them; changing one invalidates specific stories, noted in the las
 | D2a | The npm package is **`@huggingface/transformers` 4.2.0**, not `@xenova/transformers` 2.17.2 as AI-2's scope originally said | Same author, same runtime, same model — the project moved into the Hugging Face org in 2024. The abandoned fork pins an `onnxruntime-node` predating Node 22, which this project runs. D2's substance is unchanged | AI-2 |
 | D3 | **OAuth2 = hand-rolled authorization-code flow**, not Auth.js | Keeps the existing custom JWT layer and `authenticate()`/`authorize()` guards intact; the protocol itself becomes a thesis chapter | SEC-5 … SEC-9 |
 | D4 | **Recommendations use existing data only** — orders + reviews. No `listing_views` table | Zero new tracking, works with seeded data. Cold-start falls back to category popularity | AI-9 |
-| D5 | **Access token in memory (15 min) + refresh token in httpOnly cookie**, rotation with reuse detection | Removes the XSS token-theft vector that `localStorage` currently has | SEC-2 … SEC-4 |
+| D5 | ~~Access token in memory (15 min)~~ → **superseded by D5a** | — | — |
+| D5a | **Both tokens in httpOnly cookies**: a 15-minute access token in `auth_token` (`Path=/`) plus a rotating refresh token in `refresh_token` (`Path=/api/auth`), with reuse detection | D5 was decided when the access token still lived in `localStorage`, and its stated rationale was removing that XSS vector. The vector was closed early by the cookie migration (commit `8889f45`), so holding the token in JS memory would now *reintroduce* script-readable credentials rather than remove them. Rotation, reuse detection and family revocation — the parts the thesis chapter is about — are unaffected | SEC-3, SEC-4 |
 | D6 | **Test DB = GitHub Actions service container in CI, Testcontainers locally**, image `pgvector/pgvector:pg16` | Fast in CI, zero-setup locally, one code path behind `getTestDb()` | QA-3, QA-5, QA-6 |
 | D7 | **In scope:** rate limiting. **Out of scope:** AI moderation/auto-categorisation (§1.3), 2FA (§2.4), realtime chat (§4) | Keeps the thesis core tight; deferred items are listed in §6 | — |
 | D8 | Semantic search is **additive**: `GET /api/listings` gains a `mode` parameter defaulting to `keyword`, so existing clients are unaffected | Backwards compatibility; lets A/B comparison of keyword vs. semantic go in the thesis evaluation chapter | AI-6, AI-7 |
@@ -937,10 +938,11 @@ token delivered in an httpOnly cookie (decision **D5**).
 
 - `JWT_EXPIRES_IN` `7d` → **15m** in `src/lib/auth.ts`
 - `src/lib/refresh-token.ts`: `issue(userId, ctx)`, `rotate(rawToken, ctx)`, `revoke(rawToken)`, `revokeFamily(familyId)`; 32 bytes from `crypto.randomBytes`, base64url-encoded
-- `POST /api/auth/refresh` — reads the cookie, rotates, returns a new access token plus the user, sets the new cookie
+- `POST /api/auth/refresh` — reads the cookie, rotates, returns the user, and sets **both** refreshed cookies
 - `POST /api/auth/login` and `/register` — additionally issue a refresh token and set the cookie
 - `POST /api/auth/logout` — revokes the presented token's whole family and clears the cookie
-- Cookie: name `refresh_token`, `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/api/auth`, `Max-Age` 30 days
+- Refresh cookie: name `refresh_token`, `HttpOnly`, `Secure` in production, `SameSite=Lax`, `Path=/api/auth`, `Max-Age` 30 days
+- Access cookie: the existing `auth_token`, unchanged in every attribute except `Max-Age`, which drops from 7 days to 15 minutes to track `JWT_EXPIRES_IN` (per **D5a**; the body still returns `token` for Swagger and other API clients)
 - `@swagger` JSDoc for the new route and the changed responses
 
 **Scope — out**
@@ -994,17 +996,27 @@ integration tests.
 
 **Description**
 
-Stop persisting the access token in `localStorage`. Hold it in React state only and
-recover the session on page load by calling `/api/auth/refresh` with the httpOnly cookie.
+Teach the client to survive a 15-minute access token: recover the session on load and
+refresh it silently when it lapses, without the user noticing.
+
+> **Rescoped under D5a.** As written this story was "get the token out of `localStorage`
+> and into React state". The cookie migration (`8889f45`) already removed `localStorage`
+> — `grep -rn localStorage src/` returns no auth usage — and under D5a the access token
+> stays in the httpOnly `auth_token` cookie, so there is no token for the client to hold.
+> What remains is the refresh *behaviour*, which is the part the ACs actually test.
+> Estimate drops from 8 points to 3.
 
 **Scope — in**
 
-- `src/context/AuthContext.tsx`: token in state only; on mount call `POST /api/auth/refresh` instead of reading `localStorage`; expose `getAccessToken()`
-- `src/lib/api.ts`: read the token from the auth module rather than `localStorage`; send `credentials: "include"`; on a 401, attempt one silent refresh and retry the original request exactly once
+- `src/lib/api.ts`: on a 401, attempt one silent `POST /api/auth/refresh` and retry the original request exactly once (`credentials: "include"` is already set)
 - **Single-flight refresh**: concurrent 401s share one in-flight refresh promise
-- On refresh failure: clear auth state and redirect to `/login`
+- `src/context/AuthContext.tsx`: on refresh failure clear auth state and redirect to `/login`; keep the existing `/api/auth/me` bootstrap, which already restores the session from the cookie
 - Proactive refresh at ~13 minutes so an idle tab does not bounce the user
-- Delete every remaining `localStorage.getItem("token")` / `setItem` / `removeItem`
+
+**Scope — dropped by D5a**
+
+- `getAccessToken()`, token-in-React-state, and reading the token in `api.ts` — there is no client-held token to read
+- Deleting `localStorage` auth usage — already done; AC1 and AC10 survive as regression guards
 
 **Scope — out**
 
