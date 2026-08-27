@@ -79,6 +79,19 @@ Izmenite `.env` fajl i postavite vrednosti:
 | `POSTGRES_DB` | Ime baze podataka | `c2c_ecommerce` |
 | `DATABASE_URL` | Connection string za bazu | `postgresql://postgres:postgres@db:5432/c2c_ecommerce` |
 | `JWT_SECRET` | Tajni ključ za JWT tokene | (dugačak random string) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth2 kredencijali za Google prijavu | (Google Cloud Console) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth2 kredencijali za GitHub prijavu | (GitHub Developer settings) |
+| `OAUTH_REDIRECT_BASE_URL` | Javni origin aplikacije, iz koga se gradi callback URL | `http://localhost:3000` |
+| `OAUTH_PROVIDER` | `mock` pokreće ceo OAuth tok offline, bez kredencijala | (prazno) |
+
+Provajder kome nedostaje `CLIENT_ID` **ili** `CLIENT_SECRET` uopšte se ne
+registruje: njegovo dugme se ne prikazuje, a ruta vraća 404 umesto preusmeravanja
+koje bi puklo na drugoj strani.
+
+> **Napomena o PKCE.** Google podržava PKCE (RFC 7636), a GitHub OAuth Apps ga
+> **ne podržavaju** — nemaju `code_challenge` parametar. Zato Google dobija PKCE
+> *i* `state`, dok se GitHub oslanja na `state` i client secret. Zajednička
+> "PKCE za sve" implementacija bi na GitHubu tiho ne radila ništa.
 
 ### 3a. Pokretanje u development modu (sa live reload)
 
@@ -174,8 +187,16 @@ npm run db:studio    # Drizzle Studio (GUI)
 |---|---|---|
 | POST | `/api/auth/register` | Registracija novog korisnika |
 | POST | `/api/auth/login` | Prijava, vraća JWT token |
-| POST | `/api/auth/logout` | Odjava |
+| POST | `/api/auth/logout` | Odjava, poništava celu familiju refresh tokena |
+| POST | `/api/auth/refresh` | Rotira refresh token i izdaje novi access token |
 | GET | `/api/auth/me` | Trenutni korisnik (zahteva token) |
+| GET | `/api/auth/oauth/{provider}` | Pokreće OAuth2 prijavu (`google` ili `github`) |
+| GET | `/api/auth/oauth/{provider}/callback` | Callback provajdera |
+
+Sesija koristi kratkotrajni access token (15 minuta) u `auth_token` httpOnly
+kolačiću i rotirajući refresh token u `refresh_token` kolačiću ograničenom na
+`/api/auth`. Refresh token je jednokratan: ponovno slanje već rotiranog tokena
+tretira se kao krađa i poništava celu familiju.
 
 ### Kategorije
 

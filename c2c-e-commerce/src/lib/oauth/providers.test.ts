@@ -12,7 +12,13 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { OAuthError } from "./types";
+/**
+ * Resolved lazily. `vi.resetModules()` gives each test a fresh module graph, so the
+ * providers throw an OAuthError from a *different* instance of ./types than a
+ * top-level import would hold -- and `instanceof` compares class identity, not shape.
+ */
+const OAuthErrorClass = async () => (await import("./types")).OAuthError;
+type OAuthError = InstanceType<Awaited<ReturnType<typeof OAuthErrorClass>>>;
 
 const ENV = {
   GOOGLE_CLIENT_ID: "google-client-id",
@@ -167,7 +173,7 @@ describe("C2C-SEC-6 AC5 — exchanging the code", () => {
 
     await expect(
       provider.exchangeCode({ code: "c", redirectUri: REDIRECT, codeVerifier: "wrong" }),
-    ).rejects.toBeInstanceOf(OAuthError);
+    ).rejects.toBeInstanceOf(await OAuthErrorClass());
   });
 
   it("asks GitHub for JSON, which it otherwise answers form-encoded", async () => {
@@ -191,7 +197,7 @@ describe("C2C-SEC-6 AC5 — exchanging the code", () => {
 
     await expect(
       provider.exchangeCode({ code: "c", redirectUri: REDIRECT }),
-    ).rejects.toBeInstanceOf(OAuthError);
+    ).rejects.toBeInstanceOf(await OAuthErrorClass());
   });
 
   it("never puts the client secret in an error message", async () => {
@@ -268,7 +274,7 @@ describe("C2C-SEC-6 AC6/AC7 — GitHub's hidden email", () => {
       .getUserInfo("t")
       .catch((e: Error) => e);
 
-    expect(error).toBeInstanceOf(OAuthError);
+    expect(error).toBeInstanceOf(await OAuthErrorClass());
     // Named, because SEC-7 maps it onto a specific message for the user.
     expect((error as OAuthError).reason).toBe("no_verified_email");
   });
@@ -276,7 +282,9 @@ describe("C2C-SEC-6 AC6/AC7 — GitHub's hidden email", () => {
   it("AC7: rejects when the address list is empty", async () => {
     stubFetch({ body: { id: 1, login: "ghost", email: null } }, { body: [] });
 
-    await expect((await github()).getUserInfo("t")).rejects.toBeInstanceOf(OAuthError);
+    await expect((await github()).getUserInfo("t")).rejects.toBeInstanceOf(
+      await OAuthErrorClass(),
+    );
   });
 
   it("ignores a verified address that is not primary when a primary one exists", async () => {
