@@ -51,6 +51,12 @@ export type ListingDetail = Listing & {
 /** `GET /api/listings/[id]/similar` — a listing plus how close it is to the source. */
 export type SimilarListing = Listing & { similarity: number };
 
+/** `GET /api/recommendations` — the strategy says whether this is personal or popular. */
+export type RecommendationsResponse = {
+  data: Listing[];
+  strategy: "personalised" | "popular";
+};
+
 /** `GET /api/listings` */
 export type ListingsResponse = Paginated<Listing>;
 

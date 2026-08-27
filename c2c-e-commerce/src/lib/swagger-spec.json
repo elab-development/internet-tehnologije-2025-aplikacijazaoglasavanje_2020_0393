@@ -2620,6 +2620,80 @@
         }
       }
     },
+    "/api/recommendations": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Listings recommended for the authenticated user",
+        "description": "Personalised from data the marketplace already has — what the user ordered and what they reviewed. No browsing or view history is tracked.\nA user with no usable history gets the newest active listings from the most populated categories instead. The `strategy` field says which of the two happened, so a client never presents a popular list as a personal one.\nListings the user already ordered, their own listings, and anything not `active` are excluded from both strategies.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            },
+            "description": "How many recommendations to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recommendations, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Listing"
+                      }
+                    },
+                    "strategy": {
+                      "type": "string",
+                      "enum": [
+                        "personalised",
+                        "popular"
+                      ],
+                      "description": "`personalised` — ranked against a taste vector built from the user's orders and reviews. `popular` — the cold-start fallback.\n"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reviews/{id}": {
       "delete": {
         "tags": [

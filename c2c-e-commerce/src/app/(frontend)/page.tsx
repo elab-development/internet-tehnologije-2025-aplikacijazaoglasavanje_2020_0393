@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { RiStoreLine, RiSearchLine, RiShoppingBagLine } from "@remixicon/react";
 import Link from "next/link";
 
+import RecommendedForYou from "@/components/RecommendedForYou";
+
 export const metadata: Metadata = {
   title: "Home",
 };
@@ -75,6 +77,10 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      {/* Client component: renders nothing for anonymous visitors, and nothing when there
+          is nothing to recommend (AI-10 AC8). */}
+      <RecommendedForYou />
     </div>
   );
 }
