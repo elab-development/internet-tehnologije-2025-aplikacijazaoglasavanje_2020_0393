@@ -117,6 +117,31 @@ It reports whether the extension is available, whether the connecting role may i
 and whether an HNSW index with `vector_cosine_ops` can be created. Exit code 0 means
 migrations 0005 and 0006 will apply.
 
+## Generating listing descriptions
+
+`POST /api/listings/generate-description` turns a title, and optionally keywords and a
+category, into a description a seller can edit. Sellers and admins only; nothing is stored.
+
+```json
+{ "title": "Mountain bike", "keywords": ["26 inch", "aluminium"], "language": "en" }
+```
+
+Answers `{ description, model, generatedAt }`. The description is capped at 2 000
+characters and the model is instructed to write 60–120 words of plain text, invent no
+specifications and no price, and include no contact details.
+
+**It is a draft for a human to review, not a statement of fact about the item.** The
+constraints reduce the ways a generated description can mislead a buyer; they do not
+eliminate them.
+
+Rate-limited to 10 generations per hour **per account** — the endpoint is authenticated, so
+the budget belongs to the user rather than to whoever shares their IP. Exceeding it answers
+`429` with `Retry-After`. If the model is unreachable, times out, or returns nothing usable,
+the answer is `502`: the request was fine, the provider was not.
+
+Set `LLM_PROVIDER=mock` to work on the form without a key or a network — the mock is
+deterministic, so the same title always produces the same text.
+
 ## Embeddings
 
 Semantic search, "similar listings" and recommendations are all driven by 384-dimension
