@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { listingColumns } from "@/lib/listings-query";
 import {
   computeListingEmbedding,
   needsReembedding,
@@ -291,7 +292,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       .update(listings)
       .set(updates)
       .where(eq(listings.id, id))
-      .returning();
+      .returning(listingColumns);
 
     if (outcome?.status === "failed") {
       console.error(

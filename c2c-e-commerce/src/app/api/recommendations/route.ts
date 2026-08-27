@@ -8,6 +8,7 @@ import {
   MAX_INTERACTIONS,
   type Interaction,
 } from "@/lib/ai/taste-vector";
+import { listingColumns } from "@/lib/listings-query";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
 
@@ -135,7 +136,7 @@ export async function GET(request: NextRequest) {
     const literal = sql.raw(`'[${taste.join(",")}]'::vector`);
 
     const data = await db
-      .select()
+      .select(listingColumns)
       .from(listings)
       .where(and(...base, isNotNull(listings.embedding)))
       .orderBy(sql`${listings.embedding} <=> ${literal}`)
@@ -171,7 +172,7 @@ async function popular(base: ReturnType<typeof eq>[], limit: number) {
     .filter((id): id is number => id !== null);
 
   const rows = await db
-    .select()
+    .select(listingColumns)
     .from(listings)
     .where(
       and(

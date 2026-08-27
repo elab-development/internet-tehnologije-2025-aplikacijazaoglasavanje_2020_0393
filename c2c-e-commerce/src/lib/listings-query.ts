@@ -44,6 +44,30 @@ export const MIN_SIMILARITY = 0.25;
  */
 const FUSION_CANDIDATES = 200;
 
+/**
+ * The listing columns a client is allowed to see.
+ *
+ * `db.select()` and `.returning()` take *every* column, and `listings` now carries a
+ * 384-float `embedding` — ~4.7 KB per row, eighteen times the rest of the row put together.
+ * Sending it would be meaningless to a client, and it would break AI-7 AC1, which requires
+ * this endpoint to answer exactly what it answered before the epic added the column.
+ *
+ * One definition rather than a list per route, so a column added later cannot reach some
+ * responses and not others.
+ */
+export const listingColumns = {
+  id: listings.id,
+  title: listings.title,
+  description: listings.description,
+  price: listings.price,
+  imageUrl: listings.imageUrl,
+  status: listings.status,
+  sellerId: listings.sellerId,
+  categoryId: listings.categoryId,
+  createdAt: listings.createdAt,
+  updatedAt: listings.updatedAt,
+} as const;
+
 export type ParsedSearchMode =
   | { ok: true; mode: SearchMode }
   | { ok: false; error: string };
@@ -185,7 +209,10 @@ export function buildListingQuery(
 
 // ─── Execution ────────────────────────────────────────────────────────────────
 
-export type ListingRow = typeof listings.$inferSelect & { similarity?: number };
+/** A listing as a client sees it: every public column, plus AI-7's optional score. */
+export type ListingRow = {
+  [K in keyof typeof listingColumns]: (typeof listings.$inferSelect)[K];
+} & { similarity?: number };
 
 export type ListingPage = {
   data: ListingRow[];
@@ -213,7 +240,7 @@ async function runKeyword(query: ListingQuery): Promise<ListingPage> {
   // Unchanged from before this story: AC1 requires byte-identical output.
   const [data, [{ total }]] = await Promise.all([
     db
-      .select()
+      .select(listingColumns)
       .from(listings)
       .where(query.where)
       .orderBy(query.orderBy)
@@ -307,7 +334,7 @@ async function runHybrid(query: ListingQuery): Promise<ListingPage> {
 async function fetchByIds(ids: number[]): Promise<Map<number, ListingRow>> {
   if (ids.length === 0) return new Map();
 
-  const rows = await db.select().from(listings).where(inArray(listings.id, ids));
+  const rows = await db.select(listingColumns).from(listings).where(inArray(listings.id, ids));
   return new Map(rows.map((row) => [row.id, row]));
 }
 

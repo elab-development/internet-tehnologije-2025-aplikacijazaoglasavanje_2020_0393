@@ -4,7 +4,7 @@ import { listings, type NewListing } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
 import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
-import { buildListingQuery, runListingQuery } from "@/lib/listings-query";
+import { buildListingQuery, listingColumns, runListingQuery } from "@/lib/listings-query";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateListingSchema } from "@/lib/validation";
 
@@ -281,7 +281,7 @@ export async function POST(request: NextRequest) {
       }),
     };
 
-    const [created] = await db.insert(listings).values(newListing).returning();
+    const [created] = await db.insert(listings).values(newListing).returning(listingColumns);
 
     if (outcome.status === "failed") {
       // Logged once, with the id, so the row can be found again. The listing is still
