@@ -39,8 +39,14 @@ export type Category = CategoryRow;
 
 export type ListingStatus = ListingRow["status"];
 
-/** A listing row as returned by `GET /api/listings`. */
-export type Listing = Serialized<ListingRow>;
+/**
+ * A listing row as returned by `GET /api/listings`.
+ *
+ * `similarity` is present only in the `semantic` and `hybrid` search modes, and only on
+ * rows that reached the vector arm — AI-7 omits it rather than sending 0 for a row matched
+ * by keyword alone.
+ */
+export type Listing = Serialized<ListingRow> & { similarity?: number };
 
 /** `GET /api/listings/[id]` — adds the joined seller and category names. */
 export type ListingDetail = Listing & {
