@@ -77,18 +77,31 @@ describe("C2C-AI-2 — LocalEmbeddingProvider", () => {
   it("AC5: embedBatch is faster than the same texts embedded one at a time", async () => {
     const texts = Array.from({ length: 8 }, (_, i) => `marketplace listing number ${i}`);
 
-    const sequentialStart = performance.now();
-    for (const text of texts) {
-      await provider.embed(text);
+    const time = async (run: () => Promise<unknown>) => {
+      const started = performance.now();
+      await run();
+      return performance.now() - started;
+    };
+
+    // Best of three on each side, rather than one sample each. A single pair is decided by
+    // whichever run caught a GC pause: this test passed alone and failed inside the full
+    // suite, where the other projects are competing for the same CPU. Taking the minimum
+    // measures the property AC5 is about — batching does less work — instead of measuring
+    // the scheduler.
+    const sequential: number[] = [];
+    const batched: number[] = [];
+
+    for (let i = 0; i < 3; i++) {
+      sequential.push(
+        await time(async () => {
+          for (const text of texts) await provider.embed(text);
+        }),
+      );
+      batched.push(await time(() => provider.embedBatch(texts)));
     }
-    const sequentialMs = performance.now() - sequentialStart;
 
-    const batchStart = performance.now();
-    await provider.embedBatch(texts);
-    const batchMs = performance.now() - batchStart;
-
-    expect(batchMs).toBeLessThan(sequentialMs);
-  });
+    expect(Math.min(...batched)).toBeLessThan(Math.min(...sequential));
+  }, 60_000);
 
   it("AC5: embedBatch on an empty list resolves to an empty list without calling the model", async () => {
     await expect(provider.embedBatch([])).resolves.toEqual([]);
