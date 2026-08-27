@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -8,6 +9,15 @@ import {
   useState,
 } from "react";
 import { api } from "@/lib/api";
+
+/**
+ * How long after a successful refresh to schedule the next one.
+ *
+ * Two minutes inside the access token's 15-minute life (JWT_EXPIRES_IN, C2C-SEC-3), so
+ * an idle tab renews before it lapses instead of discovering the expiry through a failed
+ * request the user is waiting on.
+ */
+const PROACTIVE_REFRESH_MS = 13 * 60 * 1000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -51,6 +61,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   // The session lives in an httpOnly cookie this code cannot read, so the only
   // way to know whether one exists is to ask the server. A 401 simply means not
@@ -62,6 +73,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // The API client refreshes silently on a 401 (lib/api.ts). This fires only when that
+  // refresh failed too -- the session is genuinely gone, so stop showing a signed-in UI
+  // and send the user somewhere they can do something about it.
+  useEffect(() => {
+    api.onAuthLost(() => {
+      setUser(null);
+      router.push("/login");
+    });
+
+    // Without this, an unmounted provider's handler would still hold a stale router
+    // and redirect on behalf of a tree that no longer exists.
+    return () => api.onAuthLost(null);
+  }, [router]);
+
+  // Proactive refresh. Renewing on a timer rather than waiting for a 401 means an idle
+  // tab does not make the user's next click pay for the round trip. Only while signed
+  // in: refreshing for a visitor who never logged in is a guaranteed 401 on a loop.
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = setInterval(() => {
+      // A failure here is not fatal: the token is still valid for another two minutes,
+      // and the 401 path will refresh again if this was a transient blip.
+      api.post("/api/auth/refresh").catch(() => {});
+    }, PROACTIVE_REFRESH_MS);
+
+    return () => clearInterval(timer);
+  }, [user]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<AuthResponse>("/api/auth/login", {
