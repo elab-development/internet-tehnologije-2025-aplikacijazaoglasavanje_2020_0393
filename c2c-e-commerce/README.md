@@ -58,8 +58,10 @@ as they write it. The measured cost on this machine, with the local provider war
 | p50 added to a write | **17 ms** |
 | p95 added to a write | 27 ms |
 
-The story budgeted 100–300 ms, so the real cost is an order of magnitude smaller. Call
-`warmupEmbeddings()` at server start to move the one-off model load off the first request.
+The story budgeted 100–300 ms, so the real cost is an order of magnitude smaller. The
+one-off model load is paid at server start rather than on the first request:
+`src/instrumentation.ts` calls `warmupEmbeddings()` on the Node runtime, and logs and
+continues if it fails — a marketplace that cannot embed still runs on keyword search.
 
 **An embedding failure never fails the write.** The listing is stored with
 `embedding = NULL`, the failure is logged once with the listing id, and the row stays fully
