@@ -18,6 +18,11 @@ export type ButtonProps = {
   children?: React.ReactNode;
   className?: string;
   fullWidth?: boolean;
+  /**
+   * Native tooltip. A disabled button that does not say why it is disabled is the
+   * frustrating kind — C2C-AI-6 AC5 requires the explanation.
+   */
+  title?: string;
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -53,6 +58,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
     children,
     className = "",
     fullWidth = false,
+    title,
   },
   ref
 ) {
@@ -64,6 +70,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       type={type}
       disabled={isDisabled}
       onClick={onClick}
+      title={title}
       className={[
         "inline-flex items-center justify-center rounded-lg font-medium",
         "transition-colors duration-150",

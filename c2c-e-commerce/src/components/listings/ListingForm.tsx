@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button, ErrorAlert, InputField } from "@/components/ui";
+import DescriptionAssistant from "./DescriptionAssistant";
 import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
 import type {
@@ -63,6 +64,10 @@ export default function ListingForm(props: ListingFormProps) {
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [status, setStatus] = useState<ListingStatus>("active");
+
+  // Set once a draft comes back from the model, so the seller can see that the text they
+  // are about to publish under their own name started as a generation.
+  const [aiAssisted, setAiAssisted] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -157,14 +162,40 @@ export default function ListingForm(props: ListingFormProps) {
           required
         />
 
-        <InputField
-          label="Description"
-          type="text"
-          value={description}
-          onChange={(event) => setDescription(event.target.value)}
-          placeholder="Product description"
-          required
-        />
+        {/* A textarea, not an InputField: that renders a single-line input, and a 60-120
+            word generated description is unusable in one. */}
+        <div className="space-y-1.5">
+          <label
+            htmlFor="listing-description"
+            className="block text-sm font-medium text-zinc-700"
+          >
+            Description
+          </label>
+          <textarea
+            id="listing-description"
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            placeholder="Product description"
+            rows={6}
+            required
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+          />
+
+          {aiAssisted && (
+            <p className="text-xs text-zinc-500">
+              Drafted with AI — review it before publishing. It is your listing.
+            </p>
+          )}
+
+          <DescriptionAssistant
+            title={title}
+            hasDescription={description.trim().length > 0}
+            onGenerated={(text) => {
+              setDescription(text);
+              setAiAssisted(true);
+            }}
+          />
+        </div>
 
         <InputField
           label="Price"
