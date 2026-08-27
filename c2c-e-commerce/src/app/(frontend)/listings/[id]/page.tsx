@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import CurrencySelect from "@/components/CurrencySelect";
 import ListingReviews from "@/components/listings/ListingReviews";
+import SimilarListings from "@/components/listings/SimilarListings";
 import {
   Button,
   ErrorAlert,
@@ -189,6 +190,10 @@ export default function ListingDetailPage() {
         canReview={canReview}
         onReviewCreated={refetchReviews}
       />
+
+      {/* Renders nothing when there is nothing to recommend, so no empty heading is left
+          behind on a listing with no neighbours (AI-9 AC9). */}
+      <SimilarListings listingId={listingId} />
 
       <Modal
         isOpen={isBuyModalOpen}

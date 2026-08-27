@@ -1486,6 +1486,103 @@
         }
       }
     },
+    "/api/listings/{id}/similar": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Listings similar to this one",
+        "description": "Nearest neighbours of a listing by embedding cosine distance. Public — this needs no user history at all, so it works on a visitor's first page view.\nOnly `active` listings with a computed embedding are returned, and the source listing is never among them. A listing whose own embedding has not been computed yet answers `200` with an empty array rather than an error.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The listing to find neighbours for"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 6,
+              "maximum": 20
+            },
+            "description": "How many neighbours to return (capped at 20)"
+          },
+          {
+            "in": "query",
+            "name": "sameCategoryOnly",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Restrict results to the source listing's category. A source with no category returns an empty array under this filter rather than ignoring it.\n"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Similar listings, most similar first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Listing"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "similarity": {
+                            "type": "number",
+                            "description": "Cosine similarity in (0, 1]"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid listing id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Listing not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/listings/generate-description": {
       "post": {
         "tags": [

@@ -48,6 +48,9 @@ export type ListingDetail = Listing & {
   categoryName: string | null;
 };
 
+/** `GET /api/listings/[id]/similar` — a listing plus how close it is to the source. */
+export type SimilarListing = Listing & { similarity: number };
+
 /** `GET /api/listings` */
 export type ListingsResponse = Paginated<Listing>;
 
