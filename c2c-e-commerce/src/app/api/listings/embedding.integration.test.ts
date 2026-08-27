@@ -335,3 +335,55 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     expect(row.embedding).toBeNull();
   });
 });
+
+/**
+ * The column is internal. It is ~4.7 KB of floats per row, it is meaningless to a client,
+ * and AI-7 AC1 requires `GET /api/listings` to answer exactly what it answered before the
+ * epic added the column. `db.select()` and `.returning()` both take every column, so
+ * nothing about these routes says "not that one" unless it is asserted.
+ */
+describe("C2C-AI-7 AC1 — the embedding never leaves the server", () => {
+  const internal = ["embedding", "embeddingUpdatedAt"];
+
+  it("AC1: GET /api/listings omits the embedding columns", async () => {
+    const seller = await makeUser({ role: "seller" });
+    await post(
+      { title: "Aluminium mountain bike", description: "Hardtail frame.", price: 220 },
+      authHeaderFor(seller),
+    );
+
+    const { GET } = await import("./route");
+    const body = await (await GET(new NextRequest("http://localhost/api/listings"))).json();
+
+    // Guard the guard: a listing whose embedding was never computed would pass the
+    // assertion below for the wrong reason.
+    expect((await rowById(body.data[0].id)).embedding).not.toBeNull();
+    for (const key of internal) expect(body.data[0]).not.toHaveProperty(key);
+  });
+
+  it("AC1: POST /api/listings omits the embedding columns from the created row", async () => {
+    const seller = await makeUser({ role: "seller" });
+
+    const response = await post(
+      { title: "Aluminium mountain bike", description: "Hardtail frame.", price: 220 },
+      authHeaderFor(seller),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(201);
+    expect((await rowById(body.id)).embedding).not.toBeNull();
+    for (const key of internal) expect(body).not.toHaveProperty(key);
+  });
+
+  it("AC1: PUT /api/listings/[id] omits the embedding columns from the updated row", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id });
+
+    const response = await put(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect((await rowById(listing.id)).embedding).not.toBeNull();
+    for (const key of internal) expect(body).not.toHaveProperty(key);
+  });
+});

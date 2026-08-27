@@ -319,3 +319,16 @@ describe("C2C-AI-10 — AC9: latency", () => {
     expect(elapsed).toBeLessThan(500);
   }, 120_000);
 });
+
+describe("C2C-AI-10 — the embedding never leaves the server", () => {
+  it("recommendations omit the embedding columns", async () => {
+    const buyer = await makeUser({ role: "buyer" });
+    await makeOrder({ buyerId: buyer.id, listingIds: [inCluster("cycling")[0].id] });
+
+    const { body } = await recommend(authHeaderFor(buyer));
+
+    expect(body.strategy).toBe("personalised");
+    expect(body.data[0]).not.toHaveProperty("embedding");
+    expect(body.data[0]).not.toHaveProperty("embeddingUpdatedAt");
+  });
+});
