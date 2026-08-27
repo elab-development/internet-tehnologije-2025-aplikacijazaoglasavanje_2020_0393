@@ -204,11 +204,15 @@ describe("C2C-SEC-6 AC5 — exchanging the code", () => {
     stubFetch({ status: 401, body: { error: "unauthorized_client" } });
     const provider = await google();
 
+    // exchangeCode resolves to a string, so the union needs narrowing before the
+    // assertion; a rejection is the only outcome this test accepts anyway.
     const error = await provider
       .exchangeCode({ code: "c", redirectUri: REDIRECT, codeVerifier: "v" })
+      .then(() => null)
       .catch((e: Error) => e);
 
-    expect(error.message).not.toContain(ENV.GOOGLE_CLIENT_SECRET);
+    expect(error).toBeInstanceOf(Error);
+    expect(error?.message).not.toContain(ENV.GOOGLE_CLIENT_SECRET);
   });
 });
 
