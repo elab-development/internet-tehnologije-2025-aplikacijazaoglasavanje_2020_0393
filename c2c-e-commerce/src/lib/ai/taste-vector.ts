@@ -6,6 +6,12 @@
  */
 import { EMBEDDING_DIMENSIONS } from "./embeddings";
 
+/**
+ * One thing the user did with a listing.
+ *
+ * Callers pass these **newest first**, as a single merged timeline — see the cap in
+ * `buildTasteVector`, which keeps the head.
+ */
 export type Interaction =
   | { kind: "ordered"; embedding: number[] | null }
   | { kind: "reviewed"; embedding: number[] | null; rating: number };
@@ -51,10 +57,10 @@ function weightOf(interaction: Interaction): number {
  * rather than an accident.
  */
 export function buildTasteVector(interactions: Interaction[]): number[] | null {
-  // Callers already order by date descending and limit, but the cap is enforced here too
-  // so it holds however the history arrives. The most *recent* interactions win: taste
-  // from six months ago should not outvote last week's.
-  const recent = interactions.slice(-MAX_INTERACTIONS);
+  // Callers supply one timeline, newest first, so the cap keeps the head. Callers already
+  // limit, but it is enforced here too so it holds however the history arrives. The most
+  // *recent* interactions win: taste from six months ago should not outvote last week's.
+  const recent = interactions.slice(0, MAX_INTERACTIONS);
 
   const sum = new Array<number>(EMBEDDING_DIMENSIONS).fill(0);
   let totalWeight = 0;

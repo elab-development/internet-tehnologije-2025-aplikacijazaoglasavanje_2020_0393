@@ -12,6 +12,9 @@ import { listingColumns } from "@/lib/listings-query";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
 
+/** An interaction with the date the cap sorts on. `at` is why both arms select it. */
+type Timed = Interaction & { at: Date };
+
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
@@ -102,17 +105,25 @@ export async function GET(request: NextRequest) {
         .limit(MAX_INTERACTIONS),
     ]);
 
-    const interactions: Interaction[] = [
-      ...orderedRows.map<Interaction>((row) => ({
+    // One timeline before the cap, not two lists end to end. Each arm fetches up to
+    // MAX_INTERACTIONS, so a concatenation is up to 100 rows and any cap over it cuts on
+    // the arm boundary rather than on dates — a user with 50 reviews would lose every
+    // order they ever placed, whatever its date.
+    const interactions: Timed[] = [
+      ...orderedRows.map<Timed>((row) => ({
         kind: "ordered",
         embedding: row.embedding,
+        at: row.at,
       })),
-      ...reviewedRows.map<Interaction>((row) => ({
+      ...reviewedRows.map<Timed>((row) => ({
         kind: "reviewed",
         embedding: row.embedding,
         rating: row.rating,
+        at: row.at,
       })),
-    ];
+    ]
+      .sort((a, b) => b.at.getTime() - a.at.getTime())
+      .slice(0, MAX_INTERACTIONS);
 
     const taste = buildTasteVector(interactions);
 
