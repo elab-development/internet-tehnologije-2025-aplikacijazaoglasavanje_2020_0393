@@ -9,12 +9,14 @@
 import { hashPassword } from "@/lib/auth";
 import {
   categories,
+  oauthAccounts,
   listings,
   orderItems,
   orders,
   reviews,
   users,
   type Category,
+  type OAuthAccount,
   type Listing,
   type Order,
   type Review,
@@ -34,10 +36,19 @@ let sequence = 0;
 const next = () => ++sequence;
 
 export type MakeUserOptions = Partial<
-  Pick<User, "email" | "name" | "role" | "phoneNumber">
+  Pick<User, "email" | "name" | "role" | "phoneNumber" | "emailVerified" | "avatarUrl">
 > & {
-  /** Hashed before insert; the plaintext is never stored. */
-  password?: string;
+  /**
+   * Hashed before insert; the plaintext is never stored. Pass `null` for an
+   * OAuth-only account with no password at all (C2C-SEC-5).
+   */
+  password?: string | null;
+};
+
+export type MakeOAuthAccountOptions = Partial<
+  Pick<OAuthAccount, "provider" | "providerAccountId" | "providerEmail">
+> & {
+  userId?: number;
 };
 
 export type MakeCategoryOptions = Partial<Pick<Category, "name" | "slug" | "description">>;
@@ -71,9 +82,14 @@ export async function makeUser(options: MakeUserOptions = {}): Promise<User> {
     .values({
       email: options.email ?? `user${n}@example.test`,
       name: options.name ?? `Test User ${n}`,
-      passwordHash: await hashPassword(options.password ?? "password123"),
+      passwordHash:
+        options.password === null
+          ? null
+          : await hashPassword(options.password ?? "password123"),
       role: options.role ?? "buyer",
       phoneNumber: options.phoneNumber ?? null,
+      emailVerified: options.emailVerified ?? false,
+      avatarUrl: options.avatarUrl ?? null,
     })
     .returning();
 
@@ -184,4 +200,31 @@ export async function makeReview(options: MakeReviewOptions = {}): Promise<Revie
     .returning();
 
   return review;
+}
+
+/**
+ * Links an external identity to a user, creating the user if none is given.
+ *
+ * Defaults to Google with a distinct account id per call, so two links in one test do
+ * not collide on the composite unique index unless a test means them to.
+ */
+export async function makeOAuthAccount(
+  options: MakeOAuthAccountOptions = {},
+): Promise<OAuthAccount> {
+  const db = await getTestDb();
+  const n = next();
+
+  const userId = options.userId ?? (await makeUser({ password: null })).id;
+
+  const [account] = await db
+    .insert(oauthAccounts)
+    .values({
+      userId,
+      provider: options.provider ?? "google",
+      providerAccountId: options.providerAccountId ?? `provider-account-${n}`,
+      providerEmail: options.providerEmail ?? `oauth${n}@example.test`,
+    })
+    .returning();
+
+  return account;
 }

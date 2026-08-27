@@ -64,6 +64,20 @@
       "when": 1771946300000,
       "tag": "0008_create_refresh_tokens",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1771946400000,
+      "tag": "0009_create_oauth_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1771946500000,
+      "tag": "0010_users_oauth_columns",
+      "breakpoints": true
     }
   ]
 }

@@ -35,10 +35,41 @@ export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, SALT_ROUNDS);
 }
 
+/**
+ * A real bcrypt hash of a value nothing can supply, used to burn the same CPU as a
+ * genuine comparison when there is no hash to compare against.
+ *
+ * Generated once per process at 12 rounds -- the cost the application uses -- so the
+ * decoy costs what the real thing costs.
+ */
+let decoyHash: string | null = null;
+
+async function getDecoyHash(): Promise<string> {
+  decoyHash ??= await bcrypt.hash(
+    "password-that-belongs-to-no-account", SALT_ROUNDS
+  );
+  return decoyHash;
+}
+
+/**
+ * Checks a password against a stored hash.
+ *
+ * `hash` is nullable because OAuth-only accounts have no password (C2C-SEC-5). The
+ * naive handling -- return false immediately -- is correct on the answer and wrong on
+ * the timing: bcrypt at 12 rounds costs hundreds of milliseconds, so an early return
+ * makes those accounts answer visibly faster than password accounts. That gap is an
+ * enumeration oracle, telling an attacker which addresses to attack through the
+ * provider instead. So we compare against a decoy and discard the result.
+ */
 export async function verifyPassword(
   plain: string,
-  hash: string
+  hash: string | null
 ): Promise<boolean> {
+  if (hash === null) {
+    await bcrypt.compare(plain, await getDecoyHash());
+    return false;
+  }
+
   return bcrypt.compare(plain, hash);
 }
 

@@ -62,6 +62,8 @@ describe("sanitizeUser", () => {
       name: "John",
       role: "buyer" as const,
       phoneNumber: null,
+      emailVerified: false,
+      avatarUrl: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

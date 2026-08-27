@@ -1,6 +1,7 @@
 import { relations } from "drizzle-orm";
 import { categories } from "./categories";
 import { listings } from "./listings";
+import { oauthAccounts } from "./oauth-accounts";
 import { orderItems } from "./order-items";
 import { orders } from "./orders";
 import { refreshTokens } from "./refresh-tokens";
@@ -10,6 +11,7 @@ import { users } from "./users";
 // ─── Re-exports ───────────────────────────────────────────────────────────────
 export * from "./categories";
 export * from "./listings";
+export * from "./oauth-accounts";
 export * from "./order-items";
 export * from "./orders";
 export * from "./refresh-tokens";
@@ -23,6 +25,14 @@ export const usersRelations = relations(users, ({ many }) => ({
   orders: many(orders),
   reviews: many(reviews),
   refreshTokens: many(refreshTokens),
+  oauthAccounts: many(oauthAccounts),
+}));
+
+export const oauthAccountsRelations = relations(oauthAccounts, ({ one }) => ({
+  user: one(users, {
+    fields: [oauthAccounts.userId],
+    references: [users.id],
+  }),
 }));
 
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
