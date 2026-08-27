@@ -532,6 +532,56 @@
         }
       }
     },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Exchange a refresh token for a new access token",
+        "description": "Reads the httpOnly `refresh_token` cookie, rotates it, and returns a fresh 15-minute access token. Refresh tokens are single-use: presenting one that has already been rotated is treated as theft and revokes every token in its family, forcing a new login.\n",
+        "responses": {
+          "200": {
+            "description": "A new access token, with both session cookies refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string",
+                      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown, expired, already-used, or concurrently-rotated refresh token. The reason is deliberately not distinguished in the response.\n",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/register": {
       "post": {
         "tags": [

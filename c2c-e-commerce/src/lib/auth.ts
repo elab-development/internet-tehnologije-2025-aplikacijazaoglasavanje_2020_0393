@@ -5,7 +5,12 @@ import type { User } from "@/db/schema";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const SALT_ROUNDS = 12;
-const JWT_EXPIRES_IN = "7d";
+/**
+ * Short by design (C2C-SEC-3). A stolen access token is only useful for this long;
+ * continuity comes from the rotating refresh token instead. Must track
+ * AUTH_COOKIE_MAX_AGE in lib/cookies.ts.
+ */
+const JWT_EXPIRES_IN = "15m";
 /** Pinned so a forged header cannot talk us into a different algorithm. */
 const JWT_ALGORITHM = "HS256" as const;
 

@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
 import { AUTH_COOKIE, clearedAuthCookieOptions } from "@/lib/cookies";
+import {
+  REFRESH_COOKIE,
+  clearedRefreshCookieOptions,
+} from "@/lib/refresh-cookies";
+import { familyOf, revokeRefreshTokenFamily } from "@/lib/refresh-token";
 
 // Clears the httpOnly auth cookie, which ends the session for browser clients:
 // scripts never had the token, so once the cookie is gone it cannot be replayed.
@@ -68,11 +73,22 @@ export async function POST(request: NextRequest) {
     // client via the Authorization header -- stays valid until it expires.
     // Closing that gap needs server-side state (a jti blocklist, or a
     // tokenVersion column bumped here and checked in authenticate()).
+    // Revoking the family is what makes logout real on the server side: the refresh
+    // token and every descendant of it stop working immediately, so a copied cookie
+    // cannot resurrect the session. Best effort -- an API client authenticating with
+    // only a Bearer header has no cookie to revoke, and logout must still succeed.
+    const presented = request.cookies.get(REFRESH_COOKIE)?.value;
+    if (presented) {
+      const family = await familyOf(presented);
+      if (family) await revokeRefreshTokenFamily(family);
+    }
+
     const response = jsonOk({
       message: "Logged out successfully",
       sub: payload.sub,
     });
     response.cookies.set(AUTH_COOKIE, "", clearedAuthCookieOptions());
+    response.cookies.set(REFRESH_COOKIE, "", clearedRefreshCookieOptions());
     return response;
   } catch (err) {
     if (err instanceof AuthError) {

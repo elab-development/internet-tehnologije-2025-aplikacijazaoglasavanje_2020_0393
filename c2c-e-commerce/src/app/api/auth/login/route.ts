@@ -7,6 +7,8 @@ import { jsonError, jsonOk } from "@/lib/response";
 import { getClientIp, rateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
 import { parseRequest, LoginBodySchema } from "@/lib/validation";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
+import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
+import { issueRefreshToken } from "@/lib/refresh-token";
 
 /**
  * @swagger
@@ -114,8 +116,16 @@ export async function POST(request: NextRequest) {
     // Browsers authenticate with the httpOnly cookie. The token stays in the
     // body for API clients (Swagger, Postman) that send it as a Bearer header;
     // the web client ignores it and never stores it.
+    // A login starts a new token family: this device's sessions are tracked
+    // independently, so revoking one does not sign the user out everywhere.
+    const refresh = await issueRefreshToken(user.id, {
+      userAgent: request.headers.get("user-agent"),
+      ip: getClientIp(request),
+    });
+
     const response = jsonOk({ user: sanitizeUser(user), token });
     response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    response.cookies.set(REFRESH_COOKIE, refresh.token, refreshCookieOptions());
     return response;
   } catch (err) {
     console.error("[POST /api/auth/login]", err);

@@ -7,6 +7,8 @@ import { jsonOk, jsonError } from "@/lib/response";
 import { getClientIp, rateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
 import { parseRequest, RegisterBodySchema } from "@/lib/validation";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
+import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
+import { issueRefreshToken } from "@/lib/refresh-token";
 
 /**
  * @swagger
@@ -130,8 +132,14 @@ export async function POST(request: NextRequest) {
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
     // Same as login: cookie for the browser, body token for API clients.
+    const refresh = await issueRefreshToken(user.id, {
+      userAgent: request.headers.get("user-agent"),
+      ip: getClientIp(request),
+    });
+
     const response = jsonOk({ user: sanitizeUser(user), token }, 201);
     response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    response.cookies.set(REFRESH_COOKIE, refresh.token, refreshCookieOptions());
     return response;
   } catch (err) {
     console.error("[POST /api/auth/register]", err);

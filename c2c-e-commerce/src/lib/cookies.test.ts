@@ -41,9 +41,11 @@ describe("authCookieOptions", () => {
   });
 
   it("expires with the token, not before or after", () => {
-    // JWT_EXPIRES_IN in lib/auth.ts is "7d". A cookie outliving the token would
-    // leave the browser sending a credential the server no longer honours.
-    expect(AUTH_COOKIE_MAX_AGE).toBe(7 * 24 * 60 * 60);
+    // JWT_EXPIRES_IN in lib/auth.ts is "15m" since C2C-SEC-3. A cookie outliving the
+    // token would leave the browser sending a credential the server no longer honours.
+    // Losing the session at 15 minutes is not a consequence: the rotating refresh
+    // cookie mints a replacement (lib/refresh-cookies.ts).
+    expect(AUTH_COOKIE_MAX_AGE).toBe(15 * 60);
     expect(authCookieOptions().maxAge).toBe(AUTH_COOKIE_MAX_AGE);
   });
 });

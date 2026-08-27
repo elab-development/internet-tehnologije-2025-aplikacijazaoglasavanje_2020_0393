@@ -11,8 +11,11 @@ export const AUTH_COOKIE = "auth_token";
  * Lifetime in seconds. Must track JWT_EXPIRES_IN in lib/auth.ts: a cookie that
  * outlives its token leaves the browser sending a credential the server has
  * already stopped honouring.
+ *
+ * 15 minutes since C2C-SEC-3. The session no longer ends when this expires -- the
+ * refresh cookie mints a new one -- so a short window here costs nothing.
  */
-export const AUTH_COOKIE_MAX_AGE = 7 * 24 * 60 * 60; // 7 days
+export const AUTH_COOKIE_MAX_AGE = 15 * 60; // 15 minutes
 
 export type AuthCookieOptions = {
   httpOnly: true;
