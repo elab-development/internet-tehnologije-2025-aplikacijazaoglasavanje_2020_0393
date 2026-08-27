@@ -46,7 +46,8 @@ export type MakeListingOptions = Partial<
   Pick<Listing, "title" | "description" | "price" | "status" | "imageUrl">
 > & {
   sellerId?: number;
-  categoryId?: number;
+  /** `null` creates a listing with no category — AI-9 AC7 has to cope with one. */
+  categoryId?: number | null;
   embedding?: number[];
   embeddingUpdatedAt?: Date;
 };
@@ -102,7 +103,9 @@ export async function makeListing(options: MakeListingOptions = {}): Promise<Lis
   // Only create what was not supplied. A factory that created a seller even when given
   // one would silently break any test counting users.
   const sellerId = options.sellerId ?? (await makeUser({ role: "seller" })).id;
-  const categoryId = options.categoryId ?? (await makeCategory()).id;
+  // `?? ` would treat an explicit null as "not supplied"; the caller means "no category".
+  const categoryId =
+    options.categoryId === undefined ? (await makeCategory()).id : options.categoryId;
 
   const [listing] = await db
     .insert(listings)
