@@ -116,3 +116,17 @@ export const REGISTER_RATE_LIMIT: RateLimitOptions = {
   limit: 10,
   windowMs: 60 * 60 * 1000,
 };
+
+/**
+ * Generation endpoints (C2C-AI-5).
+ *
+ * Keyed on the user rather than the IP: the endpoint is authenticated, so the quota
+ * belongs to the account, and sharing an office NAT should not mean sharing an AI budget.
+ *
+ * Groq's free tier is roughly 30 requests/minute across the whole deployment, and a seller
+ * writing one listing needs a handful of attempts rather than hundreds.
+ */
+export const AI_RATE_LIMIT: RateLimitOptions = {
+  limit: 10,
+  windowMs: 60 * 60 * 1000,
+};

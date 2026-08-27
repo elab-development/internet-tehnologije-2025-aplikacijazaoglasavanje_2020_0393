@@ -158,6 +158,31 @@ export const CreateListingSchema = z.object({
   categoryId: z.number().int().nullable().optional(),
 });
 
+/**
+ * C2C-AI-5 — body for POST /api/listings/generate-description.
+ *
+ * The bounds are quota control as much as validation: an unbounded title or keyword list
+ * is an unbounded prompt, and the caller does not pay for the tokens.
+ */
+export const GenerateDescriptionSchema = z.object({
+  // The field is named in every message, including the missing-value case: formatZodError
+  // joins messages without their paths, so a bare `z.string()` would answer "invalid
+  // input: expected string, received undefined" and leave the caller guessing which field.
+  title: z
+    .string({ error: "title is required" })
+    .trim()
+    .min(3, "title must be at least 3 characters")
+    .max(120, "title must be at most 120 characters"),
+  keywords: z
+    .array(z.string().trim().min(1).max(30, "each keyword must be at most 30 characters"))
+    .max(10, "at most 10 keywords are allowed")
+    .optional(),
+  categoryName: z.string().trim().max(60).optional(),
+  language: z
+    .enum(["en", "sr"], { error: "language must be one of: en, sr" })
+    .default("en"),
+});
+
 export const UpdateListingSchema = z
   .object({
     title: z.string().trim().min(1, "title must be a non-empty string").optional(),
