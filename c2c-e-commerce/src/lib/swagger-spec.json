@@ -532,6 +532,83 @@
         }
       }
     },
+    "/api/auth/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "OAuth2 callback",
+        "description": "Validates `state` against the signed transaction cookie, exchanges the code, resolves or creates the user, and issues the session cookies. The access token is never placed in the redirect URL: it would land in browser history, server logs and the `Referer` header. The client picks the session up from the cookies.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect into the app on success, or to /login?error=<code>"
+          },
+          "404": {
+            "description": "Unknown or unconfigured provider"
+          },
+          "429": {
+            "description": "Too many attempts from this IP"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Start an OAuth2 sign-in",
+        "description": "Redirects to the provider's authorization endpoint and stores the transaction (state, PKCE verifier, nonce, returnTo) in a short-lived signed cookie. Google receives a PKCE challenge; GitHub OAuth Apps do not support PKCE and receive `state` only.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "returnTo",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Same-site path to land on after signing in. External origins are ignored."
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the provider"
+          },
+          "404": {
+            "description": "Unknown or unconfigured provider"
+          },
+          "429": {
+            "description": "Too many attempts from this IP"
+          }
+        }
+      }
+    },
     "/api/auth/refresh": {
       "post": {
         "tags": [

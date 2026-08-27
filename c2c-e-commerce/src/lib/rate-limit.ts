@@ -130,3 +130,26 @@ export const AI_RATE_LIMIT: RateLimitOptions = {
   limit: 10,
   windowMs: 60 * 60 * 1000,
 };
+
+/**
+ * OAuth initiation, per IP (C2C-SEC-7).
+ *
+ * Each hit mints a transaction cookie and a redirect; cheap individually, but an
+ * unbounded stream is a free way to burn CPU on HMAC signing.
+ */
+export const OAUTH_INITIATE_RATE_LIMIT: RateLimitOptions = {
+  limit: 20,
+  windowMs: 5 * 60 * 1000,
+};
+
+/**
+ * OAuth callback, per IP.
+ *
+ * Tighter than initiation is tempting but wrong: a legitimate user hits the callback
+ * once per sign-in, while an attacker guessing `state` gets one attempt per request
+ * either way. This bounds the guessing rate without breaking a user who retries.
+ */
+export const OAUTH_CALLBACK_RATE_LIMIT: RateLimitOptions = {
+  limit: 20,
+  windowMs: 5 * 60 * 1000,
+};

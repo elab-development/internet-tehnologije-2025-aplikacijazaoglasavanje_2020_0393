@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 
 import { createCodeVerifier, createOpaqueValue, deriveCodeChallenge } from "./state";
 import {
+  OAuthError,
   type AuthorizationRequest,
   type NormalizedProfile,
   type OAuthProviderClient,
@@ -16,6 +17,9 @@ import {
 
 /** Encodes the code into the token so getUserInfo can recover it without shared state. */
 const TOKEN_PREFIX = "mock-token:";
+
+/** Exchanging this code always fails. */
+export const FAILING_CODE = "__fail__";
 
 export function mockProvider(id: ProviderName): OAuthProviderClient {
   // The asymmetry is preserved deliberately: a suite that passes against a mock where
@@ -45,6 +49,16 @@ export function mockProvider(id: ProviderName): OAuthProviderClient {
     },
 
     async exchangeCode({ code }) {
+      // Sentinel: lets a test reach the callback's provider_error branch without a
+      // network, and without the mock having to know about HTTP at all.
+      if (code === FAILING_CODE) {
+        throw new OAuthError(
+          "Mock provider rejected the authorization code",
+          "token_exchange_failed",
+          400,
+        );
+      }
+
       return `${TOKEN_PREFIX}${code}`;
     },
 

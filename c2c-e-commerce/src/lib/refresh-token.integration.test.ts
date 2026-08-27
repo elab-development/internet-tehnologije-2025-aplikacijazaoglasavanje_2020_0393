@@ -125,7 +125,7 @@ describe("C2C-SEC-3 — rotation", () => {
   it("AC11: replaced_by_id points at the successor, so the chain is auditable", async () => {
     const first = await issueRefreshToken(user.id);
     const second = await rotateRefreshToken(first.token);
-    const third = await rotateRefreshToken(second.token);
+    await rotateRefreshToken(second.token);
 
     const [a, b, c] = await allRows();
     expect(a.replacedById).toBe(b.id);

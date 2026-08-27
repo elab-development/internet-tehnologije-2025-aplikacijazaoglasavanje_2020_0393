@@ -104,6 +104,7 @@ export function openTransaction(raw: string): OAuthTransaction | null {
     if (typeof payload.iat !== "number") return null;
     if (Date.now() - payload.iat > OAUTH_TX_MAX_AGE * 1000) return null;
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { iat: _iat, ...tx } = payload;
     return tx;
   } catch {
