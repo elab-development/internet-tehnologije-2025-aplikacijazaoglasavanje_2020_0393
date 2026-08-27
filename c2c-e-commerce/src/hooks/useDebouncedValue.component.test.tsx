@@ -4,6 +4,10 @@
  * Semantic mode costs an embedding per request, so a request per keystroke is not merely
  * wasteful — it is the difference between one model call and fifteen while someone types
  * "warm jacket for winter".
+ *
+ * A `.component.test.tsx` despite testing a hook rather than a component: `renderHook`
+ * needs a DOM, and QA-2 splits the projects by environment, not by what is under test.
+ * The unit project runs in node and cannot render this at all.
  */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

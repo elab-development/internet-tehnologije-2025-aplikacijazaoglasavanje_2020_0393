@@ -51,7 +51,10 @@ describe("C2C-AI-8 — AC3: what the indicator says", () => {
 
   it("AC3: clamps a similarity above 1 rather than reporting 120%", () => {
     render(<MatchQuality similarity={1.2} />);
-    expect(screen.queryByTitle(/1[0-9][0-9]%/)).toBeNull();
+
+    // Asserted as the clamped value rather than "not 1xx%", which also rejects the
+    // correct answer of 100%.
+    expect(screen.getByTitle(/^100% /)).toBeInTheDocument();
   });
 
   it("AC3: treats a zero similarity as present, not absent", () => {
