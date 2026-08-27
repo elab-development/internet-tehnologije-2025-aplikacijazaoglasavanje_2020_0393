@@ -51,6 +51,13 @@ export default defineConfig({
           environment: "jsdom",
           include: ["src/**/*.component.test.tsx"],
           setupFiles: ["src/test/setup/component.ts"],
+          // Vitest's 5s default is enough for these in isolation, but `npm run test`
+          // runs this project alongside the integration one -- Testcontainers, real
+          // Postgres, and the embedding model all competing for the same cores. A
+          // user-event-driven test that types into a form then loses its slice of the
+          // CPU can exceed 5s while behaving perfectly. This is a ceiling for a hung
+          // test, not a target: nothing here should take anywhere near it.
+          testTimeout: 20_000,
         },
         resolve: { alias },
       },
