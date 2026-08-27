@@ -257,7 +257,11 @@ async function vectorArm(
   query: ListingQuery,
 ): Promise<{ id: number; similarity: number }[]> {
   const embedding = await getEmbeddingProvider().embed(query.search);
-  const literal = sql.raw(`'[${embedding.join(",")}]'::vector`);
+  // A bound parameter, not `sql.raw`. Interpolating into a `sql` template binds; building
+  // the literal as a string would put provider output straight into the statement text,
+  // defeat statement caching, and turn a single non-finite float into a syntax error.
+  // `backfill-embeddings.ts` already writes vectors this way.
+  const literal = sql`${JSON.stringify(embedding)}::vector`;
 
   // `1 - (embedding <=> $1)` is cosine similarity, since AI-2 emits unit vectors.
   // `embedding IS NOT NULL` is implicit in the similarity comparison, but stated so the

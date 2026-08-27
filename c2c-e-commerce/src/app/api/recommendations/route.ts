@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, isNotNull, ne, notInArray, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/db";
 import { listings, orderItems, orders, reviews } from "@/db/schema";
@@ -144,7 +145,8 @@ export async function GET(request: NextRequest) {
       return jsonOk({ data: await popular(base, limit), strategy: "popular" });
     }
 
-    const literal = sql.raw(`'[${taste.join(",")}]'::vector`);
+    // Bound rather than built as a string — see listings-query.ts.
+    const literal = sql`${JSON.stringify(taste)}::vector`;
 
     const data = await db
       .select(listingColumns)
@@ -169,7 +171,7 @@ export async function GET(request: NextRequest) {
  * Not simply the newest overall — a category with three listings and one with two hundred
  * should not shape a first impression of the marketplace equally.
  */
-async function popular(base: ReturnType<typeof eq>[], limit: number) {
+async function popular(base: SQL[], limit: number) {
   const busiest = await db
     .select({ categoryId: listings.categoryId, total: sql<number>`count(*)` })
     .from(listings)
@@ -178,7 +180,7 @@ async function popular(base: ReturnType<typeof eq>[], limit: number) {
     .orderBy(desc(sql`count(*)`))
     .limit(3);
 
-    const categoryIds = busiest
+  const categoryIds = busiest
     .map((row) => row.categoryId)
     .filter((id): id is number => id !== null);
 
@@ -189,9 +191,7 @@ async function popular(base: ReturnType<typeof eq>[], limit: number) {
       and(
         ...base,
         // A marketplace whose listings have no categories at all should still answer.
-        ...(categoryIds.length > 0
-          ? [sql`${listings.categoryId} = ANY(${sql.raw(`ARRAY[${categoryIds.join(",")}]`)})`]
-          : []),
+        ...(categoryIds.length > 0 ? [inArray(listings.categoryId, categoryIds)] : []),
       ),
     )
     .orderBy(desc(listings.createdAt))

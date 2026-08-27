@@ -114,7 +114,10 @@ export async function GET(
     // asked not to have them.
     if (sameCategoryOnly && source.categoryId === null) return jsonOk([]);
 
-    const literal = sql.raw(`'[${source.embedding.join(",")}]'::vector`);
+    // Bound, not built as a string: interpolating into a `sql` template makes this a
+    // parameter, which keeps the statement cacheable and the source row's floats out of
+    // the SQL text itself.
+    const literal = sql`${JSON.stringify(source.embedding)}::vector`;
 
     // Every exclusion is in the WHERE rather than applied afterwards, so LIMIT returns
     // that many *usable* rows — filtering later would quietly return fewer than asked for
@@ -139,8 +142,9 @@ export async function GET(
         sellerId: listings.sellerId,
         categoryId: listings.categoryId,
         createdAt: listings.createdAt,
-        // Spelled out rather than aliased: Postgres will not accept a select-list alias in
-        // ORDER BY, so both sides repeat the distance and must stay identical.
+        // Spelled out rather than aliased. Postgres would accept `ORDER BY similarity`,
+        // but HNSW only indexes the `<=>` operator form — ordering by `1 - (...)` gives a
+        // sequential scan. Both sides repeat the distance and must stay identical.
         similarity: sql<number>`1 - (${listings.embedding} <=> ${literal})`,
       })
       .from(listings)
