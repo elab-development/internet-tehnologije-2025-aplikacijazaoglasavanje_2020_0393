@@ -193,6 +193,31 @@ npm run db:studio    # Drizzle Studio (GUI)
 | GET | `/api/auth/oauth/{provider}` | Pokreće OAuth2 prijavu (`google` ili `github`) |
 | GET | `/api/auth/oauth/{provider}/callback` | Callback provajdera |
 
+## Bezbednost
+
+Detaljna dokumentacija:
+
+- [`docs/security/threat-model.md`](docs/security/threat-model.md) — model pretnji:
+  devet pretnji, mitigacija za svaku, i test koji je dokazuje. Sadrži i sekvencne
+  dijagrame za authorization-code + PKCE tok i za rotaciju refresh tokena.
+- [`docs/security/rbac-matrix.md`](docs/security/rbac-matrix.md) — matrica pristupa:
+  svaka ruta × uloga × pravilo vlasništva.
+
+Ukratko, šta je implementirano:
+
+| Kontrola | Gde |
+|---|---|
+| Access token 15 min + rotirajući refresh token, oba u `HttpOnly` kolačićima | `src/lib/refresh-token.ts` |
+| Detekcija ponovne upotrebe refresh tokena (poništava celu familiju) | isto |
+| OAuth2 authorization code, PKCE za Google | `src/lib/oauth/` |
+| Provera vlasništva nad resursom, ne samo uloge | `src/lib/authorization.ts` |
+| Rate limiting | `src/lib/rate-limit.ts` |
+| Zaštita od open redirect-a | `src/lib/oauth/return-to.ts` |
+
+> **Napomena o PKCE.** GitHub OAuth Apps ne podržavaju PKCE. Zajednička implementacija
+> za oba provajdera bi na GitHubu tiho ne radila ništa, pa je razlika eksplicitna u
+> interfejsu (`supportsPkce`) i pokrivena testovima u oba smera.
+
 ### Rate limiting
 
 Svaki limit je *sliding window* u memoriji procesa (`src/lib/rate-limit.ts`).
