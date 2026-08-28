@@ -78,6 +78,45 @@ export function rateLimit(
   return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
 }
 
+/**
+ * The response headers describing a caller's standing against a policy.
+ *
+ * `Retry-After` appears only when the caller is actually blocked: sending it on a
+ * successful response tells a client to back off when it has no reason to, and clients
+ * that honour it will throttle themselves for nothing.
+ *
+ * Values are strings because a header carries no other type; returning numbers here
+ * would work by coercion and then break the first time one is compared.
+ */
+export function rateLimitHeaders(
+  result: RateLimitResult,
+  { limit }: RateLimitOptions,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "X-RateLimit-Limit": String(limit),
+    "X-RateLimit-Remaining": String(Math.max(0, result.remaining)),
+  };
+
+  if (!result.allowed) {
+    headers["Retry-After"] = String(result.retryAfterSeconds);
+  }
+
+  return headers;
+}
+
+/**
+ * Refresh rotation, per IP (C2C-SEC-11).
+ *
+ * Deliberately loose. SEC-4's single-flight means a real client sends one refresh per
+ * lapse, but several tabs opening together still produce a small burst, and throttling
+ * that would break the session-recovery path this is supposed to protect. The number
+ * that matters is the ceiling on an unauthenticated flood, not the floor on a browser.
+ */
+export const REFRESH_RATE_LIMIT: RateLimitOptions = {
+  limit: 30,
+  windowMs: 5 * 60 * 1000,
+};
+
 /** Clears all state. Exposed for tests. */
 export function resetRateLimits(): void {
   buckets.clear();

@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { getLlmProvider, LlmError } from "@/lib/ai/llm";
 import { buildDescriptionPrompt } from "@/lib/ai/prompts";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
-import { AI_RATE_LIMIT, rateLimit } from "@/lib/rate-limit";
+import { AI_RATE_LIMIT, rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { jsonError, jsonOk } from "@/lib/response";
 import { GenerateDescriptionSchema, parseRequest } from "@/lib/validation";
 
@@ -134,11 +134,13 @@ export async function POST(request: NextRequest) {
     // Keyed on the user, not the IP: this endpoint is authenticated, so the budget belongs
     // to the account rather than to whoever shares its NAT. Ahead of validation, so a
     // caller cannot spend unlimited malformed requests.
-    const { allowed, retryAfterSeconds } = rateLimit(`ai:${payload.sub}`, AI_RATE_LIMIT);
-    if (!allowed) {
-      return jsonError("Generation limit reached. Try again later.", 429, {
-        "Retry-After": String(retryAfterSeconds),
-      });
+    const limitResult = rateLimit(`ai:${payload.sub}`, AI_RATE_LIMIT);
+    if (!limitResult.allowed) {
+      return jsonError(
+        "Generation limit reached. Try again later.",
+        429,
+        rateLimitHeaders(limitResult, AI_RATE_LIMIT),
+      );
     }
 
     const parsed = await parseRequest(request, GenerateDescriptionSchema);

@@ -10,7 +10,12 @@ import {
   clearedLinkCookieOptions,
   openLinkToken,
 } from "@/lib/oauth/link-token";
-import { LINK_RATE_LIMIT, getClientIp, rateLimit } from "@/lib/rate-limit";
+import {
+  LINK_RATE_LIMIT,
+  getClientIp,
+  rateLimit,
+  rateLimitHeaders,
+} from "@/lib/rate-limit";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
 import { issueRefreshToken } from "@/lib/refresh-token";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -47,9 +52,11 @@ export async function POST(request: NextRequest) {
     // the same treatment as login.
     const limit = rateLimit(`oauth-link:${getClientIp(request)}`, LINK_RATE_LIMIT);
     if (!limit.allowed) {
-      return jsonError("Too many attempts. Please try again later.", 429, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+      return jsonError(
+        "Too many attempts. Please try again later.",
+        429,
+        rateLimitHeaders(limit, LINK_RATE_LIMIT),
+      );
     }
 
     const sealed = request.cookies.get(LINK_COOKIE)?.value;

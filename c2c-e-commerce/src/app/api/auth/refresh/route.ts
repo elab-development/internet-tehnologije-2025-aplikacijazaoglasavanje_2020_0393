@@ -5,7 +5,12 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { sanitizeUser, signToken } from "@/lib/auth";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
-import { getClientIp } from "@/lib/rate-limit";
+import {
+  REFRESH_RATE_LIMIT,
+  getClientIp,
+  rateLimit,
+  rateLimitHeaders,
+} from "@/lib/rate-limit";
 import {
   REFRESH_COOKIE,
   clearedRefreshCookieOptions,
@@ -54,6 +59,18 @@ import { jsonError, jsonOk } from "@/lib/response";
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 export async function POST(request: NextRequest) {
+  // Loose on purpose (C2C-SEC-11 AC6). Single-flight on the client means one refresh
+  // per lapse, but several tabs opening together still burst, and throttling that would
+  // break the session recovery this protects.
+  const limit = rateLimit(`refresh:${getClientIp(request)}`, REFRESH_RATE_LIMIT);
+  if (!limit.allowed) {
+    return jsonError(
+      "Too many refresh attempts. Please try again later.",
+      429,
+      rateLimitHeaders(limit, REFRESH_RATE_LIMIT),
+    );
+  }
+
   const presented = request.cookies.get(REFRESH_COOKIE)?.value;
 
   // No cookie is the ordinary "not logged in" case -- every page load hits this route

@@ -193,6 +193,33 @@ npm run db:studio    # Drizzle Studio (GUI)
 | GET | `/api/auth/oauth/{provider}` | Pokreće OAuth2 prijavu (`google` ili `github`) |
 | GET | `/api/auth/oauth/{provider}/callback` | Callback provajdera |
 
+### Rate limiting
+
+Svaki limit je *sliding window* u memoriji procesa (`src/lib/rate-limit.ts`).
+Blokiran odgovor nosi `Retry-After`, `X-RateLimit-Limit` i `X-RateLimit-Remaining`.
+
+| Endpoint | Limit | Prozor | Ključ |
+|---|---|---|---|
+| `POST /api/auth/login` | 10 | 15 min | IP |
+| `POST /api/auth/register` | 10 | 60 min | IP |
+| `POST /api/auth/refresh` | 30 | 5 min | IP |
+| `POST /api/auth/oauth/link` | 10 | 15 min | IP |
+| `GET /api/auth/oauth/{provider}` | 20 | 5 min | IP |
+| `GET /api/auth/oauth/{provider}/callback` | 20 | 5 min | IP |
+| `POST /api/listings/generate-description` | 10 | 60 min | **user id** |
+
+Generisanje opisa se ključa po **korisniku**, ne po IP adresi: endpoint je
+autentifikovan, pa kvota pripada nalogu. Ključanje po IP-u bi kaznilo sve iza
+jednog NAT-a, a jednom korisniku bi dozvolilo da rotira adrese.
+
+Refresh limit je namerno labav. Single-flight na klijentu (SEC-4) znači jedan
+refresh po isteku tokena, ali nekoliko tabova otvorenih istovremeno i dalje pravi
+mali burst — gušenje toga bi pokvarilo oporavak sesije koji limit treba da štiti.
+
+> **Ograničenje.** Limiter je in-memory i po instanci. Na više instanci svaka drži
+> svoje brojače, pa je efektivni limit `N × limit`. Deployment je jedna Railway
+> instanca, pa je to prihvaćeno; Redis varijanta je odložena (§6 backlog-a).
+
 Sesija koristi kratkotrajni access token (15 minuta) u `auth_token` httpOnly
 kolačiću i rotirajući refresh token u `refresh_token` kolačiću ograničenom na
 `/api/auth`. Refresh token je jednokratan: ponovno slanje već rotiranog tokena

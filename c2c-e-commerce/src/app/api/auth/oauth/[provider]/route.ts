@@ -11,6 +11,7 @@ import {
   OAUTH_INITIATE_RATE_LIMIT,
   getClientIp,
   rateLimit,
+  rateLimitHeaders,
 } from "@/lib/rate-limit";
 import { jsonError } from "@/lib/response";
 
@@ -53,9 +54,11 @@ export async function GET(
       OAUTH_INITIATE_RATE_LIMIT,
     );
     if (!limit.allowed) {
-      return jsonError("Too many sign-in attempts. Please try again later.", 429, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+      return jsonError(
+        "Too many sign-in attempts. Please try again later.",
+        429,
+        rateLimitHeaders(limit, OAUTH_INITIATE_RATE_LIMIT),
+      );
     }
 
     const { provider: name } = await params;

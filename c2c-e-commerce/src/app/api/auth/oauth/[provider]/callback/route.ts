@@ -22,6 +22,7 @@ import {
   OAUTH_CALLBACK_RATE_LIMIT,
   getClientIp,
   rateLimit,
+  rateLimitHeaders,
 } from "@/lib/rate-limit";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
 import { issueRefreshToken } from "@/lib/refresh-token";
@@ -84,9 +85,11 @@ export async function GET(
       OAUTH_CALLBACK_RATE_LIMIT,
     );
     if (!limit.allowed) {
-      return jsonError("Too many sign-in attempts. Please try again later.", 429, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+      return jsonError(
+        "Too many sign-in attempts. Please try again later.",
+        429,
+        rateLimitHeaders(limit, OAUTH_CALLBACK_RATE_LIMIT),
+      );
     }
 
     const { provider: name } = await params;
