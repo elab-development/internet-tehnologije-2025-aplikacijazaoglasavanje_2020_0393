@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import toast from "react-hot-toast";
@@ -10,6 +10,8 @@ import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
+import OAuthButtons from "@/components/auth/OAuthButtons";
+import { oauthErrorMessage } from "@/lib/oauth/error-messages";
 
 // Note: metadata export is ignored in client components — title is set in
 // the nearest server layout. Keep it here as documentation intent.
@@ -20,6 +22,13 @@ export const _metadata: Pick<Metadata, "title"> = { title: "Login" };
 export default function LoginPage() {
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // The OAuth callback redirects here with ?error=<code> on every failure path. An
+  // unknown code maps to null and renders nothing, rather than putting a value from
+  // the query string on the page.
+  const oauthError = oauthErrorMessage(searchParams.get("error"));
+  const returnTo = searchParams.get("returnTo") ?? undefined;
 
   // Redirect already-authenticated users away from login
   useEffect(() => {
@@ -85,6 +94,7 @@ export default function LoginPage() {
 
           {/* Global error banner */}
           {error && <ErrorAlert message={error} className="mb-5" />}
+          {!error && oauthError && <ErrorAlert message={oauthError} className="mb-5" />}
 
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <InputField
@@ -121,6 +131,8 @@ export default function LoginPage() {
               Sign in
             </Button>
           </form>
+
+          <OAuthButtons returnTo={returnTo} />
 
           {/* Footer link */}
           <p className="mt-6 text-center text-sm text-zinc-500">

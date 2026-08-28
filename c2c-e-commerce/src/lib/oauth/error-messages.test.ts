@@ -29,9 +29,12 @@ describe("C2C-SEC-9 AC5 — every code has its own message", () => {
     expect(new Set(messages).size).toBe(OAUTH_ERROR_CODES.length);
   });
 
-  it("never renders the raw code", () => {
+  it("never renders a raw identifier", () => {
+    // Checking `not.toContain(code)` would be wrong: "You cancelled the sign-in"
+    // properly contains the word "cancelled". What must not appear is a code-shaped
+    // token — a snake_case identifier the user has no way to interpret.
     for (const code of OAUTH_ERROR_CODES) {
-      expect(oauthErrorMessage(code)).not.toContain(code);
+      expect(oauthErrorMessage(code)).not.toMatch(/[a-z]+_[a-z_]+/);
     }
   });
 

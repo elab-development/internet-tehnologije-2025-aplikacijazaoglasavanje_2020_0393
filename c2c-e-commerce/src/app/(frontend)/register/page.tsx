@@ -9,6 +9,7 @@ import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
+import OAuthButtons from "@/components/auth/OAuthButtons";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -181,6 +182,8 @@ export default function RegisterPage() {
               Create account
             </Button>
           </form>
+
+          <OAuthButtons />
 
           {/* Footer link */}
           <p className="mt-6 text-center text-sm text-zinc-500">
