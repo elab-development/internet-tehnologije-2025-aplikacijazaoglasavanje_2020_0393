@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
+import { canMutateListing } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { listingColumns } from "@/lib/listings-query";
 import {
@@ -244,8 +245,10 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       return jsonError("Listing not found", 404);
     }
 
-    // Only the owner or an admin may update
-    if (payload.role !== "admin" && listing.sellerId !== payload.sub) {
+    // Only the owner or an admin may update. 403 rather than 404 here on purpose: a
+    // listing is a public object, so confirming it exists discloses nothing that
+    // GET /api/listings does not already publish.
+    if (!canMutateListing(payload, listing)) {
       return jsonError("Forbidden", 403);
     }
 
@@ -388,8 +391,10 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       return jsonError("Listing not found", 404);
     }
 
-    // Only the owner or an admin may delete
-    if (payload.role !== "admin" && listing.sellerId !== payload.sub) {
+    // Only the owner or an admin may delete. 403 rather than 404 here on purpose: a
+    // listing is a public object, so confirming it exists discloses nothing that
+    // GET /api/listings does not already publish.
+    if (!canMutateListing(payload, listing)) {
       return jsonError("Forbidden", 403);
     }
 

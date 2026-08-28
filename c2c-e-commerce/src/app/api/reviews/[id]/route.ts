@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { reviews } from "@/db/schema";
+import { canDeleteReview } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
@@ -80,7 +81,9 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const [review] = await db.select().from(reviews).where(eq(reviews.id, id)).limit(1);
     if (!review) return jsonError("Review not found", 404);
 
-    if (payload.role !== "admin" && review.reviewerId !== payload.sub) {
+    // Author or admin. Deliberately not the seller of the reviewed listing -- that is
+    // the one deletion that would make the ratings worthless.
+    if (!canDeleteReview(payload, review)) {
       return jsonError("Forbidden", 403);
     }
 

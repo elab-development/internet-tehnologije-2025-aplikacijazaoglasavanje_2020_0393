@@ -2,6 +2,11 @@ import { NextRequest } from "next/server";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
+import {
+  HIDE_EXISTENCE_MESSAGE,
+  canApproveOrder,
+  canViewOrder,
+} from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
@@ -90,10 +95,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
 
-    if (!order) return jsonError("Order not found", 404);
-
-    if (payload.role !== "admin" && order.buyerId !== payload.sub) {
-      return jsonError("Forbidden", 403);
+    // 404 for "not yours", identical to "does not exist" (C2C-SEC-10 AC3). A 403 here
+    // would confirm the order is real, and order ids are sequential -- walking them
+    // and collecting the 403s would reveal how many orders exist and which are live.
+    if (!order || !canViewOrder(payload, order)) {
+      return jsonError(HIDE_EXISTENCE_MESSAGE, 404);
     }
 
     const items = await db
@@ -207,18 +213,17 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const { status } = parsed.data;
 
-    // Seller-specific authorization: can only approve/reject their own orders
+    // Seller-specific authorization: can only approve/reject their own orders.
     if (payload.role === "seller") {
       const sellerAllowed = ["approved", "rejected"] as const;
       if (!sellerAllowed.includes(status as (typeof sellerAllowed)[number])) {
         return jsonError("Sellers can only approve or reject orders", 403);
       }
 
-      if (order.status !== "pending") {
-        return jsonError("Only pending orders can be approved or rejected", 400);
-      }
-
-      // Verify the order contains at least one listing owned by the seller
+      // Ownership is settled BEFORE the order's state is considered. The other order
+      // leaks: "Only pending orders can be approved" tells a seller with no stake in
+      // this order what state it is in, which is a fact about someone else's purchase
+      // (C2C-SEC-10).
       const items = await db
         .select({ listingId: orderItems.listingId })
         .from(orderItems)
@@ -230,10 +235,14 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         .where(eq(listings.sellerId, payload.sub));
 
       const sellerListingIds = new Set(sellerListings.map((l) => l.id));
-      const hasSellerItem = items.some((i) => sellerListingIds.has(i.listingId));
+      const ownsListingInOrder = items.some((i) => sellerListingIds.has(i.listingId));
 
-      if (!hasSellerItem) {
+      if (!canApproveOrder(payload, { ownsListingInOrder })) {
         return jsonError("Forbidden: this order does not contain your listings", 403);
+      }
+
+      if (order.status !== "pending") {
+        return jsonError("Only pending orders can be approved or rejected", 400);
       }
     }
 

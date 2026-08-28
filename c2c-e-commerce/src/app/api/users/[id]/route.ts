@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { isSelfOrAdmin } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { sanitizeUser, hashPassword } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
@@ -75,7 +76,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
-    if (payload.role !== "admin" && payload.sub !== id) {
+    if (!isSelfOrAdmin(payload, id)) {
       return jsonError("Forbidden", 403);
     }
 
@@ -183,7 +184,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
-    if (payload.role !== "admin" && payload.sub !== id) {
+    if (!isSelfOrAdmin(payload, id)) {
       return jsonError("Forbidden", 403);
     }
 
