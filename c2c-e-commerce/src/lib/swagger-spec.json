@@ -609,6 +609,85 @@
         }
       }
     },
+    "/api/auth/oauth/link/{provider}": {
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Detach an external identity",
+        "description": "Removes the caller's link to a provider. Refuses when it is the caller's last remaining credential -- an OAuth-only account unlinking its only provider would have no way back in.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unlinked"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "No such link for this user"
+          },
+          "409": {
+            "description": "Would remove the caller's last credential"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/link": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Attach an external identity to an existing password account",
+        "description": "Completes the collision flow started by the OAuth callback. Requires the signed `link_tx` cookie **and** the existing account's password (decision D9): a provider-supplied email address is not proof of ownership, so the account's own credential is what authorises the link.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked and signed in"
+          },
+          "401": {
+            "description": "Missing or invalid link token",
+            "or wrong password": null
+          },
+          "409": {
+            "description": "The identity is already linked"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
     "/api/auth/refresh": {
       "post": {
         "tags": [

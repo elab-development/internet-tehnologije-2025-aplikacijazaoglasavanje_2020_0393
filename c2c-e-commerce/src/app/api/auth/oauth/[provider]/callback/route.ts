@@ -5,6 +5,11 @@ import { db } from "@/db";
 import { oauthAccounts, users, type User } from "@/db/schema";
 import { signToken } from "@/lib/auth";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
+import {
+  LINK_COOKIE,
+  linkCookieOptions,
+  sealLinkToken,
+} from "@/lib/oauth/link-token";
 import { getOAuthProvider, redirectUriFor } from "@/lib/oauth/registry";
 import { DEFAULT_RETURN_TO, safeReturnTo } from "@/lib/oauth/return-to";
 import {
@@ -28,8 +33,7 @@ type CallbackError =
   | "expired"
   | "cancelled"
   | "provider_error"
-  | "email_unverified"
-  | "account_exists";
+  | "email_unverified";
 
 const BASE = () => process.env.OAUTH_REDIRECT_BASE_URL ?? "http://localhost:3000";
 
@@ -132,7 +136,16 @@ export async function GET(
 
     // ── Resolve the user ──────────────────────────────────────────────────────
     const resolved = await resolveUser(provider.id, profile);
-    if (resolved.outcome !== "ok") return fail(resolved.outcome);
+
+    if (resolved.outcome === "email_unverified") return fail("email_unverified");
+
+    // The collision path (decision D9). The user is NOT signed in here: they are handed
+    // a challenge and have to produce the existing account's password before the
+    // identity is attached. Auto-linking on a provider-supplied address is exactly the
+    // takeover this avoids.
+    if (resolved.outcome === "needs_link") {
+      return offerLink(provider.id, resolved.userId, resolved.profile, transaction.returnTo);
+    }
 
     return signIn(resolved.user, transaction.returnTo, request);
   } catch (err) {
@@ -144,7 +157,8 @@ export async function GET(
 type Resolution =
   | { outcome: "ok"; user: User }
   | { outcome: "email_unverified" }
-  | { outcome: "account_exists" };
+  /** A verified address already held by a password account: SEC-8 takes over. */
+  | { outcome: "needs_link"; userId: number; profile: NormalizedProfile };
 
 /**
  * Finds the user this external identity belongs to, creating one if appropriate.
@@ -187,7 +201,7 @@ async function resolveUser(
     .where(eq(users.email, profile.email))
     .limit(1);
 
-  if (existing) return { outcome: "account_exists" };
+  if (existing) return { outcome: "needs_link", userId: existing.id, profile };
 
   const [created] = await db
     .insert(users)
@@ -210,6 +224,37 @@ async function resolveUser(
   });
 
   return { outcome: "ok", user: created };
+}
+
+/**
+ * Sends the user to the link screen with a signed, short-lived challenge.
+ *
+ * The token rides in an httpOnly cookie rather than the query string: a redirect URL
+ * ends up in browser history and in the `Referer` of whatever the page loads next.
+ */
+function offerLink(
+  provider: ProviderName,
+  userId: number,
+  profile: NormalizedProfile,
+  returnTo: string | undefined,
+): NextResponse {
+  const destination = new URL(`${BASE()}/link-account`);
+  destination.searchParams.set("provider", provider);
+  if (returnTo) destination.searchParams.set("returnTo", safeReturnTo(returnTo));
+
+  const response = NextResponse.redirect(destination.toString(), 302);
+  response.cookies.set(
+    LINK_COOKIE,
+    sealLinkToken({
+      userId,
+      provider,
+      providerAccountId: profile.providerAccountId,
+      providerEmail: profile.email,
+    }),
+    linkCookieOptions(),
+  );
+  response.cookies.set(OAUTH_TX_COOKIE, "", clearedOAuthTxCookieOptions());
+  return response;
 }
 
 /** Issues the session cookies and redirects into the app. */

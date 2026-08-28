@@ -153,3 +153,15 @@ export const OAUTH_CALLBACK_RATE_LIMIT: RateLimitOptions = {
   limit: 20,
   windowMs: 5 * 60 * 1000,
 };
+
+/**
+ * Completing an account link, per IP (C2C-SEC-8).
+ *
+ * This endpoint checks a password, so it is a credential-guessing surface like login
+ * and gets the same treatment. Tighter than login's window because a legitimate user
+ * completes a link once.
+ */
+export const LINK_RATE_LIMIT: RateLimitOptions = {
+  limit: 10,
+  windowMs: 15 * 60 * 1000,
+};

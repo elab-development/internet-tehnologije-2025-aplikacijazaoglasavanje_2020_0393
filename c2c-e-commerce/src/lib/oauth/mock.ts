@@ -21,6 +21,9 @@ const TOKEN_PREFIX = "mock-token:";
 /** Exchanging this code always fails. */
 export const FAILING_CODE = "__fail__";
 
+/** This code yields a profile the provider will not vouch for (C2C-SEC-8 AC4). */
+export const UNVERIFIED_CODE = "__unverified__";
+
 export function mockProvider(id: ProviderName): OAuthProviderClient {
   // The asymmetry is preserved deliberately: a suite that passes against a mock where
   // both providers "support" PKCE would prove nothing about the branch SEC-7 has to
@@ -71,8 +74,8 @@ export function mockProvider(id: ProviderName): OAuthProviderClient {
 
       return {
         providerAccountId: digest.slice(0, 16),
-        email: `${code}@mock-oauth.test`,
-        emailVerified: true,
+        email: code === UNVERIFIED_CODE ? "unverified@mock-oauth.test" : `${code}@mock-oauth.test`,
+        emailVerified: code !== UNVERIFIED_CODE,
         name: `Mock ${code}`,
         avatarUrl: null,
       };
