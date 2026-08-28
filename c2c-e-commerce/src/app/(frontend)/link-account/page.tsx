@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
 import { api } from "@/lib/api";
+import { safeReturnTo } from "@/lib/oauth/return-to";
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: "Google",
@@ -32,7 +33,10 @@ export default function LinkAccountPage() {
 
   const provider = searchParams.get("provider") ?? "";
   const providerLabel = PROVIDER_LABELS[provider] ?? "your account";
-  const returnTo = searchParams.get("returnTo") ?? "/";
+  // Sanitised again on the client. The callback already ran this before putting the
+  // value in the URL, but a URL is not a trusted channel -- anyone can craft
+  // /link-account?returnTo=https://evil.test, and this value reaches location.assign.
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
 
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
