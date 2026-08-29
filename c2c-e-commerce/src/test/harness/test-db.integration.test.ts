@@ -68,7 +68,10 @@ describe("C2C-QA-3 — isolation between tests", () => {
       passwordHash: "x",
       name: "Isolation",
     });
-    await db.insert(categories).values({ name: "Bikes", slug: "bikes" });
+    // path is NOT NULL with no default; a direct insert (rather than the makeCategory
+    // factory) has to supply one. Any root path — the row's own id — satisfies it here,
+    // since this test only cares that the row exists.
+    await db.insert(categories).values({ name: "Bikes", slug: "bikes", path: "1" });
 
     expect(await db.select().from(users)).toHaveLength(1);
   });
@@ -98,7 +101,7 @@ describe("C2C-QA-3 — isolation between tests", () => {
       .returning();
     const [category] = await db
       .insert(categories)
-      .values({ name: "Bikes", slug: "bikes" })
+      .values({ name: "Bikes", slug: "bikes", path: "1" })
       .returning();
     await db.insert(listings).values({
       title: "A bike",

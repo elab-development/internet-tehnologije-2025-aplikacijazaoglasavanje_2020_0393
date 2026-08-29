@@ -71,8 +71,12 @@ async function seed() {
 
   const insertedCategories = await db
     .insert(categories)
-    .values(categoryData)
+    .values(categoryData.map((c) => ({ ...c, path: "" })))
     .returning();
+
+  // All seeded categories are roots, so path is just the id — but the id only exists
+  // after the insert above, hence the follow-up update rather than a value up front.
+  await db.execute(sql`UPDATE categories SET path = id::text WHERE path = ''`);
 
   console.log(`  ✔ Categories created: ${insertedCategories.map((c) => c.name).join(", ")}`);
 
