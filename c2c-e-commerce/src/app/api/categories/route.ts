@@ -129,10 +129,24 @@ export async function POST(request: NextRequest) {
       .limit(1);
     if (existing) return jsonError("A category with that slug already exists", 409);
 
-    const [created] = await db
-      .insert(categories)
-      .values({ name, slug, description: description ?? null })
-      .returning();
+    // path is NOT NULL and derived from the row's own id, so it cannot be known before
+    // the insert. Every category created through this route is a root for now — Task 4
+    // adds parentId — so the path is just the id, set in a follow-up update inside the
+    // same transaction as the insert.
+    const created = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(categories)
+        .values({ name, slug, description: description ?? null, path: "" })
+        .returning();
+
+      const [withPath] = await tx
+        .update(categories)
+        .set({ path: String(inserted.id) })
+        .where(eq(categories.id, inserted.id))
+        .returning();
+
+      return withPath;
+    });
 
     return jsonOk(created, 201);
   } catch (err) {
