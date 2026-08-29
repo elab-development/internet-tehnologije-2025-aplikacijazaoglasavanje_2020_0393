@@ -78,6 +78,13 @@
       "when": 1771946500000,
       "tag": "0010_users_oauth_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1771946600000,
+      "tag": "0011_category_tree",
+      "breakpoints": true
     }
   ]
 }

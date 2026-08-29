@@ -6,6 +6,8 @@
  * category first. Passing an explicit parent id reuses it rather than creating another,
  * which is what keeps row-counting assertions honest.
  */
+import { eq } from "drizzle-orm";
+
 import { hashPassword } from "@/lib/auth";
 import {
   categories,
@@ -51,7 +53,12 @@ export type MakeOAuthAccountOptions = Partial<
   userId?: number;
 };
 
-export type MakeCategoryOptions = Partial<Pick<Category, "name" | "slug" | "description">>;
+export type MakeCategoryOptions = Partial<
+  Pick<Category, "name" | "slug" | "description" | "sortOrder">
+> & {
+  /** Parent category. Omit or pass null for a root. */
+  parentId?: number | null;
+};
 
 export type MakeListingOptions = Partial<
   Pick<Listing, "title" | "description" | "price" | "status" | "imageUrl">
@@ -100,13 +107,44 @@ export async function makeCategory(options: MakeCategoryOptions = {}): Promise<C
   const db = await getTestDb();
   const n = next();
 
-  const [category] = await db
+  const parentId = options.parentId ?? null;
+
+  // The parent's path is what the child's path is built from, so it has to be read
+  // rather than assumed — a caller may have created the parent in an earlier test step.
+  let parentPath: string | null = null;
+  if (parentId !== null) {
+    const [parent] = await db
+      .select({ path: categories.path })
+      .from(categories)
+      .where(eq(categories.id, parentId))
+      .limit(1);
+    if (!parent) throw new Error(`makeCategory: parent ${parentId} does not exist`);
+    parentPath = parent.path;
+  }
+
+  const depth = parentPath === null ? 0 : parentPath.split(".").length;
+
+  // Insert with a placeholder path, then set it from the returned id: the row cannot
+  // know its own id before it exists.
+  const [inserted] = await db
     .insert(categories)
     .values({
       name: options.name ?? `Category ${n}`,
       slug: options.slug ?? `category-${n}`,
       description: options.description ?? null,
+      parentId,
+      path: "",
+      depth,
+      sortOrder: options.sortOrder ?? 0,
     })
+    .returning();
+
+  const path = parentPath === null ? String(inserted.id) : `${parentPath}.${inserted.id}`;
+
+  const [category] = await db
+    .update(categories)
+    .set({ path })
+    .where(eq(categories.id, inserted.id))
     .returning();
 
   return category;
