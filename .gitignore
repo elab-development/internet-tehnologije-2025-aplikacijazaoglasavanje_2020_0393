@@ -13,3 +13,9 @@ node_modules
 # spec write-ups and session notes are working notes, not deliverables, and stay out
 # of the repository. The files remain on disk for whoever is working the story.
 docs/backlog/plans/
+
+# Isolated worktrees created for subagent-driven development
+.claude/worktrees/
+
+# Subagent-driven-development scratch (ledgers, briefs, review packages)
+.superpowers/
