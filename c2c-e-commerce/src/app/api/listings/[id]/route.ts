@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { isLeafCategory } from "@/db/categories";
 import { listImagesFor, toImageSummary } from "@/db/listing-images";
+import { hasLiveOrder } from "@/db/orders";
 import { canMutateListing, isAdmin } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { isPubliclyVisible } from "@/lib/listing-visibility";
@@ -224,7 +225,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: The listing is reserved by a pending order
+ *         description: A live order (pending, confirmed or shipped) is still holding this listing
  *         content:
  *           application/json:
  *             schema:
@@ -268,12 +269,23 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const { title, description, price, categoryId, status } = parsed.data;
 
-    // A reservation the seller can dissolve by pressing Disable is not a reservation. The
-    // buyer's order is what clears this — decline it, cancel it, or let it lapse. Admins
-    // are unrestricted, as everywhere else.
-    if (listing.status === "reserved" && status !== undefined && !isAdmin(payload)) {
+    // A listing an order is counting on is not the seller's to re-status. `reserved` means
+    // a buyer is waiting on an answer; `sold` means one already got it and has not been
+    // settled. Either way the order is what clears the listing — decline it, cancel it, or
+    // let it lapse. Relisting instead would leave two live orders on one object, which the
+    // `orders_one_live_per_listing_idx` index refuses and the next buyer would meet as an
+    // error. Admins are unrestricted, as everywhere else.
+    //
+    // `reserved` needs no lookup: only the reservation path sets it, so it always implies a
+    // live order. `sold` does need one, because a completed sale stays `sold` forever and
+    // relisting after that is legitimate.
+    const heldByLiveOrder =
+      listing.status === "reserved" ||
+      (listing.status === "sold" && (await hasLiveOrder(db, id)));
+
+    if (status !== undefined && !isAdmin(payload) && heldByLiveOrder) {
       return jsonError(
-        "This listing is reserved by a pending order. Decline or cancel the order first.",
+        "An order is still in progress for this listing. Settle that order first.",
         409,
       );
     }

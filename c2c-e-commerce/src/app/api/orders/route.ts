@@ -5,6 +5,7 @@ import { db } from "@/db";
 import {
   claimListing,
   expireStalePendingOrders,
+  isOneLiveOrderViolation,
   releaseUnheldListings,
   reservationDeadline,
 } from "@/db/orders";
@@ -140,7 +141,9 @@ export async function GET(request: NextRequest) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Another buyer reserved it first
+ *         description: |
+ *           Another buyer reserved it first, or an order already in progress is still
+ *           holding this listing (an admin relisted it without settling that order).
  *         content:
  *           application/json:
  *             schema:
@@ -208,6 +211,9 @@ export async function POST(request: NextRequest) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     if (err instanceof ListingUnavailableError) {
       return jsonError("This listing has just been reserved by another buyer", 409);
+    }
+    if (isOneLiveOrderViolation(err)) {
+      return jsonError("This listing already has an order in progress", 409);
     }
     console.error("[POST /api/orders]", err);
     return jsonError("Internal server error");

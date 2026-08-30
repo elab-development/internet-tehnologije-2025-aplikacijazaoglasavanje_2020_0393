@@ -193,3 +193,49 @@ export async function transitionOrder(
 
   return row ?? null;
 }
+
+/** Whether any order is still counting on this listing — pending, confirmed or shipped. */
+export async function hasLiveOrder(
+  x: OrderExecutor,
+  listingId: number,
+): Promise<boolean> {
+  const result = await x.execute(sql`
+    SELECT 1 FROM "orders"
+     WHERE "listing_id" = ${listingId}
+       AND "status" IN ('pending', 'confirmed', 'shipped')
+     LIMIT 1
+  `);
+
+  return result.rows.length > 0;
+}
+
+/** The partial unique index 0015 creates: at most one live order per listing. */
+export const ONE_LIVE_ORDER_INDEX = "orders_one_live_per_listing_idx";
+
+/**
+ * Whether an error is that index refusing a second live order.
+ *
+ * The index is the last line of defence behind `claimListing`'s conditional update and the
+ * listing routes' guards. Reaching it means something upstream let a listing be relisted
+ * while an order still held it — a real conflict, and a 409, not the 500 an unmapped
+ * constraint violation would otherwise become.
+ *
+ * Drizzle wraps the driver's error in a `DrizzleQueryError` rather than throwing it
+ * directly, so `code` and `constraint` live on `.cause`, not on the error this function is
+ * handed. Checking the error itself first keeps this correct if that ever stops being
+ * true; falling back to one level of `.cause` is what makes it correct today.
+ */
+export function isOneLiveOrderViolation(err: unknown): boolean {
+  return isOneLiveOrderPgError(err) || isOneLiveOrderPgError(getCause(err));
+}
+
+function isOneLiveOrderPgError(err: unknown): boolean {
+  if (typeof err !== "object" || err === null) return false;
+  const e = err as { code?: unknown; constraint?: unknown };
+  return e.code === "23505" && e.constraint === ONE_LIVE_ORDER_INDEX;
+}
+
+function getCause(err: unknown): unknown {
+  if (typeof err !== "object" || err === null) return undefined;
+  return (err as { cause?: unknown }).cause;
+}

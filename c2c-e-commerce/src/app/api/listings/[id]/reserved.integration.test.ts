@@ -13,7 +13,7 @@ import { listings } from "@/db/schema";
 import { getStorageProvider } from "@/lib/storage";
 import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
-import { makeListing, makeListingImage, makeUser } from "@/test/factories";
+import { makeListing, makeListingImage, makeOrder, makeUser } from "@/test/factories";
 
 beforeEach(async () => {
   await resetDb();
@@ -160,6 +160,65 @@ describe("a reserved listing cannot be re-statused by its seller", () => {
 
     const { status } = await editListing(listing.id, authHeaderFor(seller), {
       status: "removed",
+    });
+
+    expect(status).toBe(200);
+  });
+});
+
+describe("a sold listing still held by a live order cannot be re-statused by its seller", () => {
+  it("refuses the seller's status change with 409 while a confirmed order holds it", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "confirmed" });
+
+    const { status } = await editListing(listing.id, authHeaderFor(seller), {
+      status: "active",
+    });
+
+    expect(status).toBe(409);
+
+    const db = await getTestDb();
+    const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
+    expect(row.status).toBe("sold");
+  });
+
+  it("refuses the seller's status change with 409 while a shipped order holds it", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "shipped" });
+
+    const { status } = await editListing(listing.id, authHeaderFor(seller), {
+      status: "active",
+    });
+
+    expect(status).toBe(409);
+
+    const db = await getTestDb();
+    const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
+    expect(row.status).toBe("sold");
+  });
+
+  it("lets the seller relist a sold listing whose only order is completed", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "completed" });
+
+    const { status } = await editListing(listing.id, authHeaderFor(seller), {
+      status: "active",
+    });
+
+    expect(status).toBe(200);
+  });
+
+  it("lets an admin relist a held sold listing anyway", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const admin = await makeUser({ role: "admin" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "confirmed" });
+
+    const { status } = await editListing(listing.id, authHeaderFor(admin), {
+      status: "active",
     });
 
     expect(status).toBe(200);

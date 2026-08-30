@@ -294,3 +294,36 @@ describe("GET /api/orders", () => {
     expect(status).toBe(401);
   });
 });
+
+describe("POST /api/orders — the residual conflict the unique index catches", () => {
+  it("answers 409, not 500, when an admin relists a sold listing a confirmed order still holds", async () => {
+    // Half 1 does not close the admin path: admins are deliberately unrestricted and can
+    // relist a listing a live order still holds. `claimListing`'s conditional UPDATE would
+    // then succeed against the relisted `active` row, and the INSERT would hit
+    // orders_one_live_per_listing_idx. That must come back as a 409, not an unmapped 500.
+    const seller = await makeUser({ role: "seller" });
+    const admin = await makeUser({ role: "admin" });
+    const buyer = await makeUser({ role: "buyer" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "confirmed" });
+
+    const { PUT } = await import("../listings/[id]/route");
+    const relist = await PUT(
+      new NextRequest(`http://localhost/api/listings/${listing.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", ...authHeaderFor(admin) },
+        body: JSON.stringify({ status: "active" }),
+      }),
+      { params: Promise.resolve({ id: String(listing.id) }) },
+    );
+    expect(relist.status).toBe(200);
+
+    const { status } = await place(authHeaderFor(buyer), { listingId: listing.id });
+
+    expect(status).toBe(409);
+
+    const db = await getTestDb();
+    const rows = await db.select().from(orders).where(eq(orders.listingId, listing.id));
+    expect(rows).toHaveLength(1);
+  });
+});
