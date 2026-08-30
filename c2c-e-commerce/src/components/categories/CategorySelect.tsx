@@ -67,7 +67,9 @@ export default function CategorySelect({
               onChange={(event) => handleChange(depth, event.target.value)}
             >
               <option value="">
-                {depth === 0 ? "No category" : `All ${LEVEL_LABELS[depth].toLowerCase()}`}
+                {depth === 0
+                  ? "No category"
+                  : `All ${LEVEL_LABELS[depth].toLowerCase().replace(/y$/, "ies")}`}
               </option>
               {options.map((option) => (
                 <option key={option.id} value={String(option.id)}>

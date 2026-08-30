@@ -46,11 +46,18 @@ describe("CategorySelect", () => {
 
   it("shows no deeper select for a root with no children", async () => {
     const onChange = vi.fn();
-    render(<CategorySelect categories={CATEGORIES} value={null} onChange={onChange} />);
+    const { rerender } = render(
+      <CategorySelect categories={CATEGORIES} value={null} onChange={onChange} />,
+    );
 
     await userEvent.selectOptions(screen.getByLabelText("Category"), "2");
 
     expect(onChange).toHaveBeenCalledWith(2);
+
+    // As above: the component is controlled, so the post-selection DOM only reflects the
+    // new choice once a real parent passes it back down as `value`.
+    rerender(<CategorySelect categories={CATEGORIES} value={2} onChange={onChange} />);
+
     expect(screen.queryByLabelText("Subcategory")).not.toBeInTheDocument();
   });
 
@@ -86,5 +93,17 @@ describe("CategorySelect", () => {
     await userEvent.selectOptions(screen.getByLabelText("Category"), "");
 
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it("reports the parent, not null, when a deeper level is cleared", async () => {
+    const onChange = vi.fn();
+    render(<CategorySelect categories={CATEGORIES} value={12} onChange={onChange} />);
+
+    // Clearing "Smartphones" (the Sub-subcategory select) should leave the listing under
+    // "Phones" (its parent), not uncategorised — only clearing the top level means "no
+    // category" at all.
+    await userEvent.selectOptions(screen.getByLabelText("Sub-subcategory"), "");
+
+    expect(onChange).toHaveBeenCalledWith(7);
   });
 });
