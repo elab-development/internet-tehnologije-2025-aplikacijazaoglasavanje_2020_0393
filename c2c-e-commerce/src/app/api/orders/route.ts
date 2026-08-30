@@ -1,36 +1,41 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
+
 import { db } from "@/db";
-import { listings, orderItems, orders } from "@/db/schema";
-import { authenticate, authorize, AuthError } from "@/lib/middleware";
-import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
+import {
+  claimListing,
+  expireStalePendingOrders,
+  releaseUnheldListings,
+  reservationDeadline,
+} from "@/db/orders";
+import { listings, orders } from "@/db/schema";
+import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateOrderSchema } from "@/lib/validation";
 
 /**
- * Raised inside the order transaction so the rollback happens naturally; the
- * handler translates it into a 404. Not exported: route files may only export
- * HTTP handlers.
+ * Raised inside the reserve transaction so the rollback happens naturally; the handler
+ * translates it into a 409. Not exported: route files may only export HTTP handlers.
  */
-class UnavailableListingError extends Error {
-  constructor(public readonly listingId: number) {
-    super(`Listing ${listingId} not found or not active`);
-    this.name = "UnavailableListingError";
+class ListingUnavailableError extends Error {
+  constructor() {
+    super("Listing is not available");
+    this.name = "ListingUnavailableError";
   }
 }
 
 // ─── GET /api/orders ──────────────────────────────────────────────────────────
-// Buyer   → own orders only
-// Admin   → all orders
+// Any authenticated caller. Own purchases; admins see every order.
 /**
  * @swagger
  * /api/orders:
  *   get:
  *     tags: [Orders]
- *     summary: List orders
+ *     summary: List the caller's purchases
  *     description: |
- *       Buyers see only their own orders. Admins see all orders.
- *       Results are sorted by creation date (newest first).
+ *       What the caller bought, whatever role they hold — a seller's own purchases appear
+ *       here, their sales appear in `/api/orders/seller`. Admins see every order.
+ *       Sorted newest first.
  *     security:
  *       - bearerAuth: []
  *     responses:
@@ -48,12 +53,6 @@ class UnavailableListingError extends Error {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -63,8 +62,9 @@ class UnavailableListingError extends Error {
  */
 export async function GET(request: NextRequest) {
   try {
+    // No role gate: sellers buy too (D5), and what this returns is scoped by buyer id
+    // rather than by role.
     const payload = authenticate(request);
-    authorize("buyer", "admin")(payload);
 
     const rows = await db
       .select()
@@ -81,17 +81,20 @@ export async function GET(request: NextRequest) {
 }
 
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
-// Authenticated. Role: buyer.
+// Any authenticated caller except the listing's own seller.
 // Body: { listingId: number }
 /**
  * @swagger
  * /api/orders:
  *   post:
  *     tags: [Orders]
- *     summary: Create an order
+ *     summary: Reserve a listing
  *     description: |
- *       Reserves one active listing. An order is one listing, so the price is the total
- *       and it is read server-side from the listing. Only buyers can place orders.
+ *       Claims the listing for the caller and creates a pending order priced from the
+ *       listing row. The listing becomes `reserved` and the seller has 48 hours to
+ *       confirm or decline before the reservation lapses.
+ *
+ *       Anyone signed in may buy, including sellers — but not their own listing.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -107,18 +110,11 @@ export async function GET(request: NextRequest) {
  *                 example: 5
  *     responses:
  *       201:
- *         description: Order created
+ *         description: Order created and listing reserved
  *         content:
  *           application/json:
  *             schema:
- *               allOf:
- *                 - $ref: '#/components/schemas/Order'
- *                 - type: object
- *                   properties:
- *                     items:
- *                       type: array
- *                       items:
- *                         $ref: '#/components/schemas/OrderItem'
+ *               $ref: '#/components/schemas/Order'
  *       400:
  *         description: Validation error
  *         content:
@@ -132,13 +128,19 @@ export async function GET(request: NextRequest) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
- *         description: Not a buyer
+ *         description: The caller is the listing's seller
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Listing not found or not active
+ *         description: No such listing, or it was never published
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Another buyer reserved it first
  *         content:
  *           application/json:
  *             schema:
@@ -153,64 +155,59 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const payload = authenticate(request);
-    authorize("buyer")(payload);
 
     const parsed = await parseRequest(request, CreateOrderSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { listingId } = parsed.data;
 
-    // ── Resolve and persist atomically ────────────────────────────────────────
-    // Everything happens inside the transaction, with the listing row locked
-    // FOR UPDATE. Previously the availability check ran before the transaction
-    // opened, so two buyers ordering the last of a listing could both pass the
-    // "is it active" check and both have their orders accepted.
-    const result = await db.transaction(async (tx) => {
-      const [listing] = await tx
-        .select()
-        .from(listings)
-        .where(and(eq(listings.id, listingId), eq(listings.status, "active")))
-        .for("update");
+    // Read first, only to tell the two refusals apart: a listing that was never
+    // purchasable is a 404, one that someone else is holding is a 409. The read is not a
+    // check — the claim below is authoritative, and `sellerId` cannot change under us.
+    const [listing] = await db
+      .select({ sellerId: listings.sellerId, status: listings.status })
+      .from(listings)
+      .where(eq(listings.id, listingId))
+      .limit(1);
 
-      if (!listing) {
-        throw new UnavailableListingError(listingId);
-      }
+    if (!listing || listing.status === "draft" || listing.status === "removed") {
+      return jsonError("Listing not found or not available", 404);
+    }
 
-      // With one listing per order the price is the total, so there is no longer a sum
-      // to accumulate — the integer-cent arithmetic that used to guard it is gone with
-      // the thing it guarded. `parseFloat` still normalises the numeric's text form.
-      const price = String(parseFloat(listing.price));
+    // D5: everyone is both buyer and seller in a peer-to-peer marketplace, so the guard
+    // is on the pair of ids rather than on the caller's role.
+    if (listing.sellerId === payload.sub) {
+      return jsonError("You cannot buy your own listing", 403);
+    }
 
-      const [order] = await tx
+    const order = await db.transaction(async (tx) => {
+      // D4: correctness does not wait for the sweep. Anything stale holding this listing
+      // is expired and released here, in the same transaction as the claim.
+      await expireStalePendingOrders(tx, listingId);
+      await releaseUnheldListings(tx, listingId);
+
+      const claimed = await claimListing(tx, listingId);
+      if (!claimed) throw new ListingUnavailableError();
+
+      const [created] = await tx
         .insert(orders)
         .values({
           buyerId: payload.sub,
-          sellerId: listing.sellerId,
-          listingId,
-          price,
-          // Written until 0016 drops the column, so the pages that still read it keep
-          // showing a figure. Task 4 stops writing it.
-          totalPrice: price,
-          // Postgres's clock, never Node's: the deadline and the `created_at` it is
-          // measured from have to come from the same clock or the sweep misfires.
-          expiresAt: sql`now() + make_interval(hours => ${RESERVATION_HOURS})`,
+          sellerId: claimed.sellerId,
+          listingId: claimed.id,
+          price: claimed.price,
+          expiresAt: reservationDeadline(),
         })
         .returning();
 
-      // Kept until 0016 drops the table; Task 9 removes this write with it.
-      const inserted = await tx
-        .insert(orderItems)
-        .values({ orderId: order.id, listingId, price, quantity: 1 })
-        .returning();
-
-      return { ...order, items: inserted };
+      return created;
     });
 
-    return jsonOk(result, 201);
+    return jsonOk(order, 201);
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
-    if (err instanceof UnavailableListingError) {
-      return jsonError(`Listing ${err.listingId} not found or not active`, 404);
+    if (err instanceof ListingUnavailableError) {
+      return jsonError("This listing has just been reserved by another buyer", 409);
     }
     console.error("[POST /api/orders]", err);
     return jsonError("Internal server error");

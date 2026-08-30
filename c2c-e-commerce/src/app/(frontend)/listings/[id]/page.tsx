@@ -58,15 +58,15 @@ export default function ListingDetailPage() {
   const canReview = isAuthenticated && user?.role === "buyer";
 
   async function handleBuyNow() {
-    if (!hasValidId) return;
+    if (!hasValidId || !listing) return;
 
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
 
-    if (user?.role !== "buyer") {
-      setActionError("Only buyers can place orders");
+    if (user?.id === listing.sellerId) {
+      setActionError("You cannot buy your own listing");
       setIsBuyModalOpen(false);
       return;
     }
