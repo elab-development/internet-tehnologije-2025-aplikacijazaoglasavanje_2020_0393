@@ -29,6 +29,10 @@ export default function CategorySelect({
 }: CategorySelectProps) {
   const chain = value === null ? [] : ancestorChain(categories, value);
 
+  // Spec §3.5: submitting the deepest selection, which must be a leaf. A value that still
+  // has children is not done yet — the server 400s it — so say so before the round trip.
+  const needsDeeperPick = value !== null && childrenOf(categories, value).length > 0;
+
   // One select per already-chosen level, plus one for the next choice if the deepest
   // selection still has children and we are not at the cap.
   const levels: { parentId: number | null; selected: number | null }[] = [];
@@ -69,7 +73,7 @@ export default function CategorySelect({
               <option value="">
                 {depth === 0
                   ? "No category"
-                  : `All ${LEVEL_LABELS[depth].toLowerCase().replace(/y$/, "ies")}`}
+                  : `Select a ${LEVEL_LABELS[depth].toLowerCase()}`}
               </option>
               {options.map((option) => (
                 <option key={option.id} value={String(option.id)}>
@@ -80,6 +84,11 @@ export default function CategorySelect({
           </div>
         );
       })}
+      {needsDeeperPick && (
+        <p className="text-sm text-amber-600">
+          Pick a subcategory to finish filing this listing.
+        </p>
+      )}
     </div>
   );
 }

@@ -106,4 +106,46 @@ describe("CategorySelect", () => {
 
     expect(onChange).toHaveBeenCalledWith(7);
   });
+
+  it("labels a deeper placeholder as a choice to make, not a browse-all option", () => {
+    render(<CategorySelect categories={CATEGORIES} value={7} onChange={vi.fn()} />);
+
+    // "Phones" still has a child ("Smartphones"), so a Sub-subcategory select is showing.
+    // Its placeholder must read as something still to be picked, not as "everything under
+    // here" — that phrasing invited leaving it blank and 400-ing on submit.
+    expect(
+      within(screen.getByLabelText("Sub-subcategory")).getByRole("option", {
+        name: "Select a sub-subcategory",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the top-level placeholder as No category", () => {
+    render(<CategorySelect categories={CATEGORIES} value={null} onChange={vi.fn()} />);
+
+    expect(
+      within(screen.getByLabelText("Category")).getByRole("option", {
+        name: "No category",
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("hints that a non-leaf selection is not done yet", () => {
+    render(<CategorySelect categories={CATEGORIES} value={1} onChange={vi.fn()} />);
+
+    // Electronics (id 1) still has a child (Phones) — the selection is not a leaf, and
+    // submitting it as-is would 400 on the server.
+    expect(
+      screen.getByText("Pick a subcategory to finish filing this listing."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows no hint once the selection is a leaf", () => {
+    render(<CategorySelect categories={CATEGORIES} value={12} onChange={vi.fn()} />);
+
+    // Smartphones (id 12) has no children — it is a valid, submittable leaf.
+    expect(
+      screen.queryByText("Pick a subcategory to finish filing this listing."),
+    ).not.toBeInTheDocument();
+  });
 });
