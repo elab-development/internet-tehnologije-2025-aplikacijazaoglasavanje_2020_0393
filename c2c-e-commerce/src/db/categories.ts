@@ -2,7 +2,7 @@
 // The queries the category routes and the listing routes share. Path *arithmetic* lives
 // in src/lib/categories.ts and stays pure; this file is the part that needs a database.
 
-import { and, eq, like, ne, sql } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 
 import { db, type Database } from "./index";
 import { categories, type Category } from "./schema";
@@ -72,8 +72,9 @@ export async function subtreeHeight(path: string): Promise<number> {
 /**
  * Rewrites every descendant path when a subtree moves.
  *
- * One statement: `replace` on the prefix, and a depth shift by the same delta. Doing this
- * row by row would leave the tree inconsistent if the process died halfway.
+ * One statement: `substring` off the old prefix, then concatenate the new one, plus a
+ * depth shift by the same delta. Doing this row by row would leave the tree inconsistent
+ * if the process died halfway.
  */
 export async function rewriteSubtreePaths(
   executor: Executor,
@@ -84,12 +85,15 @@ export async function rewriteSubtreePaths(
   await executor
     .update(categories)
     .set({
-      // The position argument needs an explicit ::integer cast: Postgres cannot infer a
-      // type for a bare parameter used as SUBSTRING's FROM position, and rather than
-      // erroring it silently evaluates the whole expression to NULL — which then fails
-      // the path NOT NULL constraint instead of pointing at the real cause.
+      // The position argument needs an explicit ::integer cast. Left bare, its type is
+      // unknown, and overload resolution for SUBSTRING(text FROM x) then prefers the
+      // string-category candidate — substring(text, text), the *regex* form — over the
+      // integer-position one. `'4'` is a legal (if useless) regex, so
+      // substring('1.2.3' from '4') just fails to match and legitimately returns NULL;
+      // there is no type-inference error to see, only a silently wrong result that
+      // resurfaces two lines later as a NOT NULL violation on `path`.
       path: sql`${newPrefix} || substring(${categories.path} from ${oldPrefix.length + 1}::integer)`,
       depth: sql`${categories.depth} + ${depthDelta}`,
     })
-    .where(and(like(categories.path, `${oldPrefix}.%`), ne(categories.path, oldPrefix)));
+    .where(like(categories.path, `${oldPrefix}.%`));
 }
