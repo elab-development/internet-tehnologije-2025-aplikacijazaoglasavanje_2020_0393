@@ -21,7 +21,8 @@
     "db:studio": "drizzle-kit studio",
     "db:check-pgvector": "node scripts/check-pgvector.mjs",
     "db:backfill-embeddings": "tsx src/db/backfill-embeddings.ts",
-    "db:prune-tokens": "tsx src/db/prune-tokens.ts"
+    "db:prune-tokens": "tsx src/db/prune-tokens.ts",
+    "db:expire-reservations": "tsx src/db/expire-reservations.ts"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
