@@ -143,16 +143,10 @@ describe("C2C-SEC-10 AC6 / Part 4 §6.3 — canMutateReview", () => {
 
   it("refuses anyone else", () => {
     expect(canMutateReview(actor(9, "buyer"), review)).toBe(false);
-    expect(canMutateReview(SELLER, review)).toBe(false);
   });
 
   it("allows an admin, for moderation", () => {
     expect(canMutateReview(ADMIN, review)).toBe(true);
-  });
-
-  it("refuses the seller of the reviewed listing", () => {
-    // Otherwise a seller could delete criticism of their own goods.
-    expect(canMutateReview(SELLER, { reviewerId: BUYER.sub })).toBe(false);
   });
 
   it("refuses the seller being reviewed", () => {
