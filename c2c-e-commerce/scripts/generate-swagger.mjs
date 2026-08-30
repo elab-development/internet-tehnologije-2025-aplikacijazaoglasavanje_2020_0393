@@ -93,7 +93,7 @@ const swaggerDefinition = {
             description: "Id of the listing's lowest-sort-order image, if it has one. Fetch the bytes from GET /api/images/{id}.",
             example: 12,
           },
-          status: { type: "string", enum: ["active", "sold", "removed"], example: "active" },
+          status: { type: "string", enum: ["draft", "active", "sold", "removed"], example: "active" },
           sellerId: { type: "integer", example: 1 },
           categoryId: { type: "integer", nullable: true, example: 2 },
           createdAt: { type: "string", format: "date-time" },

@@ -137,6 +137,11 @@ export const CreateListingSchema = z.object({
   description: z.string().trim().min(1, "description is required"),
   price: priceField,
   categoryId: z.number().int().nullable().optional(),
+  // Create-as-draft (spec §4.3): the only status a client may request at creation time.
+  // `sold`/`removed` are transitions a listing reaches later, never a starting point.
+  status: z.enum(["draft"], {
+    error: "status must be: draft",
+  }).optional(),
 });
 
 /**
@@ -174,8 +179,8 @@ export const UpdateListingSchema = z
       .optional(),
     price: priceField.optional(),
     categoryId: z.number().int().nullable().optional(),
-    status: z.enum(["active", "sold", "removed"], {
-      error: "status must be one of: active, sold, removed",
+    status: z.enum(["draft", "active", "sold", "removed"], {
+      error: "status must be one of: draft, active, sold, removed",
     }).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {

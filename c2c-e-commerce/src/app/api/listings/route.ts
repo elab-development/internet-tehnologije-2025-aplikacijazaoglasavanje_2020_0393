@@ -225,6 +225,14 @@ export async function GET(request: NextRequest) {
  *                 type: integer
  *                 nullable: true
  *                 example: 2
+ *               status:
+ *                 type: string
+ *                 enum: [draft]
+ *                 description: >
+ *                   Omit for an immediately-published listing (the default, "active").
+ *                   The only status a caller may request at creation time is "draft" —
+ *                   see the create-as-draft upload flow in the design doc.
+ *                 example: draft
  *     responses:
  *       201:
  *         description: Listing created
@@ -266,7 +274,7 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, CreateListingSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { title, description, price, categoryId } = parsed.data;
+    const { title, description, price, categoryId, status } = parsed.data;
 
     // Leaf-only (spec D12): a listing under "Electronics" when "Electronics › Phones"
     // exists cannot be found by anyone drilling down.
@@ -295,6 +303,9 @@ export async function POST(request: NextRequest) {
       price: String(price),
       sellerId: payload.sub,
       ...(categoryId !== undefined && categoryId !== null && { categoryId }),
+      // Create-as-draft (spec §4.3). `status` is validated to only ever be "draft" here —
+      // omitting it leaves the column's own default, "active".
+      ...(status !== undefined && { status }),
       ...(outcome.status === "embedded" && {
         embedding: outcome.embedding,
         embeddingUpdatedAt: sql`now()`,

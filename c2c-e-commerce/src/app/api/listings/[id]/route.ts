@@ -189,7 +189,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *                 example: 3
  *               status:
  *                 type: string
- *                 enum: [active, sold, removed]
+ *                 enum: [draft, active, sold, removed]
  *                 example: active
  *     responses:
  *       200:
