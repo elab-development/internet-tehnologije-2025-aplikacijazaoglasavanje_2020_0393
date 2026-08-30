@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import CategoryBreadcrumb from "@/components/categories/CategoryBreadcrumb";
 import CurrencySelect from "@/components/CurrencySelect";
 import ListingReviews from "@/components/listings/ListingReviews";
 import SimilarListings from "@/components/listings/SimilarListings";
@@ -54,15 +55,6 @@ export default function ListingDetailPage() {
   const { formatConverted } = conversion;
 
   const canReview = isAuthenticated && user?.role === "buyer";
-
-  const categoryName = useMemo(() => {
-    if (listing?.categoryName) return listing.categoryName;
-    if (!listing?.categoryId) return "Uncategorized";
-    const category = (categoryData ?? []).find(
-      (item) => item.id === listing.categoryId,
-    );
-    return category?.name ?? "Uncategorized";
-  }, [categoryData, listing]);
 
   async function handleBuyNow() {
     if (!hasValidId) return;
@@ -147,9 +139,10 @@ export default function ListingDetailPage() {
               🖼️
             </div>
           )}
-          <span className="inline-flex w-fit rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
-            {categoryName}
-          </span>
+          <CategoryBreadcrumb
+            categories={categoryData ?? []}
+            categoryId={listing.categoryId}
+          />
           <h1 className="text-2xl font-bold text-zinc-900">{listing.title}</h1>
           <p className="text-zinc-600">{listing.description}</p>
 
