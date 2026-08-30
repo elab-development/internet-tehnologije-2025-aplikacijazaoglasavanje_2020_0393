@@ -141,7 +141,7 @@ export async function resetDb(): Promise<void> {
     sql`, `,
   );
 
-  // CASCADE because listings reference users and order_items reference both; RESTART
+  // CASCADE because listings reference users and orders reference both; RESTART
   // IDENTITY because a test asserting on a specific id must not depend on suite order.
   await client.execute(sql`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
 }

@@ -15,7 +15,6 @@ import {
   listingImages,
   oauthAccounts,
   listings,
-  orderItems,
   orders,
   reviews,
   users,
@@ -239,9 +238,6 @@ export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> 
       sellerId: options.sellerId ?? listing.sellerId,
       listingId,
       price: options.price ?? listing.price,
-      // Removed in Task 9 along with the column. Written until then so the pages that
-      // still display it do not show every order as $0.00 mid-plan.
-      totalPrice: options.price ?? listing.price,
       status: options.status ?? "completed",
       // Node's clock rather than Postgres's, uniquely here: a test that wants a lapsed
       // reservation has to be able to pass a date, and mixing `sql` with a Date in one
@@ -251,16 +247,6 @@ export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> 
         new Date(Date.now() + RESERVATION_HOURS * 60 * 60 * 1000),
     })
     .returning();
-
-  // Kept until 0016 drops the table: `GET /api/orders/[id]`, the seller route, the
-  // recommendations query and review eligibility all still read it, and each moves in
-  // its own task. Remove this write with the migration, not before.
-  await db.insert(orderItems).values({
-    orderId: order.id,
-    listingId,
-    price: order.price,
-    quantity: 1,
-  });
 
   return order;
 }

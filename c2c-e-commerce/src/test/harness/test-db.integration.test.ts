@@ -49,7 +49,6 @@ describe("C2C-QA-3 — migrations on the test database", () => {
       "categories",
       "listings",
       "orders",
-      "order_items",
       "reviews",
     ]) {
       expect(tables).toContain(table);

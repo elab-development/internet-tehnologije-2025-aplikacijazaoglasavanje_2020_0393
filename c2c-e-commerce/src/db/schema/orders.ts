@@ -36,12 +36,6 @@ export const orders = pgTable("orders", {
     .notNull(),
   /** Captured at order time. With one listing per order, the price is the total. */
   price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-  /**
-   * Superseded by `price` and removed in 0016. It stays in the model, nullable, only so
-   * the four files that still read it keep compiling while each moves in its own task —
-   * the seller route, both order pages and one test's direct insert.
-   */
-  totalPrice: numeric("total_price", { precision: 10, scale: 2 }),
   status: orderStatusEnum("status").default("pending").notNull(),
   /**
    * When the reservation lapses (D3). Set from Postgres's clock at creation, never from

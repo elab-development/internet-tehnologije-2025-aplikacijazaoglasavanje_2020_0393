@@ -10,7 +10,7 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, inject, it } from "vitest";
 
 import { EMBEDDING_DIMENSIONS } from "@/lib/ai/embeddings";
-import { categories, listings, orderItems, orders, reviews, users } from "@/db/schema";
+import { categories, listings, orders, reviews, users } from "@/db/schema";
 
 import { authHeaderFor } from "../auth";
 import { getTestDb, resetDb } from "../db";
@@ -107,34 +107,36 @@ describe("C2C-QA-3 — makeListing", () => {
 });
 
 describe("C2C-QA-3 — makeOrder and makeReview", () => {
-  it("AC5: makeOrder creates a buyer, a listing and the order item behind it", async () => {
+  it("AC5: makeOrder creates a buyer, a listing and the order between them", async () => {
     const order = await makeOrder();
     const db = await getTestDb();
 
     expect(order.id).toEqual(expect.any(Number));
+    expect(order.listingId).toEqual(expect.any(Number));
 
-    const items = await db
+    // The seller is captured from the listing, which is what a real order does — the
+    // recommendations query and the seller dashboard both read it off the order.
+    const [listing] = await db
       .select()
-      .from(orderItems)
-      .where(eq(orderItems.orderId, order.id));
-    expect(items.length).toBeGreaterThan(0);
+      .from(listings)
+      .where(eq(listings.id, order.listingId));
+    expect(order.sellerId).toBe(listing.sellerId);
 
-    // AI-10 walks order_items -> orders.buyerId to build a taste vector, so the join has
-    // to be real, not implied.
     const [buyer] = await db.select().from(users).where(eq(users.id, order.buyerId));
     expect(buyer).toBeDefined();
   });
 
-  it("AC5: makeOrder accepts an explicit listing", async () => {
-    const listing = await makeListing();
+  it("AC5: makeOrder accepts an explicit listing, and prices the order from it", async () => {
+    const listing = await makeListing({ price: "42.50" });
     const order = await makeOrder({ listingId: listing.id });
-    const db = await getTestDb();
 
-    const items = await db
-      .select()
-      .from(orderItems)
-      .where(eq(orderItems.orderId, order.id));
-    expect(items.map((item) => item.listingId)).toEqual([listing.id]);
+    expect(order.listingId).toBe(listing.id);
+    expect(order.price).toBe("42.50");
+  });
+
+  it("AC5: makeOrder gives the order a deadline, so it is not swept immediately", async () => {
+    const order = await makeOrder();
+    expect(order.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("AC5: makeReview creates a reviewer and a listing, with a valid rating", async () => {
@@ -160,7 +162,7 @@ describe("C2C-QA-3 — makeOrder and makeReview", () => {
     await resetDb();
 
     const db = await getTestDb();
-    for (const table of [users, categories, listings, orders, orderItems, reviews]) {
+    for (const table of [users, categories, listings, orders, reviews]) {
       expect(await db.select().from(table)).toHaveLength(0);
     }
   });

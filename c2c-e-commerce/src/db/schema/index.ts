@@ -3,7 +3,6 @@ import { categories } from "./categories";
 import { listingImages } from "./listing-images";
 import { listings } from "./listings";
 import { oauthAccounts } from "./oauth-accounts";
-import { orderItems } from "./order-items";
 import { orders } from "./orders";
 import { refreshTokens } from "./refresh-tokens";
 import { reviews } from "./reviews";
@@ -14,7 +13,6 @@ export * from "./categories";
 export * from "./listing-images";
 export * from "./listings";
 export * from "./oauth-accounts";
-export * from "./order-items";
 export * from "./orders";
 export * from "./refresh-tokens";
 export * from "./reviews";
@@ -64,11 +62,11 @@ export const listingsRelations = relations(listings, ({ one, many }) => ({
     fields: [listings.categoryId],
     references: [categories.id],
   }),
-  orderItems: many(orderItems),
+  orders: many(orders),
   reviews: many(reviews),
 }));
 
-export const ordersRelations = relations(orders, ({ one, many }) => ({
+export const ordersRelations = relations(orders, ({ one }) => ({
   buyer: one(users, {
     fields: [orders.buyerId],
     references: [users.id],
@@ -79,18 +77,6 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   }),
   listing: one(listings, {
     fields: [orders.listingId],
-    references: [listings.id],
-  }),
-  orderItems: many(orderItems),
-}));
-
-export const orderItemsRelations = relations(orderItems, ({ one }) => ({
-  order: one(orders, {
-    fields: [orderItems.orderId],
-    references: [orders.id],
-  }),
-  listing: one(listings, {
-    fields: [orderItems.listingId],
     references: [listings.id],
   }),
 }));

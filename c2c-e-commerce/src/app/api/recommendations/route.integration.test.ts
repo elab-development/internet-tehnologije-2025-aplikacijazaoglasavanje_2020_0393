@@ -11,7 +11,7 @@ import { eq, inArray } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { listings, orderItems, orders, reviews } from "@/db/schema";
+import { listings, orders, reviews } from "@/db/schema";
 import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
 import { makeListing, makeOrder, makeReview, makeUser } from "@/test/factories";
@@ -374,24 +374,14 @@ describe("C2C-AI-10 — the interaction cap is about recency", () => {
 
     // 50 orders of a bicycle, all from the last fortnight.
     for (let i = 0; i < 50; i++) {
-      const [order] = await db
-        .insert(orders)
-        .values({
-          buyerId: buyer.id,
-          sellerId: cyclingSellerId,
-          listingId: cycling.id,
-          price: "10.00",
-          totalPrice: "10.00",
-          status: "completed",
-          expiresAt: new Date(now - i * day * 0.25 + 48 * 60 * 60 * 1000),
-          createdAt: new Date(now - i * day * 0.25),
-        })
-        .returning();
-      await db.insert(orderItems).values({
-        orderId: order.id,
+      await db.insert(orders).values({
+        buyerId: buyer.id,
+        sellerId: cyclingSellerId,
         listingId: cycling.id,
         price: "10.00",
-        quantity: 1,
+        status: "completed",
+        expiresAt: new Date(now - i * day * 0.25 + 48 * 60 * 60 * 1000),
+        createdAt: new Date(now - i * day * 0.25),
       });
     }
 

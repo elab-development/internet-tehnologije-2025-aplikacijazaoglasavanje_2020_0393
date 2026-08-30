@@ -236,7 +236,7 @@ describe("0015 — the listing backfill", () => {
   });
 });
 
-describe("0015 — what it deliberately does not do", () => {
+describe("0015 — what it deliberately leaves for 0016", () => {
   it("keeps order_items, so consumers can be migrated one at a time", async () => {
     const { rows } = await client.query(`
       SELECT count(*)::int AS n FROM pg_tables WHERE tablename = 'order_items'
