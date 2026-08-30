@@ -41,7 +41,7 @@ const row = (id: number, title: string) => ({
   id,
   title,
   price: "120.00",
-  imageUrl: null,
+  coverImageId: null,
   status: "active",
   sellerId: 9,
   categoryId: 1,

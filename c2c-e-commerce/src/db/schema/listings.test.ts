@@ -84,7 +84,6 @@ describe("C2C-AI-3 — listings schema", () => {
       "title",
       "description",
       "price",
-      "imageUrl",
       "status",
       "sellerId",
       "categoryId",

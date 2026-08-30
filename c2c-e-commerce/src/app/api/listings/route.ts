@@ -221,10 +221,6 @@ export async function GET(request: NextRequest) {
  *                   - type: number
  *                   - type: string
  *                 example: 999.99
- *               imageUrl:
- *                 type: string
- *                 nullable: true
- *                 example: https://images.unsplash.com/photo-abc
  *               categoryId:
  *                 type: integer
  *                 nullable: true
@@ -270,7 +266,7 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, CreateListingSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { title, description, price, imageUrl, categoryId } = parsed.data;
+    const { title, description, price, categoryId } = parsed.data;
 
     // Leaf-only (spec D12): a listing under "Electronics" when "Electronics › Phones"
     // exists cannot be found by anyone drilling down.
@@ -297,7 +293,6 @@ export async function POST(request: NextRequest) {
       title,
       description,
       price: String(price),
-      imageUrl: imageUrl ?? null,
       sellerId: payload.sub,
       ...(categoryId !== undefined && categoryId !== null && { categoryId }),
       ...(outcome.status === "embedded" && {

@@ -61,43 +61,6 @@ export async function parseRequest<T>(
   return parseBody(schema, body);
 }
 
-// ─── Image URL transformer (shared) ───────────────────────────────────────────
-
-/**
- * Accepts an absolute http(s) URL, normalises it, and maps empty/blank input to
- * null. Mirrors what the listing routes did by hand: a bare `.startsWith("http")`
- * check would let `httpx://…` through, so the protocol is checked after parsing.
- */
-const imageUrlField = z
-  .union([z.string(), z.null()])
-  .transform((val, ctx) => {
-    if (val === null) return null;
-
-    const trimmed = val.trim();
-    if (!trimmed) return null;
-
-    let parsed: URL;
-    try {
-      parsed = new URL(trimmed);
-    } catch {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "imageUrl must be a valid URL",
-      });
-      return z.NEVER;
-    }
-
-    if (!["http:", "https:"].includes(parsed.protocol)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "imageUrl must be a valid http or https URL",
-      });
-      return z.NEVER;
-    }
-
-    return parsed.toString();
-  });
-
 // ─── Price transformer (shared) ───────────────────────────────────────────────
 
 const priceField = z
@@ -173,7 +136,6 @@ export const CreateListingSchema = z.object({
   title: z.string().trim().min(1, "title is required"),
   description: z.string().trim().min(1, "description is required"),
   price: priceField,
-  imageUrl: imageUrlField.optional(),
   categoryId: z.number().int().nullable().optional(),
 });
 
@@ -211,7 +173,6 @@ export const UpdateListingSchema = z
       .min(1, "description must be a non-empty string")
       .optional(),
     price: priceField.optional(),
-    imageUrl: imageUrlField.optional(),
     categoryId: z.number().int().nullable().optional(),
     status: z.enum(["active", "sold", "removed"], {
       error: "status must be one of: active, sold, removed",

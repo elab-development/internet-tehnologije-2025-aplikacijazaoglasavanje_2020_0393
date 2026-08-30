@@ -79,6 +79,8 @@ Izmenite `.env` fajl i postavite vrednosti:
 | `POSTGRES_DB` | Ime baze podataka | `c2c_ecommerce` |
 | `DATABASE_URL` | Connection string za bazu | `postgresql://postgres:postgres@db:5432/c2c_ecommerce` |
 | `JWT_SECRET` | Tajni ključ za JWT tokene | (dugačak random string) |
+| `STORAGE_DRIVER` | Provajder za skladištenje fotografija oglasa (`local` piše na disk) | `local` |
+| `STORAGE_DIR` | Direktorijum za `local` provajder — u Dockeru je to mount tačka `uploads_data` volumena | `/app/uploads` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth2 kredencijali za Google prijavu | (Google Cloud Console) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth2 kredencijali za GitHub prijavu | (GitHub Developer settings) |
 | `OAUTH_REDIRECT_BASE_URL` | Javni origin aplikacije, iz koga se gradi callback URL | `http://localhost:3000` |

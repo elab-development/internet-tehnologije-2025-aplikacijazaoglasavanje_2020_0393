@@ -92,7 +92,6 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         id: listings.id,
         title: listings.title,
         description: listings.description,
-        imageUrl: listings.imageUrl,
         price: listings.price,
         status: listings.status,
         sellerId: listings.sellerId,
@@ -184,10 +183,6 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *                   - type: number
  *                   - type: string
  *                 example: 1099.99
- *               imageUrl:
- *                 type: string
- *                 nullable: true
- *                 example: https://images.unsplash.com/photo-xyz
  *               categoryId:
  *                 type: integer
  *                 nullable: true
@@ -264,7 +259,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const parsed = await parseRequest(request, UpdateListingSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { title, description, price, imageUrl, categoryId, status } = parsed.data;
+    const { title, description, price, categoryId, status } = parsed.data;
 
     if (categoryId !== undefined && categoryId !== null) {
       if (!(await isLeafCategory(categoryId))) {
@@ -287,7 +282,6 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (price !== undefined) updates.price = String(price);
-    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
     if (categoryId !== undefined) updates.categoryId = categoryId;
     if (status !== undefined) updates.status = status;
 

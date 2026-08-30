@@ -50,7 +50,7 @@ export default function SellerListingCard({
 
   return (
     <Card
-      image={listing.imageUrl}
+      image={listing.coverImageId ? `/api/images/${listing.coverImageId}` : null}
       title={listing.title}
       badge={listing.status}
       description={description}

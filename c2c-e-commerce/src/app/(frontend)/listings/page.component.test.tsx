@@ -57,7 +57,7 @@ const listing = (id: number, title: string, similarity?: number) => ({
   title,
   description: "A listing",
   price: "120.00",
-  imageUrl: null,
+  coverImageId: null,
   status: "active",
   sellerId: 9,
   categoryId: null,

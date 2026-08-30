@@ -59,8 +59,8 @@ import { jsonOk, jsonError } from "@/lib/response";
  *                           type: integer
  *                         listingTitle:
  *                           type: string
- *                         listingImageUrl:
- *                           type: string
+ *                         coverImageId:
+ *                           type: integer
  *                           nullable: true
  *                         quantity:
  *                           type: integer
@@ -111,7 +111,6 @@ export async function GET(request: NextRequest) {
         quantity: orderItems.quantity,
         price: orderItems.price,
         listingTitle: listings.title,
-        listingImageUrl: listings.imageUrl,
       })
       .from(orderItems)
       .innerJoin(listings, eq(listings.id, orderItems.listingId))
@@ -156,7 +155,6 @@ export async function GET(request: NextRequest) {
           id: i.orderItemId,
           listingId: i.listingId,
           listingTitle: i.listingTitle,
-          listingImageUrl: i.listingImageUrl,
           coverImageId: covers.get(i.listingId) ?? null,
           quantity: i.quantity,
           price: i.price,

@@ -259,7 +259,7 @@ function ListingsPageContent() {
               key={listing.id}
               title={listing.title}
               description={`$${Number(listing.price).toFixed(2)}`}
-              image={listing.imageUrl}
+              image={listing.coverImageId ? `/api/images/${listing.coverImageId}` : null}
               badge={
                 listing.categoryId
                   ? (categoryMap.get(listing.categoryId) ?? "Uncategorized")

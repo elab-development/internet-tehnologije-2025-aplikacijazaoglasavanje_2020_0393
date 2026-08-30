@@ -29,7 +29,7 @@ const row = (id: number, title: string, similarity = 0.8) => ({
   id,
   title,
   price: "120.00",
-  imageUrl: null,
+  coverImageId: null,
   status: "active",
   categoryId: 1,
   similarity,

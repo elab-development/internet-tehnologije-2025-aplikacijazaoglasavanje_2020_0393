@@ -63,10 +63,13 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_DIR: ${STORAGE_DIR:-/app/uploads}
     volumes:
       - ./c2c-e-commerce:/app
       - /app/node_modules
       - /app/.next
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -75,3 +78,4 @@ services:
 
 volumes:
   postgres_data_dev:
+  uploads_data:

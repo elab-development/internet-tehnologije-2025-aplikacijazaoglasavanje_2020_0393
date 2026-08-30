@@ -74,9 +74,8 @@ describe("C2C-AI-4 — needsReembedding", () => {
     expect(needsReembedding(current, { price: "150.00" })).toBe(false);
   });
 
-  it("AC4: a changed status, imageUrl or categoryId does not", () => {
+  it("AC4: a changed status or categoryId does not", () => {
     expect(needsReembedding(current, { status: "sold" })).toBe(false);
-    expect(needsReembedding(current, { imageUrl: "https://example.com/a.jpg" })).toBe(false);
     expect(needsReembedding(current, { categoryId: 7 })).toBe(false);
   });
 

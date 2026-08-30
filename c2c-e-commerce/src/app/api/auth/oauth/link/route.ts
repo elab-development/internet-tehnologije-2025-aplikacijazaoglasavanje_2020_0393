@@ -42,7 +42,7 @@ import { jsonError, jsonOk } from "@/lib/response";
  *               password: { type: string }
  *     responses:
  *       200: { description: Linked and signed in }
- *       401: { description: Missing or invalid link token, or wrong password }
+ *       401: { description: "Missing or invalid link token, or wrong password" }
  *       409: { description: The identity is already linked }
  *       429: { description: Too many attempts }
  */

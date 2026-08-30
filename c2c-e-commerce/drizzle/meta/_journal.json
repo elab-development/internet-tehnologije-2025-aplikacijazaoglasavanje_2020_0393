@@ -92,6 +92,13 @@
       "when": 1771946700000,
       "tag": "0012_listing_images",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1771946800000,
+      "tag": "0013_drop_listing_image_url",
+      "breakpoints": true
     }
   ]
 }

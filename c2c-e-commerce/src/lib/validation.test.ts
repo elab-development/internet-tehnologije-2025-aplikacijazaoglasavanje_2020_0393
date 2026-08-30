@@ -9,7 +9,6 @@ import {
   CreateCategorySchema,
   UpdateCategorySchema,
   CreateListingSchema,
-  UpdateListingSchema,
   CreateOrderSchema,
   CreateReviewSchema,
   UpdateOrderStatusSchema,
@@ -221,26 +220,6 @@ describe("CreateListingSchema", () => {
     });
     expect(result.success).toBe(false);
   });
-
-  it("accepts listing with imageUrl", () => {
-    const result = CreateListingSchema.safeParse({
-      title: "Item",
-      description: "Desc",
-      price: 10,
-      imageUrl: "https://example.com/image.jpg",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects invalid imageUrl", () => {
-    const result = CreateListingSchema.safeParse({
-      title: "Item",
-      description: "Desc",
-      price: 10,
-      imageUrl: "not-a-url",
-    });
-    expect(result.success).toBe(false);
-  });
 });
 
 // ─── CreateOrderSchema ────────────────────────────────────────────────────────
@@ -363,46 +342,6 @@ describe("parseRequest", () => {
     const result = await parseRequest(jsonRequest("null"), schema);
     expect(result.data).toBeNull();
     expect(result.error).toBeTruthy();
-  });
-});
-
-// ─── imageUrl hardening ───────────────────────────────────────────────────────
-
-describe("imageUrl validation", () => {
-  const base = { title: "Item", description: "Desc", price: 10 };
-
-  it("accepts and normalises an https URL", () => {
-    const result = CreateListingSchema.safeParse({
-      ...base,
-      imageUrl: "  https://example.com/a.jpg  ",
-    });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.imageUrl).toBe("https://example.com/a.jpg");
-  });
-
-  it("rejects a non-http protocol", () => {
-    for (const url of ["ftp://example.com/a.jpg", "javascript:alert(1)", "file:///etc/passwd"]) {
-      expect(CreateListingSchema.safeParse({ ...base, imageUrl: url }).success).toBe(false);
-    }
-  });
-
-  it("rejects a protocol that merely starts with 'http'", () => {
-    // The previous `.startsWith("http")` check let this through.
-    expect(
-      CreateListingSchema.safeParse({ ...base, imageUrl: "httpx://example.com/a.jpg" }).success
-    ).toBe(false);
-  });
-
-  it("maps blank input to null rather than failing", () => {
-    const result = CreateListingSchema.safeParse({ ...base, imageUrl: "   " });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.imageUrl).toBeNull();
-  });
-
-  it("accepts an explicit null to clear the image on update", () => {
-    const result = UpdateListingSchema.safeParse({ imageUrl: null });
-    expect(result.success).toBe(true);
-    if (result.success) expect(result.data.imageUrl).toBeNull();
   });
 });
 

@@ -30,7 +30,6 @@ export const listings = pgTable(
     title: text("title").notNull(),
     description: text("description").notNull(),
     price: numeric("price", { precision: 10, scale: 2 }).notNull(),
-    imageUrl: text("image_url"),
     status: listingStatusEnum("status").default("active").notNull(),
     sellerId: integer("seller_id")
       .references(() => users.id, { onDelete: "cascade" })

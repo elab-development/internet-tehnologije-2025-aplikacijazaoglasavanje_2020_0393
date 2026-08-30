@@ -50,6 +50,7 @@ export default function ListingDetailPage() {
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
+  const [activeImageId, setActiveImageId] = useState<number | null>(null);
 
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;
@@ -109,6 +110,13 @@ export default function ListingDetailPage() {
     );
   }
 
+  // Fall back to the first (cover) image whenever the selected one is no longer in the
+  // list — including on first render, when nothing has been selected yet.
+  const images = listing.images;
+  const displayImageId = images.some((image) => image.id === activeImageId)
+    ? activeImageId
+    : (images[0]?.id ?? null);
+
   return (
     <div className="space-y-8">
       {orderSuccessId && (
@@ -128,12 +136,39 @@ export default function ListingDetailPage() {
 
       <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="flex flex-col gap-4">
-          {listing.imageUrl ? (
-            <img
-              src={listing.imageUrl}
-              alt={listing.title}
-              className="w-full rounded-xl object-cover max-h-80 border border-zinc-100 bg-zinc-50"
-            />
+          {displayImageId ? (
+            <div className="flex flex-col gap-2">
+              <img
+                src={`/api/images/${displayImageId}`}
+                alt={listing.title}
+                className="w-full rounded-xl object-cover max-h-80 border border-zinc-100 bg-zinc-50"
+              />
+              {images.length > 1 && (
+                <div className="flex flex-wrap gap-2">
+                  {images.map((image) => (
+                    <button
+                      key={image.id}
+                      type="button"
+                      onClick={() => setActiveImageId(image.id)}
+                      aria-label={`Show photo ${image.sortOrder + 1}`}
+                      aria-current={image.id === displayImageId}
+                      className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
+                        image.id === displayImageId
+                          ? "border-indigo-500"
+                          : "border-zinc-100"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/images/${image.id}`}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           ) : (
             <div className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none">
               🖼️

@@ -63,7 +63,7 @@ export type MakeCategoryOptions = Partial<
 };
 
 export type MakeListingOptions = Partial<
-  Pick<Listing, "title" | "description" | "price" | "status" | "imageUrl">
+  Pick<Listing, "title" | "description" | "price" | "status">
 > & {
   sellerId?: number;
   /** `null` creates a listing with no category — AI-9 AC7 has to cope with one. */
@@ -176,7 +176,6 @@ export async function makeListing(options: MakeListingOptions = {}): Promise<Lis
       description: options.description ?? `Description for test listing ${n}`,
       price: options.price ?? "99.99",
       status: options.status ?? "active",
-      imageUrl: options.imageUrl ?? null,
       sellerId,
       categoryId,
       embedding: options.embedding,

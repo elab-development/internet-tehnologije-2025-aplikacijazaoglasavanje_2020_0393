@@ -263,7 +263,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     expect(row.embedding).toEqual(afterControl.embedding);
   });
 
-  it("AC4: changing status, imageUrl or categoryId makes no embed call", async () => {
+  it("AC4: changing status or categoryId makes no embed call", async () => {
     const seller = await makeUser({ role: "seller" });
     const category = await makeCategory();
     const listing = await makeListing({ sellerId: seller.id });
@@ -275,7 +275,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     control.embedCalls = 0;
     await put(
       listing.id,
-      { status: "sold", imageUrl: "https://images.unsplash.com/a.jpg", categoryId: category.id },
+      { status: "sold", categoryId: category.id },
       authHeaderFor(seller),
     );
 

@@ -44,10 +44,10 @@ export default function RecommendedForYou(): React.ReactElement | null {
               href={`/listings/${listing.id}`}
               className="block overflow-hidden rounded-lg border border-zinc-200 text-left transition hover:border-zinc-400 hover:shadow-sm"
             >
-              {listing.imageUrl ? (
+              {listing.coverImageId ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
-                  src={listing.imageUrl}
+                  src={`/api/images/${listing.coverImageId}`}
                   alt=""
                   className="h-24 w-full object-cover"
                 />

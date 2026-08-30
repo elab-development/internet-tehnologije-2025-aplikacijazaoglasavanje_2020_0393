@@ -60,7 +60,6 @@ export const listingColumns = {
   title: listings.title,
   description: listings.description,
   price: listings.price,
-  imageUrl: listings.imageUrl,
   status: listings.status,
   sellerId: listings.sellerId,
   categoryId: listings.categoryId,

@@ -137,10 +137,11 @@
             "type": "string",
             "example": "999.99"
           },
-          "imageUrl": {
-            "type": "string",
+          "coverImageId": {
+            "type": "integer",
             "nullable": true,
-            "example": "https://images.unsplash.com/photo-abc"
+            "description": "Id of the listing's lowest-sort-order image, if it has one. Fetch the bytes from GET /api/images/{id}.",
+            "example": 12
           },
           "status": {
             "type": "string",
@@ -167,6 +168,41 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "ListingImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 12
+          },
+          "listingId": {
+            "type": "integer",
+            "example": 5
+          },
+          "contentType": {
+            "type": "string",
+            "example": "image/webp"
+          },
+          "byteSize": {
+            "type": "integer",
+            "example": 48213
+          },
+          "width": {
+            "type": "integer",
+            "nullable": true,
+            "example": 800
+          },
+          "height": {
+            "type": "integer",
+            "nullable": true,
+            "example": 600
+          },
+          "sortOrder": {
+            "type": "integer",
+            "example": 0
           }
         }
       },
@@ -691,8 +727,7 @@
             "description": "Linked and signed in"
           },
           "401": {
-            "description": "Missing or invalid link token",
-            "or wrong password": null
+            "description": "Missing or invalid link token, or wrong password"
           },
           "409": {
             "description": "The identity is already linked"
@@ -1754,11 +1789,6 @@
                     ],
                     "example": 1099.99
                   },
-                  "imageUrl": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "https://images.unsplash.com/photo-xyz"
-                  },
                   "categoryId": {
                     "type": "integer",
                     "nullable": true,
@@ -2384,11 +2414,6 @@
                     ],
                     "example": 999.99
                   },
-                  "imageUrl": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "https://images.unsplash.com/photo-abc"
-                  },
                   "categoryId": {
                     "type": "integer",
                     "nullable": true,
@@ -3005,8 +3030,8 @@
                             "listingTitle": {
                               "type": "string"
                             },
-                            "listingImageUrl": {
-                              "type": "string",
+                            "coverImageId": {
+                              "type": "integer",
                               "nullable": true
                             },
                             "quantity": {
