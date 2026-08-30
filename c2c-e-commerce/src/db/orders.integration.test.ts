@@ -5,6 +5,7 @@
  * route rather than at the SQL underneath it.
  */
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {
@@ -12,9 +13,11 @@ import {
   claimListing,
   expireStalePendingOrders,
   releaseUnheldListings,
+  transitionOrder,
 } from "@/db/orders";
+import * as schema from "@/db/schema";
 import { listings, orders } from "@/db/schema";
-import { getTestDb, resetDb } from "@/test/db";
+import { getTestDb, resetDb, testPool } from "@/test/db";
 import { makeListing, makeOrder, makeUser } from "@/test/factories";
 
 const HOUR = 60 * 60 * 1000;
@@ -248,5 +251,72 @@ describe("applyListingSideEffect", () => {
 
     expect(await statusOf(draft.id)).toBe("draft");
     expect(await statusOf(removed.id)).toBe("removed");
+  });
+});
+
+describe("transitionOrder", () => {
+  it("moves an order from the status it was decided against", async () => {
+    const db = await getTestDb();
+    const order = await makeOrder({ status: "pending" });
+
+    const moved = await transitionOrder(db, order.id, "pending", "confirmed");
+
+    expect(moved?.status).toBe("confirmed");
+  });
+
+  it("returns null when the order has already moved", async () => {
+    const db = await getTestDb();
+    const order = await makeOrder({ status: "confirmed" });
+
+    // The caller decided against `pending`; somebody else got there first.
+    expect(await transitionOrder(db, order.id, "pending", "cancelled")).toBeNull();
+  });
+
+  it("returns null for an order that does not exist", async () => {
+    const db = await getTestDb();
+    expect(await transitionOrder(db, 999_999, "pending", "cancelled")).toBeNull();
+  });
+
+  it("lets exactly one of two overlapping transactions move the same order", async () => {
+    // Two transactions held open at once, which is what a route cannot arrange from the
+    // outside: the second one's UPDATE blocks on the first's row lock, then re-evaluates
+    // its WHERE against the committed row and matches nothing.
+    //
+    // A dedicated pool, because the shared one is what `resetDb` and the factories use —
+    // holding two of its connections open across a lock wait would starve them.
+    const order = await makeOrder({ status: "pending" });
+
+    const pool = await testPool();
+    const a = await pool.connect();
+    const b = await pool.connect();
+
+    try {
+      // Drizzle binds to a single checked-out connection as happily as to a pool, so both
+      // sides run the real `transitionOrder` rather than a copy of its statement.
+      const dbA = drizzle(a, { schema });
+      const dbB = drizzle(b, { schema });
+
+      await a.query("BEGIN");
+      await b.query("BEGIN");
+
+      const movedA = await transitionOrder(dbA, order.id, "pending", "confirmed");
+
+      // Deliberately not awaited yet: B's UPDATE has to reach the server and block on A's
+      // row lock while A is still open, which is the interleaving under test.
+      const bResult = transitionOrder(dbB, order.id, "pending", "cancelled");
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      await a.query("COMMIT");
+      const movedB = await bResult;
+      await b.query("COMMIT");
+
+      expect([movedA, movedB].filter((row) => row !== null)).toHaveLength(1);
+      expect(movedA?.status).toBe("confirmed");
+      expect(movedB).toBeNull();
+    } finally {
+      a.release();
+      b.release();
+      await pool.end();
+    }
   });
 });

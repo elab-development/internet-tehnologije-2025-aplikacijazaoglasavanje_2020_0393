@@ -13,11 +13,12 @@
 // it on every reservation, and `updated_at` is what the embedding backfill's staleness
 // query compares against — every Buy click would queue a needless re-embed.
 
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 
-import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
+import { RESERVATION_HOURS, type OrderStatus } from "@/lib/order-lifecycle";
 
 import { type Database } from "./index";
+import { orders, type Order } from "./schema";
 
 /**
  * Either the pool-backed client or a transaction handle.
@@ -150,4 +151,34 @@ export async function applyListingSideEffect(
     UPDATE "listings" SET "status" = 'active'
      WHERE "id" = ${listingId} AND "status" IN ('reserved', 'sold')
   `);
+}
+
+/**
+ * Moves an order from one status to another, or returns null if it has already moved.
+ *
+ * Compare-and-set on the status the caller made its decision against, not just the id.
+ * Between a route reading the order and writing it, another party may have driven a
+ * different legal transition; without the `from` term both writes commit, and the second
+ * one's listing side effect silently no-ops against a listing the first already moved —
+ * leaving, for instance, a `confirmed` order beside an `active` listing anyone else can
+ * reserve. That is the double-sell this part exists to make unrepresentable, reached
+ * through a different door.
+ *
+ * The query builder rather than raw `sql`, unlike everything else in this file: the
+ * reason those are raw is `listings.updatedAt`'s `$onUpdate`, which must not fire on a
+ * reservation. On `orders` that stamp is exactly what a status change should record.
+ */
+export async function transitionOrder(
+  x: OrderExecutor,
+  orderId: number,
+  from: OrderStatus,
+  to: OrderStatus,
+): Promise<Order | null> {
+  const [row] = await x
+    .update(orders)
+    .set({ status: to })
+    .where(and(eq(orders.id, orderId), eq(orders.status, from)))
+    .returning();
+
+  return row ?? null;
 }

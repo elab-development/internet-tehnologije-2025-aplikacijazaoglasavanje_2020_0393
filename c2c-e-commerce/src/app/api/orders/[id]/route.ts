@@ -3,7 +3,11 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { coverImageIdsFor } from "@/db/listing-images";
-import { applyListingSideEffect, releaseUnheldListings } from "@/db/orders";
+import {
+  applyListingSideEffect,
+  releaseUnheldListings,
+  transitionOrder,
+} from "@/db/orders";
 import { listings, orders } from "@/db/schema";
 import { HIDE_EXISTENCE_MESSAGE, canViewOrder, orderActorFor } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
@@ -183,6 +187,12 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Another party moved the order first
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -219,11 +229,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const nextListingStatus = listingStatusAfter(status);
 
     const updated = await db.transaction(async (tx) => {
-      const [row] = await tx
-        .update(orders)
-        .set({ status })
-        .where(eq(orders.id, id))
-        .returning();
+      const row = await transitionOrder(tx, id, order.status, status);
+      if (!row) return null;
 
       // Same transaction as the status change, per §5.3: an order that confirmed while
       // its listing stayed reserved is the inconsistency this part exists to prevent.
@@ -233,6 +240,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
       return row;
     });
+
+    // Matches `POST /api/orders`'s answer when someone else got there first. The caller
+    // is already established as a party to this order, so a real message leaks nothing.
+    if (!updated) {
+      return jsonError("This order has already moved to another status", 409);
+    }
 
     return jsonOk(updated);
   } catch (err) {
