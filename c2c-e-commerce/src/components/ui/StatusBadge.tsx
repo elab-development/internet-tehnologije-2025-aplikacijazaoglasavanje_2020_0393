@@ -15,6 +15,7 @@ const orderStatusClasses: Record<OrderStatus, string> = {
 };
 
 const listingStatusClasses: Record<ListingStatus, string> = {
+  draft: "bg-zinc-100 text-zinc-500",
   active: "bg-emerald-100 text-emerald-700",
   sold: "bg-blue-100 text-blue-700",
   removed: "bg-zinc-100 text-zinc-500",
