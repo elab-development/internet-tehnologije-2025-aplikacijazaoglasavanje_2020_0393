@@ -15,6 +15,7 @@ import {
 import { jsonError, jsonOk } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
 import { parseRequest, UpdateListingSchema } from "@/lib/validation";
+import { StorageError, getStorageProvider } from "@/lib/storage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -410,7 +411,23 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       return jsonError("Forbidden", 403);
     }
 
+    // Read the image rows *before* the delete: migration 0012's ON DELETE CASCADE takes
+    // listing_images (and with it, the only record of the storage keys) down with the
+    // listing row. After the cascade nothing can enumerate the orphaned objects.
+    const images = await listImagesFor(id);
+
     await db.delete(listings).where(eq(listings.id, id));
+
+    // Row first, object second, same as DELETE /api/listings/[id]/images/[imageId]:
+    // best-effort cleanup that must not fail a request the row-delete already succeeded.
+    for (const image of images) {
+      try {
+        await getStorageProvider().delete(image.storageKey);
+      } catch (err) {
+        if (!(err instanceof StorageError)) throw err;
+        console.error("[DELETE /api/listings/[id]] object left behind", image.storageKey, err);
+      }
+    }
 
     return jsonOk({ message: "Listing deleted successfully" });
   } catch (err) {
