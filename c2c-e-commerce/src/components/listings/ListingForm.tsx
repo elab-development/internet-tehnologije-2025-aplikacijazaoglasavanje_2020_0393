@@ -6,12 +6,14 @@ import toast from "react-hot-toast";
 import { Button, ErrorAlert, InputField } from "@/components/ui";
 import CategorySelect from "@/components/categories/CategorySelect";
 import DescriptionAssistant from "./DescriptionAssistant";
+import ImageUploader from "./ImageUploader";
 import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
 import type {
   Category,
   CreatedListing,
   ListingDetail,
+  ListingImageSummary,
   ListingStatus,
 } from "@/types/api";
 
@@ -62,7 +64,8 @@ export default function ListingForm(props: ListingFormProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [existingImages, setExistingImages] = useState<ListingImageSummary[]>([]);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [status, setStatus] = useState<ListingStatus>("active");
 
@@ -90,10 +93,44 @@ export default function ListingForm(props: ListingFormProps) {
     setTitle(listing.title);
     setDescription(listing.description);
     setPrice(String(Number(listing.price)));
-    setImageUrl(listing.imageUrl ?? "");
+    setExistingImages(listing.images ?? []);
     setCategoryId(listing.categoryId ?? null);
     setStatus(listing.status);
   }, [listing]);
+
+  async function handleRemoveExisting(imageId: number) {
+    if (props.mode !== "edit") return;
+    try {
+      await api.delete(`/api/listings/${props.listingId}/images/${imageId}`);
+      setExistingImages((current) => current.filter((image) => image.id !== imageId));
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Could not remove that photo");
+    }
+  }
+
+  /**
+   * Uploads each chosen file against a listing that already exists.
+   *
+   * Sequential rather than parallel: the server appends by reading the current highest
+   * sortOrder, so concurrent uploads would race for the same position.
+   */
+  async function uploadFiles(listingId: number): Promise<void> {
+    for (const file of files) {
+      const body = new FormData();
+      body.set("file", file);
+
+      const response = await fetch(`/api/listings/${listingId}/images`, {
+        method: "POST",
+        credentials: "include",
+        body,
+      });
+
+      if (!response.ok) {
+        const detail = await response.json().catch(() => ({}));
+        throw new Error(detail.error ?? `Could not upload ${file.name}`);
+      }
+    }
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -108,7 +145,6 @@ export default function ListingForm(props: ListingFormProps) {
       title: title.trim(),
       description: description.trim(),
       price: Number(price),
-      imageUrl: imageUrl.trim() || null,
       categoryId,
     };
 
@@ -120,10 +156,22 @@ export default function ListingForm(props: ListingFormProps) {
           ...payload,
           status,
         });
+        if (files.length > 0) await uploadFiles(props.listingId);
         toast.success("Listing updated successfully!");
         router.push(`/listings/${props.listingId}`);
       } else {
-        const created = await api.post<CreatedListing>("/api/listings", payload);
+        // Create as a draft, upload against its id, then publish. A failure part-way
+        // leaves a draft the seller can finish or delete from their dashboard — no
+        // staging area, and no orphaned uploads.
+        const created = await api.post<CreatedListing>("/api/listings", {
+          ...payload,
+          status: "draft",
+        });
+
+        await uploadFiles(created.id);
+
+        await api.put(`/api/listings/${created.id}`, { status: "active" });
+
         toast.success("Listing created successfully!");
         router.push(`/listings/${created.id}`);
       }
@@ -209,12 +257,12 @@ export default function ListingForm(props: ListingFormProps) {
           required
         />
 
-        <InputField
-          label="Image URL"
-          type="text"
-          value={imageUrl}
-          onChange={(event) => setImageUrl(event.target.value)}
-          placeholder="https://example.com/image.jpg"
+        <ImageUploader
+          files={files}
+          existing={existingImages}
+          onFilesChange={setFiles}
+          onRemoveExisting={handleRemoveExisting}
+          disabled={submitting}
         />
 
         <CategorySelect

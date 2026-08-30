@@ -13,6 +13,7 @@ import ListingForm from "./ListingForm";
 
 const auth = vi.hoisted(() => ({ role: "seller" as string | null }));
 const post = vi.hoisted(() => vi.fn());
+const put = vi.hoisted(() => vi.fn());
 const push = vi.hoisted(() => vi.fn());
 
 vi.mock("@/context/AuthContext", () => ({
@@ -30,7 +31,9 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn(), back: vi.fn() }),
 }));
 
-vi.mock("@/lib/api", () => ({ api: { post, get: vi.fn(), put: vi.fn() } }));
+vi.mock("@/lib/api", () => ({
+  api: { post, get: vi.fn(), put, delete: vi.fn() },
+}));
 
 // URL-aware, not blanket: the form calls useFetch twice — once for categories and once,
 // in edit mode, for the listing itself. A mock returning [] for both makes the edit-mode
@@ -61,6 +64,7 @@ const generateButton = () => screen.getByRole("button", { name: /generate with a
 beforeEach(() => {
   auth.role = "seller";
   post.mockReset();
+  put.mockReset();
   push.mockReset();
 });
 
@@ -136,10 +140,19 @@ describe("C2C-AI-6 — AC3: what gets saved", () => {
     post.mockResolvedValue({ id: 1 });
     await user.click(screen.getByRole("button", { name: /create listing|save/i }));
 
+    // Create-as-draft, then publish: the listing is created with status "draft" and only
+    // made visible by the follow-up PUT, so a failed upload in between leaves a draft
+    // rather than a half-published listing.
     await waitFor(() => {
       const create = post.mock.calls.find(([url]) => url === "/api/listings");
       expect(create).toBeDefined();
-      expect(create![1]).toMatchObject({ description: "Edited by the seller." });
+      expect(create![1]).toMatchObject({
+        description: "Edited by the seller.",
+        status: "draft",
+      });
+    });
+    await waitFor(() => {
+      expect(put).toHaveBeenCalledWith("/api/listings/1", { status: "active" });
     });
   });
 
@@ -160,6 +173,7 @@ describe("C2C-AI-6 — AC3: what gets saved", () => {
     await waitFor(() => {
       const create = post.mock.calls.find(([url]) => url === "/api/listings");
       expect(create![1]).toMatchObject({ description: generated.description });
+      expect(create![1]).toMatchObject({ status: "draft" });
     });
   });
 });
