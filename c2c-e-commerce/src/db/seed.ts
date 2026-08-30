@@ -23,6 +23,11 @@ async function seed() {
 
   console.log("🌱 Seeding database...");
 
+  // Resolved before the truncate on purpose: a misconfigured STORAGE_DIR (the local
+  // driver's env var is required, per src/lib/storage.ts) must fail cleanly here, not
+  // after the tables below are already gone.
+  const storage = getStorageProvider();
+
   // ─── Clear existing data (order matters due to FK constraints) ────────────
   await db.execute(sql`TRUNCATE listings, categories, users RESTART IDENTITY CASCADE`);
 
@@ -195,8 +200,6 @@ async function seed() {
     "Clean Code by Robert C. Martin": "book.jpg",
     "Wilson Tennis Racket": "racket.jpg",
   };
-
-  const storage = getStorageProvider();
 
   for (const listing of insertedListings) {
     const filename = seedImages[listing.title];
