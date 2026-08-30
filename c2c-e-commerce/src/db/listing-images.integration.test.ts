@@ -93,13 +93,23 @@ describe("reorderImages", () => {
     const mine = await makeListing();
     const theirs = await makeListing();
     const a = await makeListingImage({ listingId: mine.id, sortOrder: 0 });
-    const foreign = await makeListingImage({ listingId: theirs.id, sortOrder: 0 });
+    // A distinct sortOrder is what makes this test able to fail: an unscoped update
+    // would rewrite it to 0 (its index in the array below), so the assertion has
+    // something to detect. With the foreign row also at 0, scoped and unscoped
+    // produce identical state and the test proves nothing.
+    const foreign = await makeListingImage({ listingId: theirs.id, sortOrder: 5 });
 
     await reorderImages(mine.id, [foreign.id, a.id]);
 
-    // The foreign row must not be renumbered into my listing's sequence.
+    // Membership cannot change — reorder never rewrites listingId — but assert it
+    // anyway so a future change that did move rows would be caught here.
     expect((await listImagesFor(mine.id)).map((i) => i.id)).toEqual([a.id]);
     expect((await listImagesFor(theirs.id)).map((i) => i.id)).toEqual([foreign.id]);
+
+    // THE assertion: the foreign row's position was not rewritten by a reorder
+    // scoped to someone else's listing.
+    const [untouched] = await listImagesFor(theirs.id);
+    expect(untouched.sortOrder).toBe(5);
   });
 });
 
