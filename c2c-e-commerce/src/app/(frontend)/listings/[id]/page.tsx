@@ -75,9 +75,7 @@ export default function ListingDetailPage() {
     setActionError(null);
 
     try {
-      const order = await api.post<CreatedOrder>("/api/orders", {
-        items: [{ listingId }],
-      });
+      const order = await api.post<CreatedOrder>("/api/orders", { listingId });
 
       setOrderSuccessId(order.id);
       setIsBuyModalOpen(false);

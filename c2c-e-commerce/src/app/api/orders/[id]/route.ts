@@ -124,8 +124,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
 // ─── PUT /api/orders/[id] ─────────────────────────────────────────────────────
 // Admin – any status change.
-// Seller – can approve/reject orders that contain their listings (only from pending).
-// Body: { status: "pending" | "paid" | "shipped" | "completed" | "cancelled" | "approved" | "rejected" }
+// Seller – can confirm/decline orders that contain their listings (only from pending).
+// Body: { status: "pending" | "confirmed" | "shipped" | "completed" | "cancelled" | "declined" | "expired" }
 
 /**
  * @swagger
@@ -136,8 +136,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *     description: |
  *       Updates the status of an order.
  *       - **Admin**: can change to any status.
- *       - **Seller**: can only approve/reject pending orders that contain their listings.
- *       When a seller approves, their listings in the order are marked as "sold".
+ *       - **Seller**: can only confirm/decline pending orders that contain their listings.
+ *       When a seller confirms, their listings in the order are marked as "sold".
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -157,8 +157,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, paid, shipped, completed, cancelled, approved, rejected]
- *                 example: approved
+ *                 enum: [pending, confirmed, shipped, completed, cancelled, declined, expired]
+ *                 example: confirmed
  *     responses:
  *       200:
  *         description: Order updated
@@ -213,15 +213,17 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const { status } = parsed.data;
 
-    // Seller-specific authorization: can only approve/reject their own orders.
+    // Seller-specific authorization: can only confirm/decline their own orders.
     if (payload.role === "seller") {
-      const sellerAllowed = ["approved", "rejected"] as const;
+      // Renamed by Part 3; the decision itself is unchanged here. Task 6 replaces this
+      // hard-coded pair with `canTransition`.
+      const sellerAllowed = ["confirmed", "declined"] as const;
       if (!sellerAllowed.includes(status as (typeof sellerAllowed)[number])) {
-        return jsonError("Sellers can only approve or reject orders", 403);
+        return jsonError("Sellers can only confirm or decline orders", 403);
       }
 
       // Ownership is settled BEFORE the order's state is considered. The other order
-      // leaks: "Only pending orders can be approved" tells a seller with no stake in
+      // leaks: "Only pending orders can be confirmed" tells a seller with no stake in
       // this order what state it is in, which is a fact about someone else's purchase
       // (C2C-SEC-10).
       const items = await db
@@ -242,7 +244,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       }
 
       if (order.status !== "pending") {
-        return jsonError("Only pending orders can be approved or rejected", 400);
+        return jsonError("Only pending orders can be confirmed or declined", 400);
       }
     }
 
@@ -252,8 +254,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       .where(eq(orders.id, id))
       .returning();
 
-    // When a seller approves an order, mark their listings in that order as "sold"
-    if (status === "approved" && payload.role === "seller") {
+    // When a seller confirms an order, mark their listings in that order as "sold"
+    if (status === "confirmed" && payload.role === "seller") {
       const items = await db
         .select({ listingId: orderItems.listingId })
         .from(orderItems)

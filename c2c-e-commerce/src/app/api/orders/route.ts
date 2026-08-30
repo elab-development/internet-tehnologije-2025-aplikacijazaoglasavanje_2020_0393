@@ -1,8 +1,9 @@
 import { NextRequest } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { listings, orderItems, orders } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateOrderSchema } from "@/lib/validation";
 
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
 
 // ─── POST /api/orders ─────────────────────────────────────────────────────────
 // Authenticated. Role: buyer.
-// Body: { items: { listingId: number; quantity?: number }[] }
+// Body: { listingId: number }
 /**
  * @swagger
  * /api/orders:
@@ -89,8 +90,8 @@ export async function GET(request: NextRequest) {
  *     tags: [Orders]
  *     summary: Create an order
  *     description: |
- *       Creates a new order from one or more active listings.
- *       Only buyers can place orders. Total is calculated server-side.
+ *       Reserves one active listing. An order is one listing, so the price is the total
+ *       and it is read server-side from the listing. Only buyers can place orders.
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -99,23 +100,11 @@ export async function GET(request: NextRequest) {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [items]
+ *             required: [listingId]
  *             properties:
- *               items:
- *                 type: array
- *                 minItems: 1
- *                 items:
- *                   type: object
- *                   required: [listingId]
- *                   properties:
- *                     listingId:
- *                       type: integer
- *                       example: 5
- *                     quantity:
- *                       type: integer
- *                       minimum: 1
- *                       default: 1
- *                       example: 1
+ *               listingId:
+ *                 type: integer
+ *                 example: 5
  *     responses:
  *       201:
  *         description: Order created
@@ -169,48 +158,49 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, CreateOrderSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { items } = parsed.data;
+    const { listingId } = parsed.data;
 
     // ── Resolve and persist atomically ────────────────────────────────────────
-    // Everything happens inside the transaction, with the listing rows locked
+    // Everything happens inside the transaction, with the listing row locked
     // FOR UPDATE. Previously the availability check ran before the transaction
     // opened, so two buyers ordering the last of a listing could both pass the
     // "is it active" check and both have their orders accepted.
     const result = await db.transaction(async (tx) => {
-      const uniqueIds = [...new Set(items.map((i) => i.listingId))];
-
-      // One query for every item instead of one per item.
-      const rows = await tx
+      const [listing] = await tx
         .select()
         .from(listings)
-        .where(and(inArray(listings.id, uniqueIds), eq(listings.status, "active")))
+        .where(and(eq(listings.id, listingId), eq(listings.status, "active")))
         .for("update");
 
-      const byId = new Map(rows.map((row) => [row.id, row]));
-
-      const missing = uniqueIds.find((id) => !byId.has(id));
-      if (missing !== undefined) {
-        throw new UnavailableListingError(missing);
+      if (!listing) {
+        throw new UnavailableListingError(listingId);
       }
 
-      // Money in integer cents: accumulating floats then rounding at the end
-      // lets representation error reach the stored total.
-      let totalCents = 0;
-      const resolvedItems = items.map(({ listingId, quantity }) => {
-        const listing = byId.get(listingId)!;
-        const unitCents = Math.round(parseFloat(listing.price) * 100);
-        totalCents += unitCents * quantity;
-        return { listingId, quantity, price: String(parseFloat(listing.price)) };
-      });
+      // With one listing per order the price is the total, so there is no longer a sum
+      // to accumulate — the integer-cent arithmetic that used to guard it is gone with
+      // the thing it guarded. `parseFloat` still normalises the numeric's text form.
+      const price = String(parseFloat(listing.price));
 
       const [order] = await tx
         .insert(orders)
-        .values({ buyerId: payload.sub, totalPrice: (totalCents / 100).toFixed(2) })
+        .values({
+          buyerId: payload.sub,
+          sellerId: listing.sellerId,
+          listingId,
+          price,
+          // Written until 0016 drops the column, so the pages that still read it keep
+          // showing a figure. Task 4 stops writing it.
+          totalPrice: price,
+          // Postgres's clock, never Node's: the deadline and the `created_at` it is
+          // measured from have to come from the same clock or the sweep misfires.
+          expiresAt: sql`now() + make_interval(hours => ${RESERVATION_HOURS})`,
+        })
         .returning();
 
+      // Kept until 0016 drops the table; Task 9 removes this write with it.
       const inserted = await tx
         .insert(orderItems)
-        .values(resolvedItems.map((i) => ({ ...i, orderId: order.id })))
+        .values({ orderId: order.id, listingId, price, quantity: 1 })
         .returning();
 
       return { ...order, items: inserted };

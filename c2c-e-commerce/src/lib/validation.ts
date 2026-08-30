@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { ORDER_STATUSES } from "@/lib/order-lifecycle";
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 /** Stringify the first Zod validation error into a human-readable message. */
@@ -189,31 +191,24 @@ export const UpdateListingSchema = z
 
 // ─── Orders ───────────────────────────────────────────────────────────────────
 
-export const OrderItemSchema = z.object({
-  listingId: z.number().int("listingId must be an integer"),
-  quantity: z
-    .number()
-    .int()
-    .min(1, "quantity must be a positive integer")
-    .default(1),
-});
-
+/**
+ * One order, one listing (D1).
+ *
+ * The old body was `{ items: [{ listingId, quantity }] }` for a cart that was never
+ * built: one call site, and `quantity` was never sent a value other than the default
+ * against a listing that is by construction one physical object.
+ */
 export const CreateOrderSchema = z.object({
-  items: z.array(OrderItemSchema).min(1, "items must be a non-empty array"),
+  listingId: z
+    .number()
+    .int("listingId must be an integer")
+    .positive("listingId must be a positive integer"),
 });
 
-// Must stay in sync with orderStatusEnum in db/schema/orders.ts. "approved" and
-// "rejected" were added by migration 0004 for the seller approval flow.
-export const ORDER_STATUSES = [
-  "pending",
-  "paid",
-  "shipped",
-  "completed",
-  "cancelled",
-  "approved",
-  "rejected",
-] as const;
-
+/**
+ * Accepts any status the enum holds; whether *this* caller may move *this* order there
+ * is `canTransition`'s decision, not Zod's.
+ */
 export const UpdateOrderStatusSchema = z.object({
   status: z.enum(ORDER_STATUSES, {
     error: `status must be one of: ${ORDER_STATUSES.join(", ")}`,

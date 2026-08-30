@@ -156,7 +156,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *       403:
  *         description: >
  *           Not a buyer, or the buyer has no completed order containing this
- *           listing (statuses paid, shipped, completed or approved).
+ *           listing (statuses confirmed, shipped or completed).
  *         content:
  *           application/json:
  *             schema:

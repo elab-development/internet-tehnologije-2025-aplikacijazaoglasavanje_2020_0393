@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { ORDER_STATUSES } from "@/lib/order-lifecycle";
 import {
   formatZodError,
   parseBody,
   parseRequest,
-  ORDER_STATUSES,
   RegisterBodySchema,
   LoginBodySchema,
   CreateCategorySchema,
@@ -240,26 +240,19 @@ describe("UpdateListingSchema", () => {
 // ─── CreateOrderSchema ────────────────────────────────────────────────────────
 
 describe("CreateOrderSchema", () => {
-  it("accepts valid order", () => {
-    const result = CreateOrderSchema.safeParse({
-      items: [{ listingId: 1, quantity: 2 }],
-    });
-    expect(result.success).toBe(true);
+  it("accepts a single listing id", () => {
+    expect(CreateOrderSchema.safeParse({ listingId: 5 }).success).toBe(true);
   });
 
-  it("defaults quantity to 1", () => {
-    const result = CreateOrderSchema.safeParse({
-      items: [{ listingId: 1 }],
-    });
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.items[0].quantity).toBe(1);
-    }
+  it("rejects the old cart-shaped body", () => {
+    // `{ items: [...] }` is what the UI sent before D1. A body that silently parses to
+    // nothing would place an order against listing `undefined`.
+    expect(CreateOrderSchema.safeParse({ items: [{ listingId: 5 }] }).success).toBe(false);
   });
 
-  it("rejects empty items array", () => {
-    const result = CreateOrderSchema.safeParse({ items: [] });
-    expect(result.success).toBe(false);
+  it("rejects a zero or negative listing id", () => {
+    expect(CreateOrderSchema.safeParse({ listingId: 0 }).success).toBe(false);
+    expect(CreateOrderSchema.safeParse({ listingId: -3 }).success).toBe(false);
   });
 });
 
@@ -363,17 +356,16 @@ describe("parseRequest", () => {
 // ─── UpdateOrderStatusSchema ──────────────────────────────────────────────────
 
 describe("UpdateOrderStatusSchema", () => {
-  it("accepts every status the DB enum allows", () => {
+  it("accepts every status the graph names", () => {
     for (const status of ORDER_STATUSES) {
       expect(UpdateOrderStatusSchema.safeParse({ status }).success).toBe(true);
     }
   });
 
-  it("accepts approved and rejected", () => {
-    // Added by migration 0004; the schema previously omitted them, so wiring it
-    // up unchanged would have broken the seller approval flow.
-    expect(UpdateOrderStatusSchema.safeParse({ status: "approved" }).success).toBe(true);
-    expect(UpdateOrderStatusSchema.safeParse({ status: "rejected" }).success).toBe(true);
+  it("rejects the statuses this part removed", () => {
+    for (const status of ["paid", "approved", "rejected"]) {
+      expect(UpdateOrderStatusSchema.safeParse({ status }).success).toBe(false);
+    }
   });
 
   it("rejects an unknown status", () => {

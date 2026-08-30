@@ -55,7 +55,7 @@ describe("C2C-AI-10 — AC5: authentication", () => {
 describe("C2C-AI-10 — AC1: a buyer with history", () => {
   it("AC1: gets up to ten active listings flagged personalised", async () => {
     const buyer = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: buyer.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: inCluster("cycling")[0].id });
 
     const { status, body } = await recommend(authHeaderFor(buyer));
 
@@ -68,7 +68,7 @@ describe("C2C-AI-10 — AC1: a buyer with history", () => {
   it("AC1: every recommendation is active", async () => {
     const db = await getTestDb();
     const buyer = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: buyer.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: inCluster("cycling")[0].id });
 
     await db
       .update(listings)
@@ -85,7 +85,7 @@ describe("C2C-AI-10 — AC1: a buyer with history", () => {
 
   it("AC1: an explicit limit is honoured", async () => {
     const buyer = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: buyer.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: inCluster("cycling")[0].id });
 
     const { body } = await recommend(authHeaderFor(buyer), "limit=3");
     expect(body.data.length).toBe(3);
@@ -111,8 +111,8 @@ describe("C2C-AI-10 — AC7: the recommendations are actually relevant", () => {
     const buyer = await makeUser({ role: "buyer" });
     const bikes = inCluster("cycling");
 
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[0].id] });
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[1].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[0].id });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[1].id });
 
     const { body } = await recommend(authHeaderFor(buyer));
     const cyclingIds = new Set(bikes.map((entry) => entry.id));
@@ -124,8 +124,8 @@ describe("C2C-AI-10 — AC7: the recommendations are actually relevant", () => {
     const buyer = await makeUser({ role: "buyer" });
     const bikes = inCluster("cycling");
 
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[0].id] });
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[1].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[0].id });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[1].id });
 
     const { body } = await recommend(authHeaderFor(buyer));
     const cyclingIds = new Set(bikes.map((entry) => entry.id));
@@ -139,10 +139,10 @@ describe("C2C-AI-10 — AC7: the recommendations are actually relevant", () => {
     // A positive control on the whole story: if both buyers got the same list, nothing
     // above would prove the vector was consulted at all.
     const cyclist = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: cyclist.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: cyclist.id, listingId: inCluster("cycling")[0].id });
 
     const furnisher = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: furnisher.id, listingIds: [inCluster("furniture")[0].id] });
+    await makeOrder({ buyerId: furnisher.id, listingId: inCluster("furniture")[0].id });
 
     const a = await recommend(authHeaderFor(cyclist));
     const b = await recommend(authHeaderFor(furnisher));
@@ -157,7 +157,7 @@ describe("C2C-AI-10 — AC3/AC4: exclusions", () => {
   it("AC3: a listing the user already ordered never appears", async () => {
     const buyer = await makeUser({ role: "buyer" });
     const bought = inCluster("cycling")[0];
-    await makeOrder({ buyerId: buyer.id, listingIds: [bought.id] });
+    await makeOrder({ buyerId: buyer.id, listingId: bought.id });
 
     const { body } = await recommend(authHeaderFor(buyer), "limit=20");
     expect(body.data.map((r) => r.id)).not.toContain(bought.id);
@@ -166,8 +166,9 @@ describe("C2C-AI-10 — AC3/AC4: exclusions", () => {
   it("AC3: every listing across several orders is excluded", async () => {
     const buyer = await makeUser({ role: "buyer" });
     const bikes = inCluster("cycling");
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[0].id, bikes[1].id] });
-    await makeOrder({ buyerId: buyer.id, listingIds: [bikes[2].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[0].id });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[1].id });
+    await makeOrder({ buyerId: buyer.id, listingId: bikes[2].id });
 
     const { body } = await recommend(authHeaderFor(buyer), "limit=20");
     const returned = body.data.map((r) => r.id);
@@ -182,7 +183,7 @@ describe("C2C-AI-10 — AC3/AC4: exclusions", () => {
     const seller = await makeUser({ role: "seller" });
 
     // Give the seller a taste, and some inventory in that same taste.
-    await makeOrder({ buyerId: seller.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: seller.id, listingId: inCluster("cycling")[0].id });
     await db
       .update(listings)
       .set({ sellerId: seller.id })
@@ -255,7 +256,7 @@ describe("C2C-AI-10 — AC2/AC6: the cold start", () => {
     const seller = await makeUser({ role: "seller" });
     const unembedded = await makeListing({ sellerId: seller.id, title: "No vector" });
 
-    await makeOrder({ buyerId: buyer.id, listingIds: [unembedded.id] });
+    await makeOrder({ buyerId: buyer.id, listingId: unembedded.id });
 
     const { status, body } = await recommend(authHeaderFor(buyer));
 
@@ -306,7 +307,7 @@ describe("C2C-AI-10 — AC9: latency", () => {
     for (let i = 0; i < 50; i++) {
       await makeOrder({
         buyerId: buyer.id,
-        listingIds: [catalogue[i % catalogue.length].id],
+        listingId: catalogue[i % catalogue.length].id,
       });
     }
 
@@ -323,7 +324,7 @@ describe("C2C-AI-10 — AC9: latency", () => {
 describe("C2C-AI-10 — the embedding never leaves the server", () => {
   it("recommendations omit the embedding columns", async () => {
     const buyer = await makeUser({ role: "buyer" });
-    await makeOrder({ buyerId: buyer.id, listingIds: [inCluster("cycling")[0].id] });
+    await makeOrder({ buyerId: buyer.id, listingId: inCluster("cycling")[0].id });
 
     const { body } = await recommend(authHeaderFor(buyer));
 
@@ -350,14 +351,26 @@ describe("C2C-AI-10 — the interaction cap is about recency", () => {
     const now = Date.now();
     const day = 24 * 60 * 60 * 1000;
 
+    // Read rather than assumed: the catalogue's seller is created inside the fixture, so
+    // the id is not one this test can spell out.
+    const [{ sellerId: cyclingSellerId }] = await db
+      .select({ sellerId: listings.sellerId })
+      .from(listings)
+      .where(eq(listings.id, cycling.id))
+      .limit(1);
+
     // 50 orders of a bicycle, all from the last fortnight.
     for (let i = 0; i < 50; i++) {
       const [order] = await db
         .insert(orders)
         .values({
           buyerId: buyer.id,
+          sellerId: cyclingSellerId,
+          listingId: cycling.id,
+          price: "10.00",
           totalPrice: "10.00",
           status: "completed",
+          expiresAt: new Date(now - i * day * 0.25 + 48 * 60 * 60 * 1000),
           createdAt: new Date(now - i * day * 0.25),
         })
         .returning();

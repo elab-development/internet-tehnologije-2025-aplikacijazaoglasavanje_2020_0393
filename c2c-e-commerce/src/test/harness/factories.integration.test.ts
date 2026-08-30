@@ -125,9 +125,9 @@ describe("C2C-QA-3 — makeOrder and makeReview", () => {
     expect(buyer).toBeDefined();
   });
 
-  it("AC5: makeOrder accepts explicit listings", async () => {
+  it("AC5: makeOrder accepts an explicit listing", async () => {
     const listing = await makeListing();
-    const order = await makeOrder({ listingIds: [listing.id] });
+    const order = await makeOrder({ listingId: listing.id });
     const db = await getTestDb();
 
     const items = await db

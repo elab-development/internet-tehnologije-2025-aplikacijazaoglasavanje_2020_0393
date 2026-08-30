@@ -9,6 +9,7 @@
 import { eq } from "drizzle-orm";
 
 import { hashPassword } from "@/lib/auth";
+import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
 import {
   categories,
   listingImages,
@@ -78,9 +79,13 @@ export type MakeListingImageOptions = Partial<
   listingId?: number;
 };
 
-export type MakeOrderOptions = Partial<Pick<Order, "status" | "totalPrice">> & {
+export type MakeOrderOptions = Partial<Pick<Order, "status" | "price">> & {
   buyerId?: number;
-  listingIds?: number[];
+  /** Defaults to the listing's own seller, which is what a real order captures. */
+  sellerId?: number;
+  listingId?: number;
+  /** Defaults to 48 hours from now. Pass a past date to make an order sweepable. */
+  expiresAt?: Date;
 };
 
 export type MakeReviewOptions = Partial<Pick<Review, "rating" | "comment">> & {
@@ -218,37 +223,44 @@ export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> 
   const db = await getTestDb();
 
   const buyerId = options.buyerId ?? (await makeUser({ role: "buyer" })).id;
-  const listingIds = options.listingIds ?? [(await makeListing()).id];
+  const listingId = options.listingId ?? (await makeListing()).id;
 
-  const rows = await db
-    .select({ id: listings.id, price: listings.price })
-    .from(listings);
-  const priceOf = new Map(rows.map((row) => [row.id, row.price]));
-
-  const total = listingIds.reduce(
-    (sum, id) => sum + Number(priceOf.get(id) ?? 0),
-    0,
-  );
+  const [listing] = await db
+    .select({ price: listings.price, sellerId: listings.sellerId })
+    .from(listings)
+    .where(eq(listings.id, listingId))
+    .limit(1);
+  if (!listing) throw new Error(`makeOrder: listing ${listingId} does not exist`);
 
   const [order] = await db
     .insert(orders)
     .values({
       buyerId,
-      totalPrice: options.totalPrice ?? total.toFixed(2),
+      sellerId: options.sellerId ?? listing.sellerId,
+      listingId,
+      price: options.price ?? listing.price,
+      // Removed in Task 9 along with the column. Written until then so the pages that
+      // still display it do not show every order as $0.00 mid-plan.
+      totalPrice: options.price ?? listing.price,
       status: options.status ?? "completed",
+      // Node's clock rather than Postgres's, uniquely here: a test that wants a lapsed
+      // reservation has to be able to pass a date, and mixing `sql` with a Date in one
+      // optional argument buys nothing a factory needs.
+      expiresAt:
+        options.expiresAt ??
+        new Date(Date.now() + RESERVATION_HOURS * 60 * 60 * 1000),
     })
     .returning();
 
-  // AI-10 walks order_items -> orders.buyerId to build a taste vector, so the join rows
-  // have to exist, not merely be implied by the order.
-  await db.insert(orderItems).values(
-    listingIds.map((listingId) => ({
-      orderId: order.id,
-      listingId,
-      price: priceOf.get(listingId) ?? "0.00",
-      quantity: 1,
-    })),
-  );
+  // Kept until 0016 drops the table: `GET /api/orders/[id]`, the seller route, the
+  // recommendations query and review eligibility all still read it, and each moves in
+  // its own task. Remove this write with the migration, not before.
+  await db.insert(orderItems).values({
+    orderId: order.id,
+    listingId,
+    price: order.price,
+    quantity: 1,
+  });
 
   return order;
 }

@@ -11,15 +11,17 @@ type OrderStatus = (typeof orderStatusEnum.enumValues)[number];
  * Order statuses that count as "this purchase really happened".
  *
  * - `pending`   — the seller has not accepted the order yet, so nothing was bought.
- * - `approved`  — the seller accepted it; this app also marks the listing sold here.
- * - `paid` / `shipped` / `completed` — unambiguously purchased.
- * - `cancelled` / `rejected` — the sale fell through.
+ * - `confirmed` — the seller accepted it; this app also marks the listing sold here.
+ * - `shipped` / `completed` — unambiguously purchased.
+ * - `cancelled` / `declined` / `expired` — the sale fell through.
+ *
+ * The same set as before Part 3, under the names Part 3 gave them: 0015 maps both `paid`
+ * and `approved` onto `confirmed`, so this is a rename, not a change of policy.
  */
 export const PURCHASED_ORDER_STATUSES = [
-  "paid",
+  "confirmed",
   "shipped",
   "completed",
-  "approved",
 ] as const satisfies readonly OrderStatus[];
 
 /** Whether an order in this state entitles its buyer to review its listings. */

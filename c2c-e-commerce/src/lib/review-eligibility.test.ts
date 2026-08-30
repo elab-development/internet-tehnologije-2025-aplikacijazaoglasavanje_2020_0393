@@ -8,7 +8,7 @@ import { orderStatusEnum } from "@/db/schema";
 describe("PURCHASED_ORDER_STATUSES", () => {
   it("counts the statuses where money actually changed hands", () => {
     expect([...PURCHASED_ORDER_STATUSES].sort()).toEqual(
-      ["approved", "completed", "paid", "shipped"].sort()
+      ["completed", "confirmed", "shipped"].sort()
     );
   });
 
@@ -16,9 +16,10 @@ describe("PURCHASED_ORDER_STATUSES", () => {
     expect(isPurchasedStatus("pending")).toBe(false);
   });
 
-  it("excludes cancelled and rejected, where the sale fell through", () => {
+  it("excludes the three ways a sale falls through", () => {
     expect(isPurchasedStatus("cancelled")).toBe(false);
-    expect(isPurchasedStatus("rejected")).toBe(false);
+    expect(isPurchasedStatus("declined")).toBe(false);
+    expect(isPurchasedStatus("expired")).toBe(false);
   });
 
   it("only contains statuses the DB enum actually allows", () => {
@@ -36,7 +37,8 @@ describe("PURCHASED_ORDER_STATUSES", () => {
       ...PURCHASED_ORDER_STATUSES,
       "pending",
       "cancelled",
-      "rejected",
+      "declined",
+      "expired",
     ]);
     for (const status of orderStatusEnum.enumValues) {
       expect(classified).toContain(status);

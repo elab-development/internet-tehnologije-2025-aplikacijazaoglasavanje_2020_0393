@@ -222,7 +222,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
     const listing = await makeListing({ sellerId: seller.id, categoryId: category.id });
     // Pending: the route refuses to approve anything else, and that guard would
     // otherwise mask the authorisation decision under test.
-    return makeOrder({ buyerId: buyer.id, listingIds: [listing.id], status: "pending" });
+    return makeOrder({ buyerId: buyer.id, listingId: listing.id, status: "pending" });
   }
 
   it("AC4: refuses a seller who owns nothing in the order", async () => {
@@ -233,7 +233,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
 
     const response = await call("./orders/[id]/route", "PUT", `/api/orders/${order.id}`, {
       headers: authHeaderFor(stranger),
-      body: { status: "approved" },
+      body: { status: "confirmed" },
       params: { id: String(order.id) },
     });
 
@@ -241,7 +241,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
 
     const db = await getTestDb();
     const [row] = await db.select().from(orders).where(eq(orders.id, order.id));
-    expect(row.status).not.toBe("approved");
+    expect(row.status).not.toBe("confirmed");
   });
 
   it("allows the seller whose listing is in it", async () => {
@@ -251,7 +251,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
 
     const response = await call("./orders/[id]/route", "PUT", `/api/orders/${order.id}`, {
       headers: authHeaderFor(seller),
-      body: { status: "approved" },
+      body: { status: "confirmed" },
       params: { id: String(order.id) },
     });
 
@@ -259,7 +259,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
   });
 
   it("checks ownership before order state, so a stranger cannot read the status", async () => {
-    // A 400 "only pending orders can be approved" tells a seller with no stake in this
+    // A 400 "only pending orders can be confirmed" tells a seller with no stake in this
     // order what state it is in. Authorisation has to be decided first.
     const owner = await makeUser({ role: "seller" });
     const stranger = await makeUser({ role: "seller" });
@@ -268,13 +268,13 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
     const listing = await makeListing({ sellerId: owner.id, categoryId: category.id });
     const order = await makeOrder({
       buyerId: buyer.id,
-      listingIds: [listing.id],
+      listingId: listing.id,
       status: "completed",
     });
 
     const response = await call("./orders/[id]/route", "PUT", `/api/orders/${order.id}`, {
       headers: authHeaderFor(stranger),
-      body: { status: "approved" },
+      body: { status: "confirmed" },
       params: { id: String(order.id) },
     });
 
@@ -288,7 +288,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
 
     const response = await call("./orders/[id]/route", "PUT", `/api/orders/${order.id}`, {
       headers: authHeaderFor(buyer),
-      body: { status: "approved" },
+      body: { status: "confirmed" },
       params: { id: String(order.id) },
     });
 

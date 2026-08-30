@@ -19,6 +19,10 @@ import { users } from "./users";
 export const listingStatusEnum = pgEnum("listing_status", [
   "draft",
   "active",
+  // Claimed by a pending order and not yet decided. Set and cleared only by the order
+  // lifecycle — `UpdateListingSchema` does not accept it, so a seller cannot dissolve a
+  // buyer's reservation by editing the listing.
+  "reserved",
   "sold",
   "removed",
 ]);

@@ -34,7 +34,7 @@ export default function SellerOrdersTab({
 
   async function handleStatusUpdate(
     orderId: number,
-    newStatus: "approved" | "rejected",
+    newStatus: "confirmed" | "declined",
   ) {
     try {
       setUpdatingOrderId(orderId);
@@ -47,7 +47,7 @@ export default function SellerOrdersTab({
       );
 
       toast.success(
-        `Order #${orderId} ${newStatus === "approved" ? "approved" : "rejected"}`,
+        `Order #${orderId} ${newStatus === "confirmed" ? "confirmed" : "declined"}`,
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to update order";
@@ -91,8 +91,8 @@ export default function SellerOrdersTab({
                     formatConverted={formatConverted}
                     showActions
                     updating={updatingOrderId === order.id}
-                    onApprove={() => handleStatusUpdate(order.id, "approved")}
-                    onReject={() => handleStatusUpdate(order.id, "rejected")}
+                    onApprove={() => handleStatusUpdate(order.id, "confirmed")}
+                    onReject={() => handleStatusUpdate(order.id, "declined")}
                   />
                 ))}
               </div>
