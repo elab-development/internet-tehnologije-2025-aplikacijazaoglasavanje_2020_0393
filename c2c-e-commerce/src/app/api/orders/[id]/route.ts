@@ -1,22 +1,22 @@
 import { NextRequest } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+
 import { db } from "@/db";
-import { listings, orderItems, orders } from "@/db/schema";
-import {
-  HIDE_EXISTENCE_MESSAGE,
-  canApproveOrder,
-  canViewOrder,
-} from "@/lib/authorization";
+import { coverImageIdsFor } from "@/db/listing-images";
+import { applyListingSideEffect, releaseUnheldListings } from "@/db/orders";
+import { listings, orders } from "@/db/schema";
+import { HIDE_EXISTENCE_MESSAGE, canViewOrder, orderActorFor } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
-import { jsonOk, jsonError } from "@/lib/response";
+import { canTransition, listingStatusAfter } from "@/lib/order-lifecycle";
 import { parseResourceId } from "@/lib/params";
+import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 
 // ─── GET /api/orders/[id] ─────────────────────────────────────────────────────
-// Owner buyer or admin.
+// Either party to the order, or an admin.
 
 /**
  * @swagger
@@ -24,7 +24,10 @@ type RouteContext = { params: Promise<{ id: string }> };
  *   get:
  *     tags: [Orders]
  *     summary: Get an order by ID
- *     description: Returns a single order with its items. Only the buyer who placed it or an admin can view.
+ *     description: |
+ *       Returns a single order with the listing it reserves. Only the buyer who placed
+ *       it, the seller who is selling it, or an admin can view. Anyone else receives
+ *       404, not 403.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -36,7 +39,7 @@ type RouteContext = { params: Promise<{ id: string }> };
  *         description: Order ID
  *     responses:
  *       200:
- *         description: Order details with items
+ *         description: Order details with its listing's title and cover image
  *         content:
  *           application/json:
  *             schema:
@@ -44,16 +47,13 @@ type RouteContext = { params: Promise<{ id: string }> };
  *                 - $ref: '#/components/schemas/Order'
  *                 - type: object
  *                   properties:
- *                     items:
- *                       type: array
- *                       items:
- *                         allOf:
- *                           - $ref: '#/components/schemas/OrderItem'
- *                           - type: object
- *                             properties:
- *                               listingTitle:
- *                                 type: string
- *                                 example: iPhone 15 Pro
+ *                     listingTitle:
+ *                       type: string
+ *                       example: iPhone 15 Pro
+ *                     coverImageId:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: 42
  *       400:
  *         description: Invalid order id
  *         content:
@@ -66,14 +66,8 @@ type RouteContext = { params: Promise<{ id: string }> };
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Order not found
+ *         description: Order not found, or not one the caller is party to
  *         content:
  *           application/json:
  *             schema:
@@ -88,32 +82,34 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
-    authorize("buyer", "admin")(payload);
 
     const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    const [row] = await db
+      .select({
+        order: orders,
+        listingTitle: listings.title,
+      })
+      .from(orders)
+      .leftJoin(listings, eq(listings.id, orders.listingId))
+      .where(eq(orders.id, id))
+      .limit(1);
 
     // 404 for "not yours", identical to "does not exist" (C2C-SEC-10 AC3). A 403 here
-    // would confirm the order is real, and order ids are sequential -- walking them
-    // and collecting the 403s would reveal how many orders exist and which are live.
-    if (!order || !canViewOrder(payload, order)) {
+    // would confirm the order is real, and order ids are sequential.
+    if (!row || !canViewOrder(payload, row.order)) {
       return jsonError(HIDE_EXISTENCE_MESSAGE, 404);
     }
 
-    const items = await db
-      .select()
-      .from(orderItems)
-      .leftJoin(listings, eq(listings.id, orderItems.listingId))
-      .where(eq(orderItems.orderId, id));
+    const covers = await coverImageIdsFor([row.order.listingId]);
 
     return jsonOk({
-      ...order,
-      items: items.map((row) => ({
-        ...row.order_items,
-        listingTitle: row.listings?.title ?? `Listing #${row.order_items.listingId}`,
-      })),
+      ...row.order,
+      // The FK is RESTRICT, so the join cannot miss. The fallback is for a database that
+      // has been edited by hand rather than for a case the code can reach.
+      listingTitle: row.listingTitle ?? `Listing #${row.order.listingId}`,
+      coverImageId: covers.get(row.order.listingId) ?? null,
     });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
@@ -123,9 +119,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 // ─── PUT /api/orders/[id] ─────────────────────────────────────────────────────
-// Admin – any status change.
-// Seller – can confirm/decline orders that contain their listings (only from pending).
-// Body: { status: "pending" | "confirmed" | "shipped" | "completed" | "cancelled" | "declined" | "expired" }
+// Which transitions are available is decided by the caller's relationship to this order
+// (`orderActorFor`) and the graph (`canTransition`), not by their role.
 
 /**
  * @swagger
@@ -134,10 +129,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *     tags: [Orders]
  *     summary: Update order status
  *     description: |
- *       Updates the status of an order.
- *       - **Admin**: can change to any status.
- *       - **Seller**: can only confirm/decline pending orders that contain their listings.
- *       When a seller confirms, their listings in the order are marked as "sold".
+ *       Moves an order through the lifecycle. Which transitions are available depends on
+ *       the caller's relationship to this order, not on their role:
+ *       - **Buyer**: cancel (from pending, confirmed or shipped); mark received (from shipped).
+ *       - **Seller**: confirm or decline (from pending); mark shipped (from confirmed); cancel (from confirmed or shipped).
+ *       - **Admin**: any legal transition.
+ *
+ *       Confirming marks the listing sold. Declining, cancelling or expiring returns it
+ *       to browse. Anyone who is not a party to the order receives 404, not 403.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -167,7 +166,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/Order'
  *       400:
- *         description: Validation error or invalid status transition
+ *         description: Validation error or illegal transition for this caller
  *         content:
  *           application/json:
  *             schema:
@@ -178,14 +177,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Order not found
+ *         description: Order not found, or not one the caller is party to
  *         content:
  *           application/json:
  *             schema:
@@ -199,85 +192,47 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
+    // No role gate. Whether this caller may act is decided by their relationship to this
+    // order, which `authorize()` cannot see.
     const payload = authenticate(request);
-    authorize("admin", "seller")(payload);
 
     const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) return jsonError("Order not found", 404);
+
+    // Authorisation before state, and 404 rather than 403: "Only pending orders can be
+    // confirmed" would tell a stranger what state someone else's purchase is in, and a
+    // 403 would tell them it exists at all.
+    const actor = order ? orderActorFor(payload, order) : null;
+    if (!order || actor === null) return jsonError(HIDE_EXISTENCE_MESSAGE, 404);
 
     const parsed = await parseRequest(request, UpdateOrderStatusSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { status } = parsed.data;
 
-    // Seller-specific authorization: can only confirm/decline their own orders.
-    if (payload.role === "seller") {
-      // Renamed by Part 3; the decision itself is unchanged here. Task 6 replaces this
-      // hard-coded pair with `canTransition`.
-      const sellerAllowed = ["confirmed", "declined"] as const;
-      if (!sellerAllowed.includes(status as (typeof sellerAllowed)[number])) {
-        return jsonError("Sellers can only confirm or decline orders", 403);
-      }
-
-      // Ownership is settled BEFORE the order's state is considered. The other order
-      // leaks: "Only pending orders can be confirmed" tells a seller with no stake in
-      // this order what state it is in, which is a fact about someone else's purchase
-      // (C2C-SEC-10).
-      const items = await db
-        .select({ listingId: orderItems.listingId })
-        .from(orderItems)
-        .where(eq(orderItems.orderId, id));
-
-      const sellerListings = await db
-        .select({ id: listings.id })
-        .from(listings)
-        .where(eq(listings.sellerId, payload.sub));
-
-      const sellerListingIds = new Set(sellerListings.map((l) => l.id));
-      const ownsListingInOrder = items.some((i) => sellerListingIds.has(i.listingId));
-
-      if (!canApproveOrder(payload, { ownsListingInOrder })) {
-        return jsonError("Forbidden: this order does not contain your listings", 403);
-      }
-
-      if (order.status !== "pending") {
-        return jsonError("Only pending orders can be confirmed or declined", 400);
-      }
+    if (!canTransition(order.status, status, actor)) {
+      return jsonError(`Cannot move an order from ${order.status} to ${status}`, 400);
     }
 
-    const [updated] = await db
-      .update(orders)
-      .set({ status })
-      .where(eq(orders.id, id))
-      .returning();
+    const nextListingStatus = listingStatusAfter(status);
 
-    // When a seller confirms an order, mark their listings in that order as "sold"
-    if (status === "confirmed" && payload.role === "seller") {
-      const items = await db
-        .select({ listingId: orderItems.listingId })
-        .from(orderItems)
-        .where(eq(orderItems.orderId, id));
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(orders)
+        .set({ status })
+        .where(eq(orders.id, id))
+        .returning();
 
-      const sellerOwnedListings = await db
-        .select({ id: listings.id })
-        .from(listings)
-        .where(eq(listings.sellerId, payload.sub));
-
-      const sellerListingIds = new Set(sellerOwnedListings.map((l) => l.id));
-      const listingIdsToMark = items
-        .map((i) => i.listingId)
-        .filter((lid) => sellerListingIds.has(lid));
-
-      if (listingIdsToMark.length > 0) {
-        await db
-          .update(listings)
-          .set({ status: "sold" })
-          .where(inArray(listings.id, listingIdsToMark));
+      // Same transaction as the status change, per §5.3: an order that confirmed while
+      // its listing stayed reserved is the inconsistency this part exists to prevent.
+      if (nextListingStatus !== null) {
+        await applyListingSideEffect(tx, order.listingId, nextListingStatus);
       }
-    }
+
+      return row;
+    });
 
     return jsonOk(updated);
   } catch (err) {
@@ -296,7 +251,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
  *   delete:
  *     tags: [Orders]
  *     summary: Delete an order
- *     description: Permanently removes an order and its items. Admin only.
+ *     description: |
+ *       Permanently removes an order. Admin only. A deleted pending order no longer
+ *       holds its listing, so the listing is returned to browse in the same transaction.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -353,7 +310,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!order) return jsonError("Order not found", 404);
 
-    await db.delete(orders).where(eq(orders.id, id));
+    await db.transaction(async (tx) => {
+      await tx.delete(orders).where(eq(orders.id, id));
+      // A deleted pending order was the only thing holding its listing; without this the
+      // listing stays `reserved` until the next sweep, unbuyable and for no reason.
+      await releaseUnheldListings(tx, order.listingId);
+    });
 
     return jsonOk({ message: "Order deleted successfully" });
   } catch (err) {

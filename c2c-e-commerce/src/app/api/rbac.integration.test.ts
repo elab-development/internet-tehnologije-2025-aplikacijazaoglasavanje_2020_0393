@@ -201,6 +201,18 @@ describe("C2C-SEC-10 AC3 — GET /api/orders/[id] hides existence", () => {
     expect(response.status).toBe(200);
   });
 
+  it("lets the selling seller read it", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const order = await makeOrder({ sellerId: seller.id });
+
+    const response = await call("./orders/[id]/route", "GET", `/api/orders/${order.id}`, {
+      headers: authHeaderFor(seller),
+      params: { id: String(order.id) },
+    });
+
+    expect(response.status).toBe(200);
+  });
+
   it("lets an admin read anyone's", async () => {
     const owner = await makeUser({ role: "buyer" });
     const admin = await makeUser({ role: "admin" });
@@ -216,16 +228,25 @@ describe("C2C-SEC-10 AC3 — GET /api/orders/[id] hides existence", () => {
 });
 
 describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
-  /** An order containing one listing owned by `seller`. */
+  /** A pending order between these two, on a listing the seller owns. */
   async function orderFor(seller: { id: number }, buyer: { id: number }) {
     const category = await makeCategory();
-    const listing = await makeListing({ sellerId: seller.id, categoryId: category.id });
-    // Pending: the route refuses to approve anything else, and that guard would
-    // otherwise mask the authorisation decision under test.
-    return makeOrder({ buyerId: buyer.id, listingId: listing.id, status: "pending" });
+    const listing = await makeListing({
+      sellerId: seller.id,
+      categoryId: category.id,
+      status: "reserved",
+    });
+    return makeOrder({
+      buyerId: buyer.id,
+      sellerId: seller.id,
+      listingId: listing.id,
+      status: "pending",
+    });
   }
 
-  it("AC4: refuses a seller who owns nothing in the order", async () => {
+  it("AC4: hides the order from a seller who has no stake in it", async () => {
+    // Part 3 changed this from 403 to 404. With `seller_id` on the order a non-party is
+    // indistinguishable from a stranger, and a 403 on a sequential id enumerates orders.
     const owner = await makeUser({ role: "seller" });
     const stranger = await makeUser({ role: "seller" });
     const buyer = await makeUser({ role: "buyer" });
@@ -237,14 +258,14 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
       params: { id: String(order.id) },
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
 
     const db = await getTestDb();
     const [row] = await db.select().from(orders).where(eq(orders.id, order.id));
-    expect(row.status).not.toBe("confirmed");
+    expect(row.status).toBe("pending");
   });
 
-  it("allows the seller whose listing is in it", async () => {
+  it("allows the seller the order names", async () => {
     const seller = await makeUser({ role: "seller" });
     const buyer = await makeUser({ role: "buyer" });
     const order = await orderFor(seller, buyer);
@@ -259,8 +280,6 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
   });
 
   it("checks ownership before order state, so a stranger cannot read the status", async () => {
-    // A 400 "only pending orders can be confirmed" tells a seller with no stake in this
-    // order what state it is in. Authorisation has to be decided first.
     const owner = await makeUser({ role: "seller" });
     const stranger = await makeUser({ role: "seller" });
     const buyer = await makeUser({ role: "buyer" });
@@ -268,6 +287,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
     const listing = await makeListing({ sellerId: owner.id, categoryId: category.id });
     const order = await makeOrder({
       buyerId: buyer.id,
+      sellerId: owner.id,
       listingId: listing.id,
       status: "completed",
     });
@@ -278,10 +298,14 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
       params: { id: String(order.id) },
     });
 
-    expect(response.status).toBe(403);
+    // Not 400 "only pending orders can be confirmed", which is a fact about someone
+    // else's purchase.
+    expect(response.status).toBe(404);
   });
 
-  it("AC5: refuses a buyer approving their own order", async () => {
+  it("AC5: refuses a buyer confirming their own order, without hiding it from them", async () => {
+    // The buyer IS a party, so this is 400 rather than 404: they may see their order,
+    // they may not take the seller's decision for them.
     const seller = await makeUser({ role: "seller" });
     const buyer = await makeUser({ role: "buyer" });
     const order = await orderFor(seller, buyer);
@@ -292,7 +316,11 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
       params: { id: String(order.id) },
     });
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(400);
+
+    const db = await getTestDb();
+    const [row] = await db.select().from(orders).where(eq(orders.id, order.id));
+    expect(row.status).toBe("pending");
   });
 });
 

@@ -89,14 +89,23 @@ export type CreatedListing = Pick<Listing, "id">;
 
 export type OrderStatus = OrderRow["status"];
 
-/** `GET /api/orders` */
-export type Order = Serialized<OrderRow>;
+/**
+ * `GET /api/orders`.
+ *
+ * Three timestamps rather than one: `expiresAt` is when the reservation lapses and
+ * `updatedAt` is when the status last moved, and both arrive as ISO strings like
+ * `createdAt`.
+ */
+export type Order = Omit<Serialized<OrderRow>, "expiresAt" | "updatedAt"> & {
+  expiresAt: string;
+  updatedAt: string;
+};
 
-/** An order line as returned by `GET /api/orders/[id]`. */
-export type OrderItem = OrderItemRow & { listingTitle: string };
-
-/** `GET /api/orders/[id]` — the order plus its lines. */
-export type OrderDetail = Order & { items: OrderItem[] };
+/** `GET /api/orders/[id]` — the order plus the listing it is for. */
+export type OrderDetail = Order & {
+  listingTitle: string;
+  coverImageId: number | null;
+};
 
 /** `POST /api/orders` — only the id is consumed by the UI. */
 export type CreatedOrder = Pick<Order, "id">;

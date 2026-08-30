@@ -12,6 +12,7 @@
 // it can be exhaustively tested.
 
 import type { TokenPayload } from "./auth";
+import type { OrderActor } from "./order-lifecycle";
 
 /** Admins are unrestricted by design — the matrix documents this per route. */
 export function isAdmin(actor: TokenPayload): boolean {
@@ -45,33 +46,38 @@ export function canMutateListing(
 }
 
 /**
- * Whether the caller may read an order.
+ * The caller's relationship to this order, or null if they have none.
  *
- * Sellers deliberately cannot: they see their sales through `/api/orders/seller`, which
- * scopes to their own listings. Letting a seller read an arbitrary order id would expose
- * buyers' other purchases.
+ * Ids, not roles. `canMutateListing` deliberately checks the role as well, because ids
+ * are per-table there and a buyer whose user id happens to equal some listing's
+ * `sellerId` is not that seller. Here both fields are user ids from the same table, and
+ * D5 makes every user potentially both — so a role check would lock a seller out of the
+ * purchase they made, or a buyer out of the sale they are making.
+ *
+ * Buyer wins if the same user is somehow both: the route refuses self-purchase, but a
+ * predicate must still be deterministic rather than order-of-evaluation dependent.
  */
-export function canViewOrder(
+export function orderActorFor(
   actor: TokenPayload,
-  order: { buyerId: number },
-): boolean {
-  if (isAdmin(actor)) return true;
-  return actor.role === "buyer" && actor.sub === order.buyerId;
+  order: { buyerId: number; sellerId: number },
+): OrderActor | null {
+  if (isAdmin(actor)) return "admin";
+  if (actor.sub === order.buyerId) return "buyer";
+  if (actor.sub === order.sellerId) return "seller";
+  return null;
 }
 
 /**
- * Whether the caller may approve or reject an order.
+ * Whether the caller may read an order.
  *
- * Buyers never can, including on their own order — approving your own purchase would let
- * a buyer mark it fulfilled without the seller ever agreeing. The seller must own at
- * least one listing in it; the route establishes that and passes the answer in.
+ * Both parties and admins. Everyone else gets a 404 rather than a 403 — order ids are
+ * sequential, so confirming existence is an enumeration oracle.
  */
-export function canApproveOrder(
+export function canViewOrder(
   actor: TokenPayload,
-  context: { ownsListingInOrder: boolean },
+  order: { buyerId: number; sellerId: number },
 ): boolean {
-  if (isAdmin(actor)) return true;
-  return actor.role === "seller" && context.ownsListingInOrder;
+  return orderActorFor(actor, order) !== null;
 }
 
 /**

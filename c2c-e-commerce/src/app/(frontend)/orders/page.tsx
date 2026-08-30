@@ -61,10 +61,10 @@ function OrdersPageContent() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-semibold text-zinc-900">
-                      ${Number(order.totalPrice).toFixed(2)}
+                      ${Number(order.price).toFixed(2)}
                     </span>
                     <span className="text-zinc-500">
-                      ({formatConverted(Number(order.totalPrice))})
+                      ({formatConverted(Number(order.price))})
                     </span>
                     <StatusBadge status={order.status} descriptive />
                   </div>

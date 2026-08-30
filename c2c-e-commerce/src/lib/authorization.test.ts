@@ -13,12 +13,12 @@ import { describe, expect, it } from "vitest";
 
 import type { TokenPayload } from "./auth";
 import {
-  canApproveOrder,
   canDeleteReview,
   canMutateListing,
   canViewOrder,
   isAdmin,
   isSelfOrAdmin,
+  orderActorFor,
 } from "./authorization";
 
 const actor = (
@@ -73,43 +73,64 @@ describe("C2C-SEC-10 AC2 — canMutateListing", () => {
   });
 });
 
-describe("C2C-SEC-10 AC3 — canViewOrder", () => {
-  const order = { buyerId: BUYER.sub };
+describe("Part 3 — orderActorFor", () => {
+  const order = { buyerId: BUYER.sub, sellerId: SELLER.sub };
+
+  it("calls the buyer a buyer", () => {
+    expect(orderActorFor(BUYER, order)).toBe("buyer");
+  });
+
+  it("calls the seller a seller", () => {
+    expect(orderActorFor(SELLER, order)).toBe("seller");
+  });
+
+  it("calls an admin an admin, whichever side they are on", () => {
+    expect(orderActorFor(ADMIN, order)).toBe("admin");
+    expect(orderActorFor(ADMIN, { buyerId: ADMIN.sub, sellerId: SELLER.sub })).toBe("admin");
+  });
+
+  it("makes a stranger no party at all", () => {
+    expect(orderActorFor(OTHER_SELLER, order)).toBeNull();
+    expect(orderActorFor(actor(99, "buyer"), order)).toBeNull();
+  });
+
+  it("reads ids, not roles", () => {
+    // A user whose role is `buyer` can still be the seller on an order they placed a
+    // listing for — D5 makes everyone both. Gating on the role here would lock them out
+    // of their own sale.
+    const swapped = { buyerId: SELLER.sub, sellerId: BUYER.sub };
+    expect(orderActorFor(BUYER, swapped)).toBe("seller");
+    expect(orderActorFor(SELLER, swapped)).toBe("buyer");
+  });
+
+  it("prefers buyer when the same user is somehow both", () => {
+    // The route refuses self-purchase, so this should not exist. If a row ever does, the
+    // answer must be deterministic rather than whichever branch ran first.
+    expect(orderActorFor(BUYER, { buyerId: BUYER.sub, sellerId: BUYER.sub })).toBe("buyer");
+  });
+});
+
+describe("Part 3 — canViewOrder", () => {
+  const order = { buyerId: BUYER.sub, sellerId: SELLER.sub };
 
   it("allows the buyer who placed it", () => {
     expect(canViewOrder(BUYER, order)).toBe(true);
   });
 
-  it("refuses another buyer", () => {
-    expect(canViewOrder(actor(9, "buyer"), order)).toBe(false);
+  it("allows the seller who is selling it", () => {
+    // Changed by Part 3. The old rule refused sellers because an order was a basket that
+    // could expose the buyer's other purchases. One order is now one listing this seller
+    // already sells, so there is nothing left to hide from them.
+    expect(canViewOrder(SELLER, order)).toBe(true);
   });
 
   it("allows an admin", () => {
     expect(canViewOrder(ADMIN, order)).toBe(true);
   });
 
-  it("refuses a seller, who reads their sales through /api/orders/seller", () => {
-    expect(canViewOrder(SELLER, order)).toBe(false);
-  });
-});
-
-describe("C2C-SEC-10 AC4/AC5 — canApproveOrder", () => {
-  it("allows a seller who owns a listing in the order", () => {
-    expect(canApproveOrder(SELLER, { ownsListingInOrder: true })).toBe(true);
-  });
-
-  it("refuses a seller who owns nothing in it", () => {
-    expect(canApproveOrder(OTHER_SELLER, { ownsListingInOrder: false })).toBe(false);
-  });
-
-  it("AC5: refuses a buyer outright, even their own order", () => {
-    // Approving your own purchase would let a buyer mark it fulfilled.
-    expect(canApproveOrder(BUYER, { ownsListingInOrder: false })).toBe(false);
-    expect(canApproveOrder(BUYER, { ownsListingInOrder: true })).toBe(false);
-  });
-
-  it("allows an admin regardless of ownership", () => {
-    expect(canApproveOrder(ADMIN, { ownsListingInOrder: false })).toBe(true);
+  it("refuses everyone else", () => {
+    expect(canViewOrder(OTHER_SELLER, order)).toBe(false);
+    expect(canViewOrder(actor(99, "buyer"), order)).toBe(false);
   });
 });
 
