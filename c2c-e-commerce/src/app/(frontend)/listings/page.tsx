@@ -15,6 +15,7 @@ import {
 import { useFetch } from "@/hooks/useFetch";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import MatchQuality from "@/components/listings/MatchQuality";
+import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
 import type { Category, ListingsResponse } from "@/types/api";
 
 export const _metadata: Pick<Metadata, "title"> = {
@@ -32,9 +33,12 @@ function ListingsPageContent() {
     return Number.isFinite(raw) && raw > 0 ? raw : 1;
   });
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
-  const [categoryId, setCategoryId] = useState(
-    searchParams.get("categoryId") ?? "",
-  );
+  const [categoryId, setCategoryId] = useState<number | null>(() => {
+    const raw = searchParams.get("categoryId");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  });
   const [minPrice, setMinPrice] = useState(searchParams.get("minPrice") ?? "");
   const [maxPrice, setMaxPrice] = useState(searchParams.get("maxPrice") ?? "");
   // Smart search is off unless the URL says otherwise, so an existing link keeps behaving
@@ -63,7 +67,7 @@ function ListingsPageContent() {
     params.set("page", String(page));
     params.set("limit", "12");
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
-    if (categoryId) params.set("categoryId", categoryId);
+    if (categoryId !== null) params.set("categoryId", String(categoryId));
     if (minPrice) params.set("minPrice", minPrice);
     if (maxPrice) params.set("maxPrice", maxPrice);
     if (sort) params.set("sort", sort);
@@ -96,7 +100,7 @@ function ListingsPageContent() {
   function clearFilters() {
     setSmartSearch(false);
     setSearch("");
-    setCategoryId("");
+    setCategoryId(null);
     setMinPrice("");
     setMaxPrice("");
     setSort("newest");
@@ -144,27 +148,14 @@ function ListingsPageContent() {
             </label>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-sm font-medium text-zinc-700"
-              htmlFor="category-filter"
-            >
-              Category
-            </label>
-            <select
-              id="category-filter"
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-            >
-              <option value="">All categories</option>
-              {categories.map((category) => (
-                <option key={category.id} value={String(category.id)}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <CategoryTreeFilter
+            categories={categories}
+            value={categoryId}
+            onChange={(id) => {
+              setCategoryId(id);
+              setPage(1);
+            }}
+          />
 
           <InputField
             label="Min price"
