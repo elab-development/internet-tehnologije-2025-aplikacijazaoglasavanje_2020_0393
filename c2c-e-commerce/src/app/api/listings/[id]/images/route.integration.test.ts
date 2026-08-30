@@ -173,6 +173,24 @@ describe("POST /api/listings/[id]/images", () => {
     expect(stored.storageKey).not.toContain("..");
     expect(stored.storageKey).toMatch(/^listings\/\d+\/[0-9a-f]{32}\.webp$/);
   });
+
+  it("refuses a GIF, which decodes fine but is outside the accepted list", async () => {
+    const listing = await makeListing({ sellerId });
+    const gif = await sharp({
+      create: { width: 4, height: 4, channels: 3, background: { r: 10, g: 20, b: 30 } },
+    })
+      .gif()
+      .toBuffer();
+
+    const response = await upload(listing.id, sellerToken, gif);
+
+    // sharp can decode this without complaint, so a 400 here can only come from the
+    // sniffer's accepted-format check, not the re-encode branch.
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "That file is not a JPEG, PNG or WebP image",
+    });
+  });
 });
 
 describe("PATCH /api/listings/[id]/images", () => {
@@ -233,5 +251,29 @@ describe("DELETE /api/listings/[id]/images/[imageId]", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it("refuses an image that belongs to a different listing than the one in the path", async () => {
+    // The caller owns `listing` (so canMutateListing passes) but the image named in the
+    // path belongs to `victimListing`, which someone else owns. Without the listingId
+    // scoping in the route, an owner of one listing could delete any image by naming
+    // their own listing in the path and any image id in the URL.
+    const listing = await makeListing({ sellerId });
+    const victimSeller = await makeUser({ role: "seller" });
+    const victimListing = await makeListing({ sellerId: victimSeller.id });
+    const victimImage = await makeListingImage({ listingId: victimListing.id });
+
+    const { DELETE } = await import("./[imageId]/route");
+    const response = await DELETE(
+      new NextRequest(
+        `http://localhost/api/listings/${listing.id}/images/${victimImage.id}`,
+        { method: "DELETE", headers: { authorization: `Bearer ${sellerToken}` } },
+      ),
+      { params: Promise.resolve({ id: String(listing.id), imageId: String(victimImage.id) }) },
+    );
+
+    expect(response.status).toBe(404);
+    const stillThere = await listImagesFor(victimListing.id);
+    expect(stillThere.map((i) => i.id)).toContain(victimImage.id);
   });
 });

@@ -50,7 +50,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
  *         schema: { type: integer }
  *     responses:
  *       201: { description: The stored image }
- *       400: { description: Not a JPEG, PNG or WebP }
+ *       400: { description: "Not a JPEG, PNG or WebP" }
  *       401: { description: Missing or invalid token }
  *       403: { description: Not the listing's owner }
  *       404: { description: Listing not found }
@@ -113,18 +113,30 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     // Re-encoding is the point, not a formatting nicety: it drops EXIF — including the
     // GPS coordinates phone cameras attach — and a decode-then-encode cycle cannot carry
     // a polyglot payload through (D10).
+    //
+    // The size checks above bound the *compressed* bytes only. Without a decode-side
+    // bound, a 5 MB PNG or WebP can still be crafted to decode to ~200 megapixels —
+    // sharp's own default ceiling — which allocates roughly 600 MB of raw pixels in this
+    // process. `limitInputPixels` caps that; `resize` additionally caps what gets stored,
+    // which nothing else here does.
     let webp: Buffer;
     let width: number | null = null;
     let height: number | null = null;
     try {
-      const output = await sharp(incoming).rotate().webp({ quality: 82 }).toBuffer({
-        resolveWithObject: true,
-      });
+      const output = await sharp(incoming, { limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width: 4000, height: 4000, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82 })
+        .toBuffer({ resolveWithObject: true });
       webp = output.data;
       width = output.info.width;
       height = output.info.height;
-    } catch {
-      // Sniffed as an image but undecodable: truncated, or crafted to look like one.
+    } catch (err) {
+      // Sniffed as an image but undecodable: truncated, crafted to look like one, or
+      // rejected by limitInputPixels. This branch failing broadly (a broken sharp
+      // binary, an OOM) would look like "every upload is suddenly invalid" with no
+      // server-side trace otherwise, so it's logged even though the response stays 400.
+      console.warn("[POST /api/listings/[id]/images] decode failed", err);
       return jsonError("That image could not be processed", 400);
     }
 

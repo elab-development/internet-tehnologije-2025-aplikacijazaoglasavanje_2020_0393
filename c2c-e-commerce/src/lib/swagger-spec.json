@@ -1327,8 +1327,7 @@
             "description": "The stored image"
           },
           "400": {
-            "description": "Not a JPEG",
-            "PNG or WebP": null
+            "description": "Not a JPEG, PNG or WebP"
           },
           "401": {
             "description": "Missing or invalid token"
