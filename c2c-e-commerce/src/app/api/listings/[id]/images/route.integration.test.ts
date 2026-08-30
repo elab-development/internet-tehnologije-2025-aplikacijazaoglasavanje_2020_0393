@@ -114,6 +114,32 @@ describe("POST /api/listings/[id]/images", () => {
     expect(response.status).toBe(413);
   });
 
+  it("rejects an oversized upload by Content-Length before reading the body", async () => {
+    const listing = await makeListing({ sellerId });
+    const { POST } = await import("./route");
+
+    // A small real body, but a Content-Length header claiming far more than the limit —
+    // isolates the header-based gate from the two checks that run after formData().
+    const body = new FormData();
+    body.set("file", new Blob([new Uint8Array(await pngBytes())], { type: "image/png" }), "x.png");
+    const request = new NextRequest(`http://localhost/listings/${listing.id}/images`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${sellerToken}`,
+        "x-forwarded-for": nextIp(),
+        "content-length": String(5 * 1024 * 1024 + 1024 * 1024 + 1),
+      },
+      body,
+    });
+
+    const response = await POST(request, { params: Promise.resolve({ id: String(listing.id) }) });
+
+    expect(response.status).toBe(413);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "That image is larger than 5 MB",
+    });
+  });
+
   it("rejects the ninth image", async () => {
     const listing = await makeListing({ sellerId });
     for (let i = 0; i < 8; i++) {

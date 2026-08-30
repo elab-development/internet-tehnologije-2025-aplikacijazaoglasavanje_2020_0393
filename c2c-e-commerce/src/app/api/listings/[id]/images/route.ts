@@ -94,6 +94,17 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return jsonError(`A listing may have at most ${MAX_IMAGES_PER_LISTING} images`, 409);
     }
 
+    // Cheapest gate first: App Router route handlers have no default body cap, so
+    // `await request.formData()` below buffers the whole body into memory before
+    // `file.size` is ever consulted. A Content-Length check ahead of that is what
+    // actually keeps an oversized upload's memory cost off the process — the two size
+    // checks after formData() only bound what's already been paid for. The allowance
+    // above MAX_BYTES accounts for the multipart envelope (headers, boundaries).
+    const contentLength = Number(request.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_BYTES + 1024 * 1024) {
+      return jsonError("That image is larger than 5 MB", 413);
+    }
+
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof Blob)) return jsonError("Expected a file field named `file`", 400);
