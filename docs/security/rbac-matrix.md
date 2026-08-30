@@ -42,9 +42,10 @@ resource is **private to one user**.
 
 ### Authorisation is decided before state
 
-`PUT /api/orders/{id}` checks ownership *before* it checks whether the order is still
-`pending`. The other order returns `400 "Only pending orders can be approved"` to a
-seller with no stake in the order — which is a fact about someone else's purchase.
+`PUT /api/orders/{id}` decides whether the caller is a party to the order before it
+checks whether the transition they asked for is legal. The other order returns
+`400 "Cannot move an order from completed to confirmed"` to a stranger, which is a fact
+about someone else's purchase.
 
 ## The matrix
 
@@ -68,20 +69,21 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/listings` | GET | optional | ✓ | ✓ | ✓ | Anonymous and non-owners see `active` only; a seller sees their own `sold`/`removed`; admin sees all |
 | `/api/listings` | POST | required | ✗ | ✓ | ✓ | `sellerId` is taken from the token, never the body |
 | `/api/listings/{id}` | GET | optional | ✓ | ✓ | ✓ | Non-active rows visible to the owner or an admin |
-| `/api/listings/{id}` | PUT · DELETE | required | ✗ | owner | ✓ | `canMutateListing` |
+| `/api/listings/{id}` | PUT · DELETE | required | ✗ | owner | ✓ | `canMutateListing`; a **409** on any status change while the listing is `reserved` |
 | `/api/listings/{id}/images` | POST | required | ✗ | owner | ✓ | `canMutateListing`; magic-byte sniffed, re-encoded, rate limited |
 | `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
 | `/api/listings/{id}/images/{imageId}` | DELETE | required | ✗ | owner | ✓ | `canMutateListing`; row deleted, then the object, best-effort |
-| `/api/images/{id}` | GET | optional | ✓ | ✓ | ✓ | Public for a published listing (`active`/`sold`); owner or admin otherwise → **404**, not 403 (see below) |
+| `/api/images/{id}` | GET | optional | ✓ | ✓ | ✓ | Public for a published listing (`active`/`reserved`/`sold`); owner or admin otherwise → **404**, not 403 (see below) |
 | `/api/listings/{id}/reviews` | GET | — | ✓ | ✓ | ✓ | — |
-| `/api/listings/{id}/reviews` | POST | required | ✓ | ✗ | ✗ | Must have a completed purchase of the listing |
+| `/api/listings/{id}/reviews` | POST | required | ✓ | ✓ | ✓ | Must be the buyer on a `completed` order for this listing |
 | `/api/listings/{id}/similar` | GET | — | ✓ | ✓ | ✓ | Embeddings never leave the server |
 | `/api/listings/generate-description` | POST | required | ✗ | ✓ | ✓ | Rate limited per **user id** (SEC-11) |
-| `/api/orders` | GET | required | own | ✗ | all | Scoped to `buyerId = caller` |
-| `/api/orders` | POST | required | ✓ | ✗ | ✗ | `buyerId` from the token |
-| `/api/orders/{id}` | GET | required | owner | ✗ | ✓ | `canViewOrder`; refusal is **404** |
-| `/api/orders/{id}` | PUT | required | ✗ | seller of a contained listing | ✓ | `canApproveOrder`; sellers may set only `approved`/`rejected` |
-| `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to the caller's listings |
+| `/api/orders` | GET | required | own | own | all | The caller's purchases, whatever their role — `buyerId = caller` |
+| `/api/orders` | POST | required | ✓ | ✓ | ✓ | Anyone signed in may buy (D5); `buyerId` from the token; the listing's own seller gets **403** |
+| `/api/orders/{id}` | GET | required | party | party | ✓ | `canViewOrder` — buyer or seller of *this* order; refusal is **404** |
+| `/api/orders/{id}` | PUT | required | party | party | ✓ | `canTransition(from, to, actor)`; a non-party gets **404**, an illegal transition **400** |
+| `/api/orders/{id}` | DELETE | required | ✗ | ✗ | ✓ | Releases the listing in the same transaction |
+| `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to `orders.sellerId` |
 | `/api/recommendations` | GET | required | ✓ | ✓ | ✓ | Built from the caller's own history |
 | `/api/reviews/{id}` | DELETE | required | author | author | ✓ | `canDeleteReview`; **not** the reviewed listing's seller |
 | `/api/users` | GET | required | ✗ | ✗ | ✓ | — |
@@ -104,5 +106,8 @@ Legend: **—** public · **✓** permitted · **✗** refused
 
 - **`DELETE /api/users/{id}`** cascades to listings, orders and reviews. That is the
   intended behaviour but it is destructive and has no soft-delete; deferred.
+- **`DELETE /api/users/{id}`** now also cascades to orders on both sides — a deleted
+  seller takes their buyers' purchase records with them. Same disposition as the listing
+  cascade above: intended, destructive, no soft delete, deferred.
 - **Rate limiting is per-instance**, not distributed. Documented in SEC-11 and in the
   thesis deployment chapter rather than glossed over.

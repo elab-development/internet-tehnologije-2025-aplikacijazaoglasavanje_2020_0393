@@ -119,6 +119,12 @@ It reports whether the extension is available, whether the connecting role may i
 and whether an HNSW index with `vector_cosine_ops` can be created. Exit code 0 means
 migrations 0005 and 0006 will apply.
 
+### Scheduled maintenance scripts
+
+| Command | What it does |
+|---|---|
+| `npm run db:expire-reservations` | Return listings held by lapsed reservations to browse. Safe to run repeatedly; a cron entry every ten minutes is ample for a 48-hour deadline. Correctness does not depend on it — placing an order expires whatever is holding that listing first. |
+
 ## Generating listing descriptions
 
 `POST /api/listings/generate-description` turns a title, and optionally keywords and a

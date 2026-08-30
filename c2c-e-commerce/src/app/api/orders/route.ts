@@ -134,7 +134,7 @@ export async function GET(request: NextRequest) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: No such listing, or it was never published
+ *         description: "No such listing, or it is not currently purchasable (draft or removed)"
  *         content:
  *           application/json:
  *             schema:

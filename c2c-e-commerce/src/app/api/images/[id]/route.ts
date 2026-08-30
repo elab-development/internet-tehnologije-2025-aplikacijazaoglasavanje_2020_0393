@@ -17,12 +17,12 @@ type RouteContext = { params: Promise<{ id: string }> };
  *     tags: [Listings]
  *     summary: Fetch a listing photo
  *     description: >
- *       Publicly visible only for a published listing (`active` or `sold`) — matching
- *       when the listings API itself would show the parent listing to an anonymous
- *       caller, plus `sold` so a completed purchase's photos keep rendering. A `draft` or
- *       `removed` listing's photos are visible only to its owner or an admin. Streams the
- *       stored bytes same-origin. Storage keys are random, so a URL never outlives the
- *       bytes it names.
+ *       Publicly visible for a published listing — `active`, `reserved` or `sold` —
+ *       matching when the listings API itself would show the parent listing to an
+ *       anonymous caller, plus `reserved` and `sold` so a pending or completed
+ *       purchase's photos keep rendering. A `draft` or `removed` listing's photos are
+ *       visible only to its owner or an admin. Streams the stored bytes same-origin.
+ *       Storage keys are random, so a URL never outlives the bytes it names.
  *     parameters:
  *       - in: path
  *         name: id

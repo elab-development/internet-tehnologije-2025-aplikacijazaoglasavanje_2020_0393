@@ -167,11 +167,13 @@ Status codes, messages, or response timing reveal what exists or who has an acco
 
 **Mitigations.**
 
-- `GET /api/orders/{id}` answers **404** for another user's order, byte-identical to the
-  genuinely-missing case. A 403 on a sequential id is an enumeration oracle.
-- `PUT /api/orders/{id}` settles ownership *before* order state. The other order returns
-  "Only pending orders can be approved" to a seller with no stake in the order, which is
-  a fact about someone else's purchase.
+- `GET /api/orders/{id}` answers **404** for an order the caller is not a party to,
+  byte-identical to the genuinely-missing case. A 403 on a sequential id is an
+  enumeration oracle.
+- `PUT /api/orders/{id}` answers **404** to a non-party too, and settles that question
+  *before* it looks at the order's status. Either mistake leaks: a 403 says the order
+  exists, and "Cannot move an order from `completed` to `confirmed`" says what state
+  someone else's purchase is in.
 - Password login against an OAuth-only account compares a decoy bcrypt hash, so it costs
   what a real check costs. Returning early would make those accounts answer visibly
   faster and reveal which addresses authenticate elsewhere.

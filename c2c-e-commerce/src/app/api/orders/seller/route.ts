@@ -56,6 +56,9 @@ import { jsonOk, jsonError } from "@/lib/response";
  *                   createdAt:
  *                     type: string
  *                     format: date-time
+ *                   updatedAt:
+ *                     type: string
+ *                     format: date-time
  *       401:
  *         description: Missing or invalid token
  *         content:

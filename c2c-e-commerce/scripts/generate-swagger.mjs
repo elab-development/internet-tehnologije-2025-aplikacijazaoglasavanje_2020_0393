@@ -120,24 +120,17 @@ const swaggerDefinition = {
         properties: {
           id: { type: "integer", example: 1 },
           buyerId: { type: "integer", example: 3 },
+          sellerId: { type: "integer", example: 7 },
+          listingId: { type: "integer", example: 5 },
+          price: { type: "string", example: "999.99" },
           status: {
             type: "string",
-            enum: ["pending", "approved", "rejected", "paid", "shipped", "completed", "cancelled"],
+            enum: ["pending", "confirmed", "shipped", "completed", "cancelled", "declined", "expired"],
             example: "pending",
           },
-          totalAmount: { type: "string", example: "1299.98" },
+          expiresAt: { type: "string", format: "date-time" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
-        },
-      },
-      OrderItem: {
-        type: "object",
-        properties: {
-          id: { type: "integer", example: 1 },
-          orderId: { type: "integer", example: 1 },
-          listingId: { type: "integer", example: 5 },
-          quantity: { type: "integer", example: 1 },
-          priceAtPurchase: { type: "string", example: "999.99" },
         },
       },
       Review: {

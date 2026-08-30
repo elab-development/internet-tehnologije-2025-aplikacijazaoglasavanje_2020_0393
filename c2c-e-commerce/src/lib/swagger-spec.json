@@ -207,22 +207,34 @@
             "type": "integer",
             "example": 3
           },
+          "sellerId": {
+            "type": "integer",
+            "example": 7
+          },
+          "listingId": {
+            "type": "integer",
+            "example": 5
+          },
+          "price": {
+            "type": "string",
+            "example": "999.99"
+          },
           "status": {
             "type": "string",
             "enum": [
               "pending",
-              "approved",
-              "rejected",
-              "paid",
+              "confirmed",
               "shipped",
               "completed",
-              "cancelled"
+              "cancelled",
+              "declined",
+              "expired"
             ],
             "example": "pending"
           },
-          "totalAmount": {
+          "expiresAt": {
             "type": "string",
-            "example": "1299.98"
+            "format": "date-time"
           },
           "createdAt": {
             "type": "string",
@@ -231,31 +243,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "OrderItem": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "example": 1
-          },
-          "orderId": {
-            "type": "integer",
-            "example": 1
-          },
-          "listingId": {
-            "type": "integer",
-            "example": 5
-          },
-          "quantity": {
-            "type": "integer",
-            "example": 1
-          },
-          "priceAtPurchase": {
-            "type": "string",
-            "example": "999.99"
           }
         }
       },
@@ -1286,7 +1273,7 @@
           "Listings"
         ],
         "summary": "Fetch a listing photo",
-        "description": "Publicly visible only for a published listing (`active` or `sold`) — matching when the listings API itself would show the parent listing to an anonymous caller, plus `sold` so a completed purchase's photos keep rendering. A `draft` or `removed` listing's photos are visible only to its owner or an admin. Streams the stored bytes same-origin. Storage keys are random, so a URL never outlives the bytes it names.\n",
+        "description": "Publicly visible for a published listing — `active`, `reserved` or `sold` — matching when the listings API itself would show the parent listing to an anonymous caller, plus `reserved` and `sold` so a pending or completed purchase's photos keep rendering. A `draft` or `removed` listing's photos are visible only to its owner or an admin. Streams the stored bytes same-origin. Storage keys are random, so a URL never outlives the bytes it names.\n",
         "parameters": [
           {
             "in": "path",
@@ -1542,7 +1529,7 @@
           "Reviews"
         ],
         "summary": "Create a review for a listing",
-        "description": "Adds a review to a listing. Only buyers can review.\nA user can only submit one review per listing, and only for a listing\nthey have actually purchased.\n",
+        "description": "Adds a review to a listing. Any authenticated user may review — sellers buy too —\nprovided they have a `completed` order for this listing.\nA user can only submit one review per listing.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1617,7 +1604,7 @@
             }
           },
           "403": {
-            "description": "Not a buyer, or the buyer has no completed order containing this listing (statuses paid, shipped, completed or approved).\n",
+            "description": "The caller has no completed order for this listing.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -1849,6 +1836,16 @@
           },
           "404": {
             "description": "Listing not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The listing is reserved by a pending order",
             "content": {
               "application/json": {
                 "schema": {
@@ -2490,7 +2487,7 @@
           "Orders"
         ],
         "summary": "Get an order by ID",
-        "description": "Returns a single order with its items. Only the buyer who placed it or an admin can view.",
+        "description": "Returns a single order with the listing it reserves. Only the buyer who placed\nit, the seller who is selling it, or an admin can view. Anyone else receives\n404, not 403.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2509,7 +2506,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Order details with items",
+            "description": "Order details with its listing's title and cover image",
             "content": {
               "application/json": {
                 "schema": {
@@ -2520,24 +2517,14 @@
                     {
                       "type": "object",
                       "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "allOf": [
-                              {
-                                "$ref": "#/components/schemas/OrderItem"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "listingTitle": {
-                                    "type": "string",
-                                    "example": "iPhone 15 Pro"
-                                  }
-                                }
-                              }
-                            ]
-                          }
+                        "listingTitle": {
+                          "type": "string",
+                          "example": "iPhone 15 Pro"
+                        },
+                        "coverImageId": {
+                          "type": "integer",
+                          "nullable": true,
+                          "example": 42
                         }
                       }
                     }
@@ -2566,18 +2553,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "404": {
-            "description": "Order not found",
+            "description": "Order not found, or not one the caller is party to",
             "content": {
               "application/json": {
                 "schema": {
@@ -2603,7 +2580,7 @@
           "Orders"
         ],
         "summary": "Update order status",
-        "description": "Updates the status of an order.\n- **Admin**: can change to any status.\n- **Seller**: can only approve/reject pending orders that contain their listings.\nWhen a seller approves, their listings in the order are marked as \"sold\".\n",
+        "description": "Moves an order through the lifecycle. Which transitions are available depends on\nthe caller's relationship to this order, not on their role:\n- **Buyer**: cancel (from pending, confirmed or shipped); mark received (from shipped).\n- **Seller**: confirm or decline (from pending); mark shipped (from confirmed); cancel (from confirmed or shipped).\n- **Admin**: any legal transition.\n\nConfirming marks the listing sold. Declining, cancelling or expiring returns it\nto browse. Anyone who is not a party to the order receives 404, not 403.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2634,14 +2611,14 @@
                     "type": "string",
                     "enum": [
                       "pending",
-                      "paid",
+                      "confirmed",
                       "shipped",
                       "completed",
                       "cancelled",
-                      "approved",
-                      "rejected"
+                      "declined",
+                      "expired"
                     ],
-                    "example": "approved"
+                    "example": "confirmed"
                   }
                 }
               }
@@ -2660,7 +2637,7 @@
             }
           },
           "400": {
-            "description": "Validation error or invalid status transition",
+            "description": "Validation error or illegal transition for this caller",
             "content": {
               "application/json": {
                 "schema": {
@@ -2679,8 +2656,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden",
+          "404": {
+            "description": "Order not found, or not one the caller is party to",
             "content": {
               "application/json": {
                 "schema": {
@@ -2689,8 +2666,8 @@
               }
             }
           },
-          "404": {
-            "description": "Order not found",
+          "409": {
+            "description": "Another party moved the order first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2716,7 +2693,7 @@
           "Orders"
         ],
         "summary": "Delete an order",
-        "description": "Permanently removes an order and its items. Admin only.",
+        "description": "Permanently removes an order. Admin only. A deleted pending order no longer\nholds its listing, so the listing is returned to browse in the same transaction.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2798,8 +2775,8 @@
         "tags": [
           "Orders"
         ],
-        "summary": "List orders",
-        "description": "Buyers see only their own orders. Admins see all orders.\nResults are sorted by creation date (newest first).\n",
+        "summary": "List the caller's purchases",
+        "description": "What the caller bought, whatever role they hold — a seller's own purchases appear\nhere, their sales appear in `/api/orders/seller`. Admins see every order.\nSorted newest first.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2829,16 +2806,6 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -2855,8 +2822,8 @@
         "tags": [
           "Orders"
         ],
-        "summary": "Create an order",
-        "description": "Creates a new order from one or more active listings.\nOnly buyers can place orders. Total is calculated server-side.\n",
+        "summary": "Reserve a listing",
+        "description": "Claims the listing for the caller and creates a pending order priced from the\nlisting row. The listing becomes `reserved` and the seller has 48 hours to\nconfirm or decline before the reservation lapses.\n\nAnyone signed in may buy, including sellers — but not their own listing.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2869,30 +2836,12 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "items"
+                  "listingId"
                 ],
                 "properties": {
-                  "items": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                      "type": "object",
-                      "required": [
-                        "listingId"
-                      ],
-                      "properties": {
-                        "listingId": {
-                          "type": "integer",
-                          "example": 5
-                        },
-                        "quantity": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "default": 1,
-                          "example": 1
-                        }
-                      }
-                    }
+                  "listingId": {
+                    "type": "integer",
+                    "example": 5
                   }
                 }
               }
@@ -2901,26 +2850,11 @@
         },
         "responses": {
           "201": {
-            "description": "Order created",
+            "description": "Order created and listing reserved",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Order"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/OrderItem"
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/Order"
                 }
               }
             }
@@ -2946,7 +2880,7 @@
             }
           },
           "403": {
-            "description": "Not a buyer",
+            "description": "The caller is the listing's seller",
             "content": {
               "application/json": {
                 "schema": {
@@ -2956,7 +2890,17 @@
             }
           },
           "404": {
-            "description": "Listing not found or not active",
+            "description": "No such listing, or it is not currently purchasable (draft or removed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another buyer reserved it first",
             "content": {
               "application/json": {
                 "schema": {
@@ -2984,7 +2928,7 @@
           "Orders"
         ],
         "summary": "List seller's incoming orders",
-        "description": "Returns orders that contain at least one item from the authenticated seller's\nlistings. Each order includes only the items belonging to the seller, plus\nthe buyer's name and email. Requires seller or admin role.\n",
+        "description": "Returns every order whose `seller_id` is the authenticated seller — the seller\ncaptured at order time, not the listing's current owner. Requires seller or\nadmin role.\n",
         "security": [
           {
             "bearerAuth": []
@@ -3006,48 +2950,42 @@
                       "buyerId": {
                         "type": "integer"
                       },
+                      "sellerId": {
+                        "type": "integer"
+                      },
                       "buyerName": {
                         "type": "string"
                       },
                       "buyerEmail": {
                         "type": "string"
                       },
-                      "totalPrice": {
+                      "listingId": {
+                        "type": "integer"
+                      },
+                      "listingTitle": {
+                        "type": "string"
+                      },
+                      "coverImageId": {
+                        "type": "integer",
+                        "nullable": true
+                      },
+                      "price": {
                         "type": "string"
                       },
                       "status": {
                         "type": "string"
                       },
+                      "expiresAt": {
+                        "type": "string",
+                        "format": "date-time"
+                      },
                       "createdAt": {
                         "type": "string",
                         "format": "date-time"
                       },
-                      "items": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "integer"
-                            },
-                            "listingId": {
-                              "type": "integer"
-                            },
-                            "listingTitle": {
-                              "type": "string"
-                            },
-                            "coverImageId": {
-                              "type": "integer",
-                              "nullable": true
-                            },
-                            "quantity": {
-                              "type": "integer"
-                            },
-                            "price": {
-                              "type": "string"
-                            }
-                          }
-                        }
+                      "updatedAt": {
+                        "type": "string",
+                        "format": "date-time"
                       }
                     }
                   }
