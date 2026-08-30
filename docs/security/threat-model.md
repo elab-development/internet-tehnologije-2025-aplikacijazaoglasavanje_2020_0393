@@ -181,6 +181,33 @@ Status codes, messages, or response timing reveal what exists or who has an acco
 stranger cannot read the status"; `oauth-only.integration.test.ts` "takes comparable time
 to a real password check, so timing reveals nothing".
 
+### T10 — Malicious file upload
+
+`POST /api/listings/{id}/images` is a new trust boundary Part 2 introduces: untrusted
+bytes from the browser cross into a filesystem (or object store). A crafted file could
+try to masquerade as an image to reach a decoder vulnerability, smuggle a polyglot payload
+that renders as something else when served back, exhaust memory by claiming a small
+compressed size but an enormous decoded one, or carry EXIF data — including GPS
+coordinates a phone camera attaches — straight through to other users.
+
+**Mitigation.** Type is decided by **magic bytes**, never the multipart `Content-Type`
+header or filename — both are attacker-controlled and worth nothing. Every accepted file
+is unconditionally re-encoded to WebP with `sharp`: a decode-then-encode cycle cannot
+carry a polyglot through, and re-encoding drops EXIF as a side effect, including GPS.
+`sharp`'s `limitInputPixels` bounds the *decoded* size separately from the *compressed*
+size checks, since a small file can still decode to hundreds of megapixels. Storage keys
+are server-generated random hex — the client's filename never reaches a path join — and
+every driver validates a key against `isValidStorageKey` before touching its backing
+store, so a key that somehow reached the database through a future bug still cannot
+escape the storage root. `src/lib/image-type.ts`, `src/app/api/listings/[id]/images/route.ts`,
+`src/lib/storage.ts`.
+
+**Proof.** `image-type.test.ts` (magic-byte sniffing, including the GIF-decodes-fine-but-
+rejected case); `[id]/images/route.integration.test.ts` "rejects a file whose bytes are
+not an image, whatever it claims", "refuses a GIF, which decodes fine but is outside the
+accepted list", and "never lets the client's filename reach the storage key";
+`storage.test.ts` and `storage-contract.test.ts` for `isValidStorageKey`.
+
 ## 4. Known limitations
 
 | Limitation | Status |

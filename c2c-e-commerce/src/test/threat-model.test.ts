@@ -29,9 +29,10 @@ describe("C2C-SEC-12 AC1 — every threat names a mitigation", () => {
     "Brute force",
     "OAuth `state` and PKCE replay",
     "Information disclosure",
+    "Malicious file upload",
   ];
 
-  it("covers all nine", () => {
+  it("covers all ten", () => {
     for (const threat of THREATS) {
       expect(threatModel, threat).toContain(threat);
     }

@@ -33,6 +33,12 @@ resource is **private to one user**.
 - **Not applied** to listings. A listing is a public object — confirming one exists
   discloses nothing that `GET /api/listings` does not already publish, and a 403 there is
   the more useful answer for the seller who mistyped an id.
+- **Applied to `GET /api/images/{id}`, which looks like an exception to the listing rule
+  above but isn't.** A `draft` or `removed` listing is *not* public — that is the whole
+  point of those statuses — so an image id that resolves only for a non-published listing
+  is itself information a stranger should not get from a 403. The route answers 404,
+  byte-identical to a genuinely unknown image id, for both "doesn't exist" and "exists
+  but its listing isn't published to you."
 
 ### Authorisation is decided before state
 
@@ -63,6 +69,10 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/listings` | POST | required | ✗ | ✓ | ✓ | `sellerId` is taken from the token, never the body |
 | `/api/listings/{id}` | GET | optional | ✓ | ✓ | ✓ | Non-active rows visible to the owner or an admin |
 | `/api/listings/{id}` | PUT · DELETE | required | ✗ | owner | ✓ | `canMutateListing` |
+| `/api/listings/{id}/images` | POST | required | ✗ | owner | ✓ | `canMutateListing`; magic-byte sniffed, re-encoded, rate limited |
+| `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
+| `/api/listings/{id}/images/{imageId}` | DELETE | required | ✗ | owner | ✓ | `canMutateListing`; row deleted, then the object, best-effort |
+| `/api/images/{id}` | GET | optional | ✓ | ✓ | ✓ | Public for a published listing (`active`/`sold`); owner or admin otherwise → **404**, not 403 (see below) |
 | `/api/listings/{id}/reviews` | GET | — | ✓ | ✓ | ✓ | — |
 | `/api/listings/{id}/reviews` | POST | required | ✓ | ✗ | ✗ | Must have a completed purchase of the listing |
 | `/api/listings/{id}/similar` | GET | — | ✓ | ✓ | ✓ | Embeddings never leave the server |
