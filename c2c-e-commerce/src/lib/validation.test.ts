@@ -497,6 +497,9 @@ describe("Part 1 — category tree fields", () => {
     expect(
       CreateCategorySchema.safeParse({ name: "a", slug: "a", parentId: 0 }).success,
     ).toBe(false);
+    expect(
+      CreateCategorySchema.safeParse({ name: "a", slug: "a", parentId: -1 }).success,
+    ).toBe(false);
   });
 
   it("accepts sortOrder on update", () => {
