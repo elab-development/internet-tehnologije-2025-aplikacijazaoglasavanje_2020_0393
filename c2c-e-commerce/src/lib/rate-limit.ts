@@ -204,3 +204,12 @@ export const LINK_RATE_LIMIT: RateLimitOptions = {
   limit: 10,
   windowMs: 15 * 60 * 1000,
 };
+
+/**
+ * Uploads are expensive: a 5 MB decode and re-encode each. Looser than login, far tighter
+ * than a read endpoint.
+ */
+export const IMAGE_UPLOAD_RATE_LIMIT: RateLimitOptions = {
+  limit: 30,
+  windowMs: 60 * 60 * 1000,
+};

@@ -1255,6 +1255,141 @@
         }
       }
     },
+    "/api/listings/{id}/images/{imageId}": {
+      "delete": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Remove a photo from a listing",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "imageId",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "403": {
+            "description": "Not the listing's owner"
+          },
+          "404": {
+            "description": "Listing or image not found"
+          }
+        }
+      }
+    },
+    "/api/listings/{id}/images": {
+      "post": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Upload a photo to a listing",
+        "description": "Multipart upload of a single `file`. The type is decided from the file's magic bytes, never its declared Content-Type or filename, and the image is re-encoded to WebP — which also strips EXIF, including any GPS coordinates. Owner or admin only. At most 8 images per listing, 5 MB each.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The stored image"
+          },
+          "400": {
+            "description": "Not a JPEG",
+            "PNG or WebP": null
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "403": {
+            "description": "Not the listing's owner"
+          },
+          "404": {
+            "description": "Listing not found"
+          },
+          "409": {
+            "description": "Image limit reached"
+          },
+          "413": {
+            "description": "File too large"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Reorder a listing's photos",
+        "description": "Body `{ order: number[] }` — image ids in their new order. Owner or admin.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reordered"
+          },
+          "400": {
+            "description": "Invalid body"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "403": {
+            "description": "Not the listing's owner"
+          },
+          "404": {
+            "description": "Listing not found"
+          }
+        }
+      }
+    },
     "/api/listings/{id}/reviews": {
       "get": {
         "tags": [
