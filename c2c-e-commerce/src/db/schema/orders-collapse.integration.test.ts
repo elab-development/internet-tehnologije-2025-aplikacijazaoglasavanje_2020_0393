@@ -8,7 +8,9 @@
  *
  * It is the only test in the suite that starts a second container. That cost buys the
  * one thing an irreversible data migration needs and nothing else provides: evidence it
- * preserves what it claims to preserve.
+ * preserves what it claims to preserve — and, at the end of the file, evidence that it
+ * refuses to run at all on the one row shape it cannot preserve. That last case gets a
+ * second *database* inside the same container, not a second container.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
@@ -32,8 +34,16 @@ function migrationFiles(): string[] {
 }
 
 /**
- * Applies one migration file the way Drizzle's migrator does: split on the breakpoint
- * marker, run every statement inside a single transaction.
+ * Applies one migration file: split on the breakpoint marker, run every statement inside
+ * a single transaction.
+ *
+ * NOT what Drizzle's migrator does, and the difference matters. The real migrator wraps
+ * *all* pending migrations in one transaction; this gives each file its own. That is
+ * precisely why this test passed while the real migrator hit Postgres 55P04 ("new enum
+ * values must be committed before they can be used") during Task 2 — 0014 added the enum
+ * value and 0015 wrote it, which is legal across two transactions and illegal inside
+ * one. Nothing here certifies cross-file transaction behaviour; only a real
+ * `drizzle-kit`/migrator run does.
  */
 async function apply(client: Client, file: string): Promise<void> {
   const contents = readFileSync(path.join(MIGRATIONS, file), "utf8");
@@ -80,10 +90,12 @@ beforeAll(async () => {
   `);
   await client.query(`
     INSERT INTO listings (title, description, price, status, seller_id, category_id) VALUES
-      ('Road bike',  'Fast',  '500.00', 'active', 1, 1),
-      ('Track pump', 'Solid', ' 30.00', 'active', 1, 1),
-      ('Helmet',     'Safe',  ' 45.00', 'active', 2, 1),
-      ('Pannier',    'Roomy', ' 60.00', 'active', 2, 1)
+      ('Road bike',  'Fast',   '500.00', 'active', 1, 1),
+      ('Track pump', 'Solid',  ' 30.00', 'active', 1, 1),
+      ('Helmet',     'Safe',   ' 45.00', 'active', 2, 1),
+      ('Pannier',    'Roomy',  ' 60.00', 'active', 2, 1),
+      ('Turbo',      'Loud',   '200.00', 'active', 1, 1),
+      ('Wheelset',   'Light',  '400.00', 'active', 2, 1)
   `);
 
   // A single-line order in the old `approved` state.
@@ -120,7 +132,38 @@ beforeAll(async () => {
     INSERT INTO orders (id, buyer_id, total_price, status, created_at)
     VALUES (4, 3, '0.00', 'cancelled', now() - interval '90 days')
   `);
-  await client.query(`SELECT setval('orders_id_seq', 4)`);
+  // ── The old double-sell's residue ───────────────────────────────────────────
+  // A listing became `sold` only when its *seller* approved the order; an admin approval
+  // left it `active`, so a second buyer could claim the same object. Both shapes below
+  // are what that produced, and 0015 has to settle them or the new code inherits two
+  // live orders on one listing.
+
+  // Listing 5: approved (an admin's), plus the pending order that shadow claim produced.
+  await client.query(`
+    INSERT INTO orders (id, buyer_id, total_price, status, created_at) VALUES
+      (5, 3, '200.00', 'approved', now() - interval '3 days'),
+      (6, 3, '200.00', 'pending',  now() - interval '2 hours')
+  `);
+  await client.query(`
+    INSERT INTO order_items (order_id, listing_id, price, quantity) VALUES
+      (5, 5, '200.00', 1),
+      (6, 5, '200.00', 1)
+  `);
+
+  // Listing 6: two pending orders, neither decided. The earliest claim is the one the
+  // new reservation path would have kept.
+  await client.query(`
+    INSERT INTO orders (id, buyer_id, total_price, status, created_at) VALUES
+      (7, 3, '400.00', 'pending', now() - interval '3 hours'),
+      (8, 3, '400.00', 'pending', now() - interval '1 hour')
+  `);
+  await client.query(`
+    INSERT INTO order_items (order_id, listing_id, price, quantity) VALUES
+      (7, 6, '400.00', 1),
+      (8, 6, '400.00', 1)
+  `);
+
+  await client.query(`SELECT setval('orders_id_seq', 8)`);
 
   await apply(client, COLLAPSE);
 }, 180_000);
@@ -230,9 +273,79 @@ describe("0015 — the listing backfill", () => {
     expect(rows[0].status).toBe("reserved");
   });
 
-  it("leaves a listing whose orders are all settled alone", async () => {
+  it("sells a listing whose order was approved, whoever recorded the approval", async () => {
+    // Order 1 arrives here as `confirmed`, and confirmed is not settled: the seller
+    // agreed to the sale. The old handler only sold the listing when a *seller* clicked
+    // approve, so an admin's approval left this row `active` and buyable — which is the
+    // state a new buyer could claim out from under a sale that had already happened.
     const { rows } = await client.query(`SELECT status FROM listings WHERE id = 1`);
-    expect(rows[0].status).toBe("active");
+    expect(rows[0].status).toBe("sold");
+  });
+
+  it("sells both listings of a split order that had been approved", async () => {
+    const { rows } = await client.query(
+      `SELECT id, status FROM listings WHERE id IN (2, 3) ORDER BY id`,
+    );
+    expect(rows.map((r) => r.status)).toEqual(["sold", "sold"]);
+  });
+});
+
+describe("0015 — settling the old double-sell", () => {
+  it("expires a pending order left over beside a confirmed one", async () => {
+    // Listing 5's sale already happened. The pending order is the residue of the second
+    // claim the old bug allowed, and declining it would have un-sold the real sale.
+    const { rows } = await client.query(`SELECT status FROM orders WHERE id = 6`);
+    expect(rows[0].status).toBe("expired");
+  });
+
+  it("sells the listing that pending order was shadowing", async () => {
+    const { rows } = await client.query(`SELECT status FROM listings WHERE id = 5`);
+    expect(rows[0].status).toBe("sold");
+  });
+
+  it("keeps the earliest of two pending orders and expires the rest", async () => {
+    const { rows } = await client.query(
+      `SELECT id, status FROM orders WHERE id IN (7, 8) ORDER BY id`,
+    );
+    expect(rows).toEqual([
+      { id: 7, status: "pending" },
+      { id: 8, status: "expired" },
+    ]);
+  });
+
+  it("reserves the listing for the pending order it kept", async () => {
+    const { rows } = await client.query(`SELECT status FROM listings WHERE id = 6`);
+    expect(rows[0].status).toBe("reserved");
+  });
+
+  it("leaves at most one live order per listing", async () => {
+    const { rows } = await client.query(`
+      SELECT listing_id, count(*)::int AS n
+        FROM orders
+       WHERE status IN ('pending', 'confirmed', 'shipped')
+       GROUP BY listing_id
+      HAVING count(*) > 1
+    `);
+
+    expect(rows).toEqual([]);
+  });
+
+  it("makes that invariant structural, not a one-off cleanup", async () => {
+    // Without the index the next duplicate arrives by some other route and nothing says
+    // so. With it, the database refuses.
+    const { rows } = await client.query(`
+      SELECT indexdef FROM pg_indexes WHERE indexname = 'orders_one_live_per_listing_idx'
+    `);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].indexdef).toContain("UNIQUE");
+
+    await expect(
+      client.query(`
+        INSERT INTO orders (buyer_id, seller_id, listing_id, price, status, expires_at)
+        VALUES (3, 2, 6, '400.00', 'pending', now() + interval '48 hours')
+      `),
+    ).rejects.toThrow(/orders_one_live_per_listing_idx/);
   });
 });
 
@@ -250,5 +363,77 @@ describe("0015 — what it deliberately leaves for 0016", () => {
        WHERE table_name = 'orders' AND column_name = 'total_price'
     `);
     expect(rows[0].is_nullable).toBe("YES");
+  });
+});
+
+/**
+ * The one shape 0015 refuses to migrate.
+ *
+ * Every line becomes an order priced at that line's *unit* price, so `quantity = 3`
+ * would silently become an order worth a third of what was owed — and 0016 drops
+ * `total_price`, the only column that still held the real figure. The guard aborts
+ * instead of losing a number nobody can reconstruct.
+ *
+ * Its own database inside the same container rather than its own container: the fixture
+ * has to be one 0015 has never touched, and starting a second Postgres to get that costs
+ * far more than a `CREATE DATABASE`.
+ */
+describe("0015 — the quantity guard", () => {
+  let guarded: Client;
+
+  beforeAll(async () => {
+    await client.query(`CREATE DATABASE "quantity_guard"`);
+
+    const uri = new URL(container.getConnectionUri());
+    uri.pathname = "/quantity_guard";
+    guarded = new Client({ connectionString: uri.toString() });
+    await guarded.connect();
+
+    for (const file of migrationFiles()) {
+      await apply(guarded, file);
+      if (file === RESERVED) break;
+    }
+
+    await guarded.query(`
+      INSERT INTO users (email, password_hash, name, role) VALUES
+        ('seller@example.test', 'x', 'Seller', 'seller'),
+        ('buyer@example.test',  'x', 'Buyer',  'buyer')
+    `);
+    await guarded.query(`
+      INSERT INTO categories (name, slug, path, depth) VALUES ('Bikes', 'bikes', '1', 0)
+    `);
+    await guarded.query(`
+      INSERT INTO listings (title, description, price, status, seller_id, category_id)
+      VALUES ('Inner tube', 'Spare', '6.00', 'active', 1, 1)
+    `);
+    await guarded.query(`
+      INSERT INTO orders (id, buyer_id, total_price, status, created_at)
+      VALUES (1, 2, '12.00', 'pending', now())
+    `);
+    // The row the collapse cannot represent: two of them, at 6.00 each.
+    await guarded.query(`
+      INSERT INTO order_items (order_id, listing_id, price, quantity) VALUES (1, 1, '6.00', 2)
+    `);
+  }, 180_000);
+
+  afterAll(async () => {
+    await guarded?.end().catch(() => {});
+  });
+
+  it("refuses to run rather than lose the quantity", async () => {
+    await expect(apply(guarded, COLLAPSE)).rejects.toThrow(
+      /cannot be collapsed losslessly/,
+    );
+  });
+
+  it("leaves the database as it found it, so the rows can be reconciled by hand", async () => {
+    // The file runs in one transaction, so the abort takes the new columns with it and
+    // the operator still has `order_items.quantity` to work from.
+    const { rows } = await guarded.query(`
+      SELECT count(*)::int AS n FROM information_schema.columns
+       WHERE table_name = 'orders' AND column_name = 'listing_id'
+    `);
+
+    expect(rows[0].n).toBe(0);
   });
 });

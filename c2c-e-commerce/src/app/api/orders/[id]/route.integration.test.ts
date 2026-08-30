@@ -215,6 +215,57 @@ describe("PUT /api/orders/[id] — the rest of the graph", () => {
   });
 });
 
+describe("PUT /api/orders/[id] — when the listing is no longer sellable", () => {
+  it("answers 409 and leaves the order pending when the listing has moved on", async () => {
+    // The listing is not `reserved` any more, so the sale cannot be applied to it. The
+    // order's own compare-and-set still succeeds — its status did not change under us —
+    // and committing that alone is how a confirmed order comes to own nothing.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const { listing, order } = await pendingOrder(seller, buyer);
+
+    const db = await getTestDb();
+    await db.update(listings).set({ status: "removed" }).where(eq(listings.id, listing.id));
+
+    const { status } = await transition(order.id, authHeaderFor(seller), "confirmed");
+
+    expect(status).toBe(409);
+    expect(await orderStatus(order.id)).toBe("pending");
+    expect(await listingStatus(listing.id)).toBe("removed");
+  });
+
+  it("still confirms the ordinary case", async () => {
+    // The guard above must refuse a listing that moved, not confirmation in general.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const { listing, order } = await pendingOrder(seller, buyer);
+
+    const { status } = await transition(order.id, authHeaderFor(seller), "confirmed");
+
+    expect(status).toBe(200);
+    expect(await orderStatus(order.id)).toBe("confirmed");
+    expect(await listingStatus(listing.id)).toBe("sold");
+  });
+
+  it("still cancels an order whose listing has moved on, rather than stranding it", async () => {
+    // The `active` direction is deliberately not guarded: releasing a listing that is
+    // already released is idempotent, and refusing the cancellation would leave the
+    // order in a status its buyer cannot leave.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const { listing, order } = await pendingOrder(seller, buyer);
+
+    const db = await getTestDb();
+    await db.update(listings).set({ status: "removed" }).where(eq(listings.id, listing.id));
+
+    const { status } = await transition(order.id, authHeaderFor(buyer), "cancelled");
+
+    expect(status).toBe(200);
+    expect(await orderStatus(order.id)).toBe("cancelled");
+    expect(await listingStatus(listing.id)).toBe("removed");
+  });
+});
+
 describe("PUT /api/orders/[id] — hiding existence", () => {
   it("answers 404, not 403, to a stranger", async () => {
     // A 403 would confirm the order exists, and order ids are sequential.

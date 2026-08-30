@@ -133,24 +133,35 @@ export async function claimListing(
  *
  * Both statements are conditional on the status they expect to find, so a listing its
  * seller has since withdrawn is not dragged back into browse by an order being settled.
+ *
+ * @returns how many listings changed — 0 or 1. The count is the whole point of the
+ * return: a conditional UPDATE that matches nothing is indistinguishable from one that
+ * succeeded unless the caller is told. `PUT /api/orders/[id]` checks it on the `sold`
+ * direction, where a no-op means the listing was not the caller's to sell and the order
+ * must not be confirmed against it. The `active` direction is genuinely idempotent, so
+ * its count is available but nothing has to read it.
  */
 export async function applyListingSideEffect(
   x: OrderExecutor,
   listingId: number,
   next: "active" | "sold",
-): Promise<void> {
+): Promise<number> {
   if (next === "sold") {
-    await x.execute(sql`
+    const result = await x.execute(sql`
       UPDATE "listings" SET "status" = 'sold'
        WHERE "id" = ${listingId} AND "status" = 'reserved'
+       RETURNING "id"
     `);
-    return;
+    return result.rows.length;
   }
 
-  await x.execute(sql`
+  const result = await x.execute(sql`
     UPDATE "listings" SET "status" = 'active'
      WHERE "id" = ${listingId} AND "status" IN ('reserved', 'sold')
+     RETURNING "id"
   `);
+
+  return result.rows.length;
 }
 
 /**

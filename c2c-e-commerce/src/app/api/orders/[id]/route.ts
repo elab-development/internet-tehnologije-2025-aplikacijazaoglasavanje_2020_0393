@@ -18,6 +18,16 @@ import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+/**
+ * Thrown inside the `PUT` transaction when the listing was not in the state the
+ * transition assumed, to roll the order's own status change back with it.
+ *
+ * A thrown error is the only way out of a Drizzle transaction that does not commit, and
+ * committing here is exactly how two confirmed orders come to own one object: the order
+ * moves, the listing does not, and nobody is told.
+ */
+class ListingNotSellableError extends Error {}
+
 
 // ─── GET /api/orders/[id] ─────────────────────────────────────────────────────
 // Either party to the order, or an admin.
@@ -188,7 +198,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Another party moved the order first
+ *         description: Another party moved the order first, or the listing is no longer available to sell
  *         content:
  *           application/json:
  *             schema:
@@ -228,18 +238,38 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     const nextListingStatus = listingStatusAfter(status);
 
-    const updated = await db.transaction(async (tx) => {
-      const row = await transitionOrder(tx, id, order.status, status);
-      if (!row) return null;
+    let updated;
+    try {
+      updated = await db.transaction(async (tx) => {
+        const row = await transitionOrder(tx, id, order.status, status);
+        if (!row) return null;
 
-      // Same transaction as the status change, per §5.3: an order that confirmed while
-      // its listing stayed reserved is the inconsistency this part exists to prevent.
-      if (nextListingStatus !== null) {
-        await applyListingSideEffect(tx, order.listingId, nextListingStatus);
+        // Same transaction as the status change, per §5.3: an order that confirmed while
+        // its listing stayed reserved is the inconsistency this part exists to prevent.
+        if (nextListingStatus !== null) {
+          const applied = await applyListingSideEffect(tx, order.listingId, nextListingStatus);
+
+          // Selling requires the listing to still be this order's to sell. If it is not
+          // — an admin removed it, or legacy data left it already `sold` under another
+          // order — the compare-and-set on the order succeeded against an assumption
+          // that turned out to be false, and the whole transition has to come back.
+          //
+          // Only this direction. Releasing a listing that is already released is
+          // idempotent, and rolling a cancellation back because the listing had moved on
+          // would strand the order in a status nobody can leave.
+          if (nextListingStatus === "sold" && applied === 0) {
+            throw new ListingNotSellableError();
+          }
+        }
+
+        return row;
+      });
+    } catch (err) {
+      if (err instanceof ListingNotSellableError) {
+        return jsonError("The listing is no longer available to sell", 409);
       }
-
-      return row;
-    });
+      throw err;
+    }
 
     // Matches `POST /api/orders`'s answer when someone else got there first. The caller
     // is already established as a party to this order, so a real message leaks nothing.

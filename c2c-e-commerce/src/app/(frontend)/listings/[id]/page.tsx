@@ -13,6 +13,7 @@ import {
   ErrorAlert,
   ListingDetailSkeleton,
   Modal,
+  StatusBadge,
 } from "@/components/ui";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
@@ -55,7 +56,14 @@ export default function ListingDetailPage() {
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;
 
-  const canReview = isAuthenticated && user?.role === "buyer";
+  // No role test. Sellers buy too — the same reasoning that made the purchase guard
+  // below compare ids rather than roles. Whether this person may review is decided by
+  // the server's completed-order query, which is the only place that can answer it.
+  const canReview = isAuthenticated;
+
+  // A `reserved` or `sold` listing is publicly readable, because the buyer's own order
+  // page links to it. Offering a stranger a Buy button on one only produces a 409.
+  const isForSale = listing?.status === "active";
 
   async function handleBuyNow() {
     if (!hasValidId || !listing) return;
@@ -153,8 +161,12 @@ export default function ListingDetailPage() {
 
           <CurrencySelect conversion={conversion} className="sm:max-w-xs" />
 
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
+          <div className="flex flex-wrap items-center gap-2 pt-2">
+            {isForSale ? (
+              <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
+            ) : (
+              <StatusBadge status={listing.status} kind="listing" size="md" />
+            )}
             {orderSuccessId && (
               <Button
                 variant="secondary"

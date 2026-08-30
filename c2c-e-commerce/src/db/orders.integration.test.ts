@@ -203,22 +203,23 @@ describe("claimListing", () => {
 });
 
 describe("applyListingSideEffect", () => {
-  it("sells a reserved listing", async () => {
+  it("sells a reserved listing, and says it changed one", async () => {
     const db = await getTestDb();
     const listing = await makeListing({ status: "reserved" });
 
-    await applyListingSideEffect(db, listing.id, "sold");
+    expect(await applyListingSideEffect(db, listing.id, "sold")).toBe(1);
 
     expect(await statusOf(listing.id)).toBe("sold");
   });
 
-  it("refuses to sell a listing that was never reserved", async () => {
+  it("refuses to sell a listing that was never reserved, and says it changed none", async () => {
     // Reaching `sold` without passing through `reserved` would mean an order confirmed a
-    // listing nobody had claimed.
+    // listing nobody had claimed. The count is how the caller finds out: a conditional
+    // UPDATE that matches nothing looks exactly like one that worked.
     const db = await getTestDb();
     const listing = await makeListing({ status: "active" });
 
-    await applyListingSideEffect(db, listing.id, "sold");
+    expect(await applyListingSideEffect(db, listing.id, "sold")).toBe(0);
 
     expect(await statusOf(listing.id)).toBe("active");
   });
@@ -246,8 +247,8 @@ describe("applyListingSideEffect", () => {
     const draft = await makeListing({ status: "draft" });
     const removed = await makeListing({ status: "removed" });
 
-    await applyListingSideEffect(db, draft.id, "active");
-    await applyListingSideEffect(db, removed.id, "active");
+    expect(await applyListingSideEffect(db, draft.id, "active")).toBe(0);
+    expect(await applyListingSideEffect(db, removed.id, "active")).toBe(0);
 
     expect(await statusOf(draft.id)).toBe("draft");
     expect(await statusOf(removed.id)).toBe("removed");

@@ -1,11 +1,13 @@
 /**
  * Part 3 spec §5.5 — the seller dashboard is a column filter now.
  */
+import { inArray } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
+import { orders } from "@/db/schema";
 import { authHeaderFor } from "@/test/auth";
-import { resetDb } from "@/test/db";
+import { getTestDb, resetDb } from "@/test/db";
 import { makeListing, makeOrder, makeUser } from "@/test/factories";
 
 beforeEach(async () => {
@@ -100,9 +102,21 @@ describe("GET /api/orders/seller", () => {
   it("sorts newest first, deterministically", async () => {
     // Two orders placed in the same millisecond share a `created_at`, so `id` breaks the
     // tie. Without it this assertion would pass or fail depending on the planner.
+    //
+    // The tie has to be forced. Two sequential factory calls get `created_at` values
+    // microseconds apart, which `created_at DESC` alone already orders correctly — so
+    // this case passed without exercising the tiebreak at all until the update below.
+    // `makeOrder` takes no `createdAt`, deliberately: nothing in production chooses one.
     const seller = await makeUser({ role: "seller" });
     const first = await makeOrder({ sellerId: seller.id });
     const second = await makeOrder({ sellerId: seller.id });
+
+    const db = await getTestDb();
+    const sameInstant = new Date("2026-08-30T12:00:00.000Z");
+    await db
+      .update(orders)
+      .set({ createdAt: sameInstant })
+      .where(inArray(orders.id, [first.id, second.id]));
 
     const { body } = await sales(authHeaderFor(seller));
 

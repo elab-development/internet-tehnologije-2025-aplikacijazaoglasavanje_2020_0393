@@ -68,7 +68,7 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/categories/{id}` | PUT · DELETE | required | ✗ | ✗ | ✓ | — |
 | `/api/listings` | GET | optional | ✓ | ✓ | ✓ | Anonymous and non-owners see `active` only; a seller sees their own `sold`/`removed`; admin sees all |
 | `/api/listings` | POST | required | ✗ | ✓ | ✓ | `sellerId` is taken from the token, never the body |
-| `/api/listings/{id}` | GET | optional | ✓ | ✓ | ✓ | Non-active rows visible to the owner or an admin |
+| `/api/listings/{id}` | GET | optional | ✓ | ✓ | ✓ | Published rows (`active`/`reserved`/`sold`) are public; `draft` and `removed` are owner-or-admin |
 | `/api/listings/{id}` | PUT · DELETE | required | ✗ | owner | ✓ | `canMutateListing`; a **409** on any status change while the listing is `reserved` |
 | `/api/listings/{id}/images` | POST | required | ✗ | owner | ✓ | `canMutateListing`; magic-byte sniffed, re-encoded, rate limited |
 | `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
@@ -111,3 +111,8 @@ Legend: **—** public · **✓** permitted · **✗** refused
   cascade above: intended, destructive, no soft delete, deferred.
 - **Rate limiting is per-instance**, not distributed. Documented in SEC-11 and in the
   thesis deployment chapter rather than glossed over.
+- **`POST /api/orders` is not rate limited, and nothing caps a buyer's concurrent
+  reservations.** Placing an order now moves the listing to `reserved`, which removes it
+  from browse for 48 hours; one self-registered account could therefore reserve the whole
+  catalogue and hold it. An abuse control was never in this part's scope and the shape it
+  should take — a limiter, a per-buyer cap, or both — is a product decision; deferred.

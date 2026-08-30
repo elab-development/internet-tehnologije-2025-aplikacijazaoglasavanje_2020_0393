@@ -34,7 +34,8 @@ type RouteContext = { params: Promise<{ id: string }> };
  *     summary: Get a listing by ID
  *     description: |
  *       Returns a single listing with seller and category names.
- *       Only active listings are visible publicly; the owner or admin can see any status.
+ *       Published listings (active, reserved or sold) are visible publicly; draft and
+ *       removed rows are visible only to the owner or an admin.
  *     parameters:
  *       - in: path
  *         name: id
