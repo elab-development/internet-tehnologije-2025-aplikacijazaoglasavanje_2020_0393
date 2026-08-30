@@ -148,14 +148,17 @@ function ListingsPageContent() {
             </label>
           </div>
 
-          <CategoryTreeFilter
-            categories={categories}
-            value={categoryId}
-            onChange={(id) => {
-              setCategoryId(id);
-              setPage(1);
-            }}
-          />
+          <div className="flex flex-col gap-1 lg:col-span-2">
+            <span className="text-sm font-medium text-zinc-700">Category</span>
+            <CategoryTreeFilter
+              categories={categories}
+              value={categoryId}
+              onChange={(id) => {
+                setCategoryId(id);
+                setPage(1);
+              }}
+            />
+          </div>
 
           <InputField
             label="Min price"
