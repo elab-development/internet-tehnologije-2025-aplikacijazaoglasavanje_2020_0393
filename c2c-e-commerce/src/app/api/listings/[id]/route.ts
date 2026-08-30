@@ -136,7 +136,11 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
     // Summaries, not rows — `storageKey` must not reach the client.
     const images = (await listImagesFor(listing.id)).map(toImageSummary);
 
-    return jsonOk({ ...listing, images });
+    return jsonOk({
+      ...listing,
+      coverImageId: images[0]?.id ?? null,
+      images,
+    });
   } catch (err) {
     console.error("[GET /api/listings/[id]]", err);
     return jsonError("Internal server error", 500);

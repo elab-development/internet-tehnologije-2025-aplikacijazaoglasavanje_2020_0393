@@ -99,4 +99,37 @@ describe("GET /api/listings/[id]", () => {
 
     expect((await response.json()).images).toEqual([]);
   });
+
+  it("carries coverImageId — the lowest sortOrder, same as images[0]", async () => {
+    const listing = await makeListing();
+    await makeListingImage({ listingId: listing.id, sortOrder: 1 });
+    const cover = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
+
+    const { GET } = await import("./[id]/route");
+    const response = await GET(
+      new NextRequest(`http://localhost/api/listings/${listing.id}`),
+      { params: Promise.resolve({ id: String(listing.id) }) },
+    );
+    const detail = (await response.json()) as {
+      coverImageId: number | null;
+      images: { id: number }[];
+    };
+
+    expect(detail.coverImageId).toBe(cover.id);
+    expect(detail.coverImageId).toBe(detail.images[0].id);
+  });
+
+  it("carries coverImageId: null for a listing with no images", async () => {
+    const listing = await makeListing();
+
+    const { GET } = await import("./[id]/route");
+    const response = await GET(
+      new NextRequest(`http://localhost/api/listings/${listing.id}`),
+      { params: Promise.resolve({ id: String(listing.id) }) },
+    );
+    const detail = (await response.json()) as { coverImageId: number | null; images: unknown[] };
+
+    expect(detail.coverImageId).toBeNull();
+    expect(detail.images).toEqual([]);
+  });
 });
