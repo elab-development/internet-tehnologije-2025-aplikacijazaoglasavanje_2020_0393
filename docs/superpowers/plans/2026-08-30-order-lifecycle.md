@@ -4201,6 +4201,9 @@ async function storedImageOn(listingId: number) {
 
 The provider generates the key, which is why the row is created second. The bytes are never decoded on the way out — `GET /api/images/{id}` serves what it stored — so they do not have to be a real WebP. Import `getStorageProvider` from `@/lib/storage`.
 
+The last describe in the same file:
+
+```ts
 describe("a reserved listing cannot be re-statused by its seller", () => {
   it("refuses the seller's status change with 409", async () => {
     const seller = await makeUser({ role: "seller" });
