@@ -119,5 +119,5 @@ export type SellerOrder = Order & {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-/** `GET /api/listings/[id]/reviews` — adds the joined reviewer name. */
+/** A review row as returned by the reviews API, with the joined reviewer name. */
 export type Review = Serialized<ReviewRow> & { reviewerName: string | null };

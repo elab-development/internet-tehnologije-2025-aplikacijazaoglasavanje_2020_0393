@@ -6,7 +6,6 @@ import toast from "react-hot-toast";
 import CategoryBreadcrumb from "@/components/categories/CategoryBreadcrumb";
 import CurrencySelect from "@/components/CurrencySelect";
 import ListingGallery from "@/components/listings/ListingGallery";
-import ListingReviews from "@/components/listings/ListingReviews";
 import SimilarListings from "@/components/listings/SimilarListings";
 import {
   Button,
@@ -23,7 +22,6 @@ import type {
   Category,
   CreatedOrder,
   ListingDetail,
-  Review,
 } from "@/types/api";
 
 export default function ListingDetailPage() {
@@ -41,9 +39,6 @@ export default function ListingDetailPage() {
   } = useFetch<ListingDetail>(hasValidId ? `/api/listings/${listingId}` : null);
 
   const { data: categoryData } = useFetch<Category[]>("/api/categories");
-  const { data: reviewData, refetch: refetchReviews } = useFetch<Review[]>(
-    hasValidId ? `/api/listings/${listingId}/reviews` : null,
-  );
 
   // Errors raised by an action on this page, as opposed to the initial load.
   // Kept separate so a failed purchase no longer replaces the whole listing.
@@ -55,11 +50,6 @@ export default function ListingDetailPage() {
 
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;
-
-  // No role test. Sellers buy too — the same reasoning that made the purchase guard
-  // below compare ids rather than roles. Whether this person may review is decided by
-  // the server's completed-order query, which is the only place that can answer it.
-  const canReview = isAuthenticated;
 
   // A `reserved` or `sold` listing is publicly readable, because the buyer's own order
   // page links to it. Offering a stranger a Buy button on one only produces a 409.
@@ -178,13 +168,6 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </section>
-
-      <ListingReviews
-        listingId={listingId}
-        reviews={reviewData ?? []}
-        canReview={canReview}
-        onReviewCreated={refetchReviews}
-      />
 
       {/* Renders nothing when there is nothing to recommend, so no empty heading is left
           behind on a listing with no neighbours (AI-9 AC9). */}
