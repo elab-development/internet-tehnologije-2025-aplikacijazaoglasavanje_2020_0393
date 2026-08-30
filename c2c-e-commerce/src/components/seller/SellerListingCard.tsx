@@ -55,6 +55,11 @@ export default function SellerListingCard({
       badge={listing.status}
       description={description}
       onClick={onOpen}
+      // The seller dashboard shows removed (and, once drafts are visible here, draft)
+      // listings, whose images 404 through next/image's cookie-less optimizer fetch —
+      // see Card's `unoptimized` doc. The bytes are already sharp-produced WebP capped
+      // at 4000px and served same-origin, so the optimizer has little left to add here.
+      unoptimized
       footer={
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">

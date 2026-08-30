@@ -10,6 +10,19 @@ export type CardProps = {
   onClick?: () => void;
   className?: string;
   badge?: string;
+  /**
+   * Skip `next/image`'s `/_next/image` optimizer and request `image` directly.
+   *
+   * The optimizer's internal fetch of a relative `src` sends no cookies — Next builds
+   * that request with only `url`, `method` and `socket` — so it hits `/api/images/{id}`
+   * anonymously. A `removed` or `draft` listing's image 404s for that request even to
+   * its owner, and `/_next/image` turns that into a 500 for a page (the seller
+   * dashboard) that legitimately shows non-active listings. Forwarding the cookie
+   * instead is not an option: the optimizer's on-disk cache is keyed by `(url, width,
+   * quality)` with no auth dimension, so a cached private image would be readable by
+   * anyone hitting the same optimized URL.
+   */
+  unoptimized?: boolean;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -22,6 +35,7 @@ export default function Card({
   onClick,
   className = "",
   badge,
+  unoptimized = false,
 }: CardProps) {
   const isClickable = typeof onClick === "function";
   
@@ -55,6 +69,7 @@ export default function Card({
             src={image}
             alt={title}
             fill
+            unoptimized={unoptimized}
             className="object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 400px"
           />
