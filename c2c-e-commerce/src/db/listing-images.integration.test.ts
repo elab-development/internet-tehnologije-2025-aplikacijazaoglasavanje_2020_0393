@@ -53,6 +53,17 @@ describe("countImagesFor / nextSortOrder", () => {
     expect(await countImagesFor(listing.id)).toBe(0);
     expect(await nextSortOrder(listing.id)).toBe(0);
   });
+
+  // `max(sort_order)` returns SQL NULL for zero rows and the number 0 for one row whose
+  // sortOrder really is 0 — two different reasons to see a falsy-looking value, and only
+  // one of them means "empty". Getting this wrong silently collides the cover image: a
+  // second upload landing at sortOrder 0 again, on top of the first.
+  it("returns 1 when the only image has sortOrder 0 — a real zero, not the no-rows NULL", async () => {
+    const listing = await makeListing();
+    await makeListingImage({ listingId: listing.id, sortOrder: 0 });
+
+    expect(await nextSortOrder(listing.id)).toBe(1);
+  });
 });
 
 describe("findImage / deleteImage", () => {
