@@ -1,7 +1,9 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
+import { findCategoryById } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { MAX_CATEGORY_DEPTH, childPath, depthOfPath } from "@/lib/categories";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, CreateCategorySchema } from "@/lib/validation";
 import { eq } from "drizzle-orm";
@@ -73,6 +75,15 @@ export async function GET() {
  *                 type: string
  *                 nullable: true
  *                 example: Gadgets & devices
+ *               parentId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Parent category. Omit or send null for a root.
+ *                 example: 3
+ *               sortOrder:
+ *                 type: integer
+ *                 description: Curated order among siblings.
+ *                 example: 0
  *     responses:
  *       201:
  *         description: Category created
@@ -119,7 +130,7 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, CreateCategorySchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, slug, description } = parsed.data;
+    const { name, slug, description, parentId, sortOrder } = parsed.data;
 
     // check uniqueness
     const [existing] = await db
@@ -129,19 +140,42 @@ export async function POST(request: NextRequest) {
       .limit(1);
     if (existing) return jsonError("A category with that slug already exists", 409);
 
+    // `parentId` is nullable and optional; both null and undefined mean "a root" on
+    // create, and only an explicit id means otherwise.
+    let parentPath: string | null = null;
+    if (parentId !== undefined && parentId !== null) {
+      const parent = await findCategoryById(parentId);
+      if (!parent) return jsonError("Parent category not found", 400);
+
+      if (parent.depth + 1 > MAX_CATEGORY_DEPTH - 1) {
+        return jsonError(
+          `Categories may be nested at most ${MAX_CATEGORY_DEPTH} levels deep`,
+          400,
+        );
+      }
+      parentPath = parent.path;
+    }
+
     // path is NOT NULL and derived from the row's own id, so it cannot be known before
-    // the insert. Every category created through this route is a root for now — Task 4
-    // adds parentId — so the path is just the id, set in a follow-up update inside the
-    // same transaction as the insert.
+    // the insert. It is set in a follow-up update inside the same transaction as the
+    // insert: a row with an empty path would be invisible to every descendant query.
     const created = await db.transaction(async (tx) => {
       const [inserted] = await tx
         .insert(categories)
-        .values({ name, slug, description: description ?? null, path: "" })
+        .values({
+          name,
+          slug,
+          description: description ?? null,
+          parentId: parentId ?? null,
+          path: "",
+          depth: parentPath === null ? 0 : depthOfPath(parentPath) + 1,
+          sortOrder: sortOrder ?? 0,
+        })
         .returning();
 
       const [withPath] = await tx
         .update(categories)
-        .set({ path: String(inserted.id) })
+        .set({ path: childPath(parentPath, inserted.id) })
         .where(eq(categories.id, inserted.id))
         .returning();
 

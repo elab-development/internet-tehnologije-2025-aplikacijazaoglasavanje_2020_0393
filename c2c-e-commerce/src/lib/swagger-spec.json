@@ -1159,6 +1159,17 @@
                     "type": "string",
                     "nullable": true,
                     "example": "Gadgets & devices"
+                  },
+                  "parentId": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Parent category. Omit or send null for a root.",
+                    "example": 3
+                  },
+                  "sortOrder": {
+                    "type": "integer",
+                    "description": "Curated order among siblings.",
+                    "example": 0
                   }
                 }
               }

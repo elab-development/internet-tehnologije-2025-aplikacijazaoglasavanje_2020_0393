@@ -76,7 +76,14 @@ const swaggerDefinition: swaggerJsdoc.Options["swaggerDefinition"] = {
           name: { type: "string", example: "Electronics" },
           slug: { type: "string", example: "electronics" },
           description: { type: "string", nullable: true, example: "Gadgets & devices" },
-          createdAt: { type: "string", format: "date-time" },
+          parentId: { type: "integer", nullable: true, example: null },
+          path: {
+            type: "string",
+            description: "Dot-separated ancestor ids, including this category.",
+            example: "1.7.12",
+          },
+          depth: { type: "integer", description: "0 for a root category.", example: 0 },
+          sortOrder: { type: "integer", example: 0 },
         },
       },
 
