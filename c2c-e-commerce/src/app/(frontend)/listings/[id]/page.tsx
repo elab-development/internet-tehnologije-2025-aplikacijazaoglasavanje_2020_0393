@@ -142,6 +142,7 @@ export default function ListingDetailPage() {
           <CategoryBreadcrumb
             categories={categoryData ?? []}
             categoryId={listing.categoryId}
+            fallbackName={listing.categoryName}
           />
           <h1 className="text-2xl font-bold text-zinc-900">{listing.title}</h1>
           <p className="text-zinc-600">{listing.description}</p>

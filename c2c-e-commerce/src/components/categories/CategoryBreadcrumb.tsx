@@ -6,6 +6,13 @@ import type { Category } from "@/types/api";
 export type CategoryBreadcrumbProps = {
   categories: Category[];
   categoryId: number | null;
+  /**
+   * The listing's own category name, as already returned by the listing detail API's
+   * join — a fallback for while `categories` has not arrived yet (or failed), so a
+   * categorised listing does not read as "Uncategorized" just because a second, unrelated
+   * fetch is slow.
+   */
+  fallbackName?: string | null;
 };
 
 /**
@@ -17,12 +24,18 @@ export type CategoryBreadcrumbProps = {
 export default function CategoryBreadcrumb({
   categories,
   categoryId,
+  fallbackName,
 }: CategoryBreadcrumbProps) {
   const chain = categoryId === null ? [] : ancestorChain(categories, categoryId);
 
-  // Either the listing has no category, or the category list has not arrived yet. Both
-  // render the same thing rather than an empty gap.
+  // Either the listing has no category, or the category list has not arrived yet (or
+  // failed). The fallback name — already on the listing from the API's join — tells the
+  // two apart: a name to show means the listing does have a category, just not a chain we
+  // can render links for yet.
   if (chain.length === 0) {
+    if (fallbackName) {
+      return <span className="text-sm text-zinc-700">{fallbackName}</span>;
+    }
     return <span className="text-sm text-zinc-500">Uncategorized</span>;
   }
 
