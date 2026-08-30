@@ -4,7 +4,7 @@ import { and, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-
 
 import { db } from "@/db";
 import { coverImageIdsFor } from "@/db/listing-images";
-import { listings, orderItems, orders, reviews } from "@/db/schema";
+import { listings, orders, reviews } from "@/db/schema";
 import {
   buildTasteVector,
   MAX_INTERACTIONS,
@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai/taste-vector";
 import { listingColumns } from "@/lib/listings-query";
 import { authenticate, AuthError } from "@/lib/middleware";
+import type { OrderStatus } from "@/lib/order-lifecycle";
 import { jsonError, jsonOk } from "@/lib/response";
 
 /** An interaction with the date the cap sorts on. `at` is why both arms select it. */
@@ -87,10 +88,14 @@ export async function GET(request: NextRequest) {
     // but 50 interactions would otherwise be 50 round trips.
     const [orderedRows, reviewedRows] = await Promise.all([
       db
-        .select({ id: listings.id, embedding: listings.embedding, at: orders.createdAt })
-        .from(orderItems)
-        .innerJoin(orders, eq(orderItems.orderId, orders.id))
-        .innerJoin(listings, eq(orderItems.listingId, listings.id))
+        .select({
+          id: listings.id,
+          embedding: listings.embedding,
+          at: orders.createdAt,
+          status: orders.status,
+        })
+        .from(orders)
+        .innerJoin(listings, eq(orders.listingId, listings.id))
         .where(eq(orders.buyerId, userId))
         .orderBy(desc(orders.createdAt))
         .limit(MAX_INTERACTIONS),
@@ -129,9 +134,14 @@ export async function GET(request: NextRequest) {
 
     const taste = buildTasteVector(interactions);
 
-    // Excluded from results because the user owns them already. Reviewing is NOT owning —
-    // a user may well want a second one — so reviewed listings stay in the pool.
-    const ownedIds = orderedRows.map((row) => row.id);
+    // Excluded from results because the user has them or has a claim on them. A declined,
+    // cancelled or expired order is the opposite: the listing went back into browse and
+    // this buyer is exactly the person who wanted it. Reviewing is NOT owning either — a
+    // user may well want a second one — so reviewed listings stay in the pool.
+    const HOLDING: readonly OrderStatus[] = ["pending", "confirmed", "shipped", "completed"];
+    const ownedIds = orderedRows
+      .filter((row) => HOLDING.includes(row.status))
+      .map((row) => row.id);
 
     // Both arms share these: never their own listings (AC4), never anything unavailable.
     const base = [

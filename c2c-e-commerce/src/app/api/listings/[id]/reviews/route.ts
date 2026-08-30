@@ -1,9 +1,8 @@
 import { NextRequest } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { listings, orderItems, orders, reviews, users } from "@/db/schema";
-import { PURCHASED_ORDER_STATUSES } from "@/lib/review-eligibility";
-import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { listings, orders, reviews, users } from "@/db/schema";
+import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
 import { parseRequest, CreateReviewSchema } from "@/lib/validation";
@@ -95,7 +94,8 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
 }
 
 // ─── POST /api/listings/[id]/reviews ─────────────────────────────────────────
-// Authenticated. Role: buyer, and only for a listing they have purchased.
+// Authenticated. No role gate — sellers buy too (D5) — only for a listing this caller
+// has a `completed` order for.
 // Body: { rating: number (1-5); comment?: string }
 
 /**
@@ -105,9 +105,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *     tags: [Reviews]
  *     summary: Create a review for a listing
  *     description: |
- *       Adds a review to a listing. Only buyers can review.
- *       A user can only submit one review per listing, and only for a listing
- *       they have actually purchased.
+ *       Adds a review to a listing. Any authenticated user may review — sellers buy too —
+ *       provided they have a `completed` order for this listing.
+ *       A user can only submit one review per listing.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -155,8 +155,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *               $ref: '#/components/schemas/ErrorResponse'
  *       403:
  *         description: >
- *           Not a buyer, or the buyer has no completed order containing this
- *           listing (statuses confirmed, shipped or completed).
+ *           The caller has no completed order for this listing.
  *         content:
  *           application/json:
  *             schema:
@@ -182,8 +181,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  */
 export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
+    // No role gate: sellers buy too (D5). The eligibility query below is the real
+    // authorisation — it asks whether *this* caller received *this* listing.
     const payload = authenticate(request);
-    authorize("buyer")(payload);
 
     const listingId = parseResourceId((await params).id);
     if (!listingId) return jsonError("Invalid listing id", 400);
@@ -200,23 +200,23 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     const { rating, comment } = parsed.data;
 
-    // Only buyers who actually bought this listing may review it. Without this
-    // any buyer account could rate any listing it had never touched.
+    // Only a buyer who actually received this listing may review it. `completed` is the
+    // whole rule now — the hand-maintained list of "statuses that count as purchased" is
+    // gone, and with it the chance of the list and the graph disagreeing.
     const [purchase] = await db
-      .select({ orderId: orders.id })
-      .from(orderItems)
-      .innerJoin(orders, eq(orders.id, orderItems.orderId))
+      .select({ id: orders.id })
+      .from(orders)
       .where(
         and(
-          eq(orderItems.listingId, listingId),
+          eq(orders.listingId, listingId),
           eq(orders.buyerId, payload.sub),
-          inArray(orders.status, [...PURCHASED_ORDER_STATUSES])
-        )
+          eq(orders.status, "completed"),
+        ),
       )
       .limit(1);
 
     if (!purchase) {
-      return jsonError("You can only review a listing you have purchased", 403);
+      return jsonError("You can only review a listing you have received", 403);
     }
 
     // Prevent duplicate review for the same listing

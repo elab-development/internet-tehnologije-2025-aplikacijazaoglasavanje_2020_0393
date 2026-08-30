@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveListingVisibility } from "./listing-visibility";
+import { isPubliclyVisible, PUBLIC_LISTING_STATUSES, resolveListingVisibility } from "./listing-visibility";
 import type { TokenPayload } from "@/lib/auth";
 
 const anonymous = null;
@@ -120,5 +120,28 @@ describe("sellerId parsing", () => {
     // Guards against a `if (sellerId)` style regression, where 0 is falsy.
     const result = resolveListingVisibility("0", anonymous);
     expect(result.sellerFilter).toBe(0);
+  });
+});
+
+describe("isPubliclyVisible", () => {
+  it("publishes active, reserved and sold", () => {
+    // Reserved and sold listings were public while they were for sale. Un-publishing them
+    // the moment somebody buys would break the buyer's own order page and the seller's
+    // record of what they sold.
+    expect(isPubliclyVisible("active")).toBe(true);
+    expect(isPubliclyVisible("reserved")).toBe(true);
+    expect(isPubliclyVisible("sold")).toBe(true);
+  });
+
+  it("keeps drafts and removed listings private", () => {
+    // A draft was never published, and `removed` is the seller's decision to unpublish.
+    expect(isPubliclyVisible("draft")).toBe(false);
+    expect(isPubliclyVisible("removed")).toBe(false);
+  });
+
+  it("names every status exactly once", () => {
+    // The list and the enum have to move together: a status missing from both branches
+    // would default to whichever side the caller happened to write.
+    expect([...PUBLIC_LISTING_STATUSES].sort()).toEqual(["active", "reserved", "sold"]);
   });
 });

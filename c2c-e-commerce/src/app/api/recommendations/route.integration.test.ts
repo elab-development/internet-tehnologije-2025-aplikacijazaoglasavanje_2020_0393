@@ -206,6 +206,19 @@ describe("C2C-AI-10 — AC3/AC4: exclusions", () => {
     const { body } = await recommend(authHeaderFor(buyer), "limit=20");
     expect(body.data.map((r) => r.id)).toContain(reviewed.id);
   });
+
+  it("recommends a listing whose order was declined, because it is back in browse", async () => {
+    const buyer = await makeUser({ role: "buyer" });
+    const wanted = inCluster("cycling")[0];
+    await makeOrder({ buyerId: buyer.id, listingId: wanted.id, status: "completed" });
+    const declined = inCluster("cycling")[1];
+    await makeOrder({ buyerId: buyer.id, listingId: declined.id, status: "declined" });
+
+    const { body } = await recommend(authHeaderFor(buyer), "limit=20");
+
+    expect(body.data.map((r) => r.id)).toContain(declined.id);
+    expect(body.data.map((r) => r.id)).not.toContain(wanted.id);
+  });
 });
 
 describe("C2C-AI-10 — AC2/AC6: the cold start", () => {

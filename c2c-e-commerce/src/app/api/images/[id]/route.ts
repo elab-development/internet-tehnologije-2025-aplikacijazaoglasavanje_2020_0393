@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { findImageWithListing } from "@/db/listing-images";
 import { canMutateListing } from "@/lib/authorization";
+import { isPubliclyVisible } from "@/lib/listing-visibility";
 import { authenticate } from "@/lib/middleware";
 import { parseResourceId } from "@/lib/params";
 import { jsonError } from "@/lib/response";
@@ -55,12 +56,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       // Not authenticated — treat as public visitor.
     }
 
-    // `active` and `sold` are both legitimately published — a sold item's photo was
-    // already public while it was for sale, so a purchase must not un-publish it out
-    // from under the buyer's order history. `draft` and `removed` are private to the
-    // owner/admin. Same message and status as a missing row: the response must not
-    // reveal that the id exists.
-    const isPublished = status === "active" || status === "sold";
+    // `active`, `reserved` and `sold` are all legitimately published — a purchase must
+    // not un-publish a photo out from under the buyer's order history. `draft` and
+    // `removed` are private to the owner/admin. Same message and status as a missing
+    // row: the response must not reveal that the id exists.
+    const isPublished = isPubliclyVisible(status);
     if (!isPublished && !isOwnerOrAdmin) return jsonError("Image not found", 404);
 
     const object = await getStorageProvider().get(image.storageKey);

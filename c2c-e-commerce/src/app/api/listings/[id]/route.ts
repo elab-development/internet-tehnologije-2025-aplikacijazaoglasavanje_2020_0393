@@ -4,8 +4,9 @@ import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { isLeafCategory } from "@/db/categories";
 import { listImagesFor, toImageSummary } from "@/db/listing-images";
-import { canMutateListing } from "@/lib/authorization";
+import { canMutateListing, isAdmin } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { isPubliclyVisible } from "@/lib/listing-visibility";
 import { listingColumns } from "@/lib/listings-query";
 import {
   computeListingEmbedding,
@@ -125,12 +126,10 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       // Not authenticated – treat as public visitor
     }
 
-    // Only active listings are publicly visible
-    if (listing.status !== "active" && !isOwnerOrAdmin) {
-      return jsonError(
-        "Listing not found",
-        404 
-      );
+    // Published listings are readable by anyone; drafts and removed listings only by
+    // their owner or an admin. See PUBLIC_LISTING_STATUSES for why `sold` is public.
+    if (!isPubliclyVisible(listing.status) && !isOwnerOrAdmin) {
+      return jsonError("Listing not found", 404);
     }
 
     // Summaries, not rows — `storageKey` must not reach the client.
@@ -223,6 +222,12 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: The listing is reserved by a pending order
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -261,6 +266,16 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { title, description, price, categoryId, status } = parsed.data;
+
+    // A reservation the seller can dissolve by pressing Disable is not a reservation. The
+    // buyer's order is what clears this — decline it, cancel it, or let it lapse. Admins
+    // are unrestricted, as everywhere else.
+    if (listing.status === "reserved" && status !== undefined && !isAdmin(payload)) {
+      return jsonError(
+        "This listing is reserved by a pending order. Decline or cancel the order first.",
+        409,
+      );
+    }
 
     if (categoryId !== undefined && categoryId !== null) {
       if (!(await isLeafCategory(categoryId))) {
