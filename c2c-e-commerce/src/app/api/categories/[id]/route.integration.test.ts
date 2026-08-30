@@ -12,7 +12,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { categories } from "@/db/schema";
 import { signToken } from "@/lib/auth";
 import { getTestDb, resetDb } from "@/test/db";
-import { makeCategory, makeUser } from "@/test/factories";
+import { makeCategory, makeListing, makeUser } from "@/test/factories";
 
 let adminToken: string;
 
@@ -112,6 +112,21 @@ describe("PUT /api/categories/[id] — re-parenting", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: "Categories may be nested at most 3 levels deep",
     });
+  });
+
+  it("refuses to re-parent a category under one that holds a listing, with 409", async () => {
+    const clothing = await makeCategory({ slug: "clothing" });
+    await makeListing({ categoryId: clothing.id });
+    const electronics = await makeCategory({ slug: "electronics" });
+    const phones = await makeCategory({ slug: "phones", parentId: electronics.id });
+
+    const response = await updateCategory(phones.id, { parentId: clothing.id });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Move this category's listings before giving it subcategories",
+    });
+    expect((await row(phones.id)).parentId).toBe(electronics.id);
   });
 
   it("leaves the parent alone when parentId is omitted", async () => {

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
-import { findCategoryById } from "@/db/categories";
+import { findCategoryById, hasListings } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { MAX_CATEGORY_DEPTH, childPath, depthOfPath } from "@/lib/categories";
 import { jsonOk, jsonError } from "@/lib/response";
@@ -153,6 +153,16 @@ export async function POST(request: NextRequest) {
           400,
         );
       }
+
+      // A category with listings filed on it is a leaf by definition (D12). Giving it a
+      // child would strand those listings on a now-non-leaf node.
+      if (await hasListings(parentId)) {
+        return jsonError(
+          "Move this category's listings before giving it subcategories",
+          409,
+        );
+      }
+
       parentPath = parent.path;
     }
 

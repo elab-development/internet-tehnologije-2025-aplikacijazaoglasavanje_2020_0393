@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { signToken } from "@/lib/auth";
 import { resetDb } from "@/test/db";
-import { makeCategory, makeUser } from "@/test/factories";
+import { makeCategory, makeListing, makeUser } from "@/test/factories";
 
 let adminToken: string;
 
@@ -96,5 +96,33 @@ describe("POST /api/categories — tree placement", () => {
     const response = await createCategory({ name: "Electronics", slug: "electronics" });
 
     expect(response.status).toBe(409);
+  });
+
+  it("refuses to give a category-with-listings a child, with 409", async () => {
+    const electronics = await makeCategory({ slug: "electronics" });
+    await makeListing({ categoryId: electronics.id });
+
+    const response = await createCategory({
+      name: "Phones",
+      slug: "phones",
+      parentId: electronics.id,
+    });
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Move this category's listings before giving it subcategories",
+    });
+  });
+
+  it("still allows a child under a parent with no listings", async () => {
+    const electronics = await makeCategory({ slug: "electronics" });
+
+    const response = await createCategory({
+      name: "Phones",
+      slug: "phones",
+      parentId: electronics.id,
+    });
+
+    expect(response.status).toBe(201);
   });
 });

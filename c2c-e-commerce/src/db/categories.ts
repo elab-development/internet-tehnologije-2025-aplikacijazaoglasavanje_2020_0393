@@ -5,7 +5,7 @@
 import { eq, like, sql } from "drizzle-orm";
 
 import { db, type Database } from "./index";
-import { categories, type Category } from "./schema";
+import { categories, listings, type Category } from "./schema";
 
 /**
  * Either the pool-backed client or a transaction handle.
@@ -36,6 +36,23 @@ export async function hasChildren(id: number): Promise<boolean> {
     .limit(1);
 
   return child !== undefined;
+}
+
+/**
+ * Whether any listing is filed directly under `id`.
+ *
+ * Guards the other direction from `isLeafCategory`: giving a category-with-listings a
+ * child would leave those listings on a now-non-leaf node, which D12 forbids just as much
+ * as filing a new one there would.
+ */
+export async function hasListings(categoryId: number): Promise<boolean> {
+  const [listing] = await db
+    .select({ id: listings.id })
+    .from(listings)
+    .where(eq(listings.categoryId, categoryId))
+    .limit(1);
+
+  return listing !== undefined;
 }
 
 /**

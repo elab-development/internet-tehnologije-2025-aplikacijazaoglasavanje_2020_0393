@@ -2,7 +2,13 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
-import { findCategoryById, hasChildren, rewriteSubtreePaths, subtreeHeight } from "@/db/categories";
+import {
+  findCategoryById,
+  hasChildren,
+  hasListings,
+  rewriteSubtreePaths,
+  subtreeHeight,
+} from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import {
   MAX_CATEGORY_DEPTH,
@@ -159,6 +165,16 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
           return jsonError(
             `Categories may be nested at most ${MAX_CATEGORY_DEPTH} levels deep`,
             400,
+          );
+        }
+
+        // Re-parenting under a category that already carries listings gives it a child
+        // just as surely as creating one there would, and strands those listings on a
+        // now-non-leaf node (D12).
+        if (await hasListings(parentId)) {
+          return jsonError(
+            "Move this category's listings before giving it subcategories",
+            409,
           );
         }
 
