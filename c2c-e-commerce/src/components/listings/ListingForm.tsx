@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button, ErrorAlert, InputField } from "@/components/ui";
+import CategorySelect from "@/components/categories/CategorySelect";
 import DescriptionAssistant from "./DescriptionAssistant";
 import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
@@ -62,7 +63,7 @@ export default function ListingForm(props: ListingFormProps) {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [status, setStatus] = useState<ListingStatus>("active");
 
   // Set once a draft comes back from the model, so the seller can see that the text they
@@ -90,7 +91,7 @@ export default function ListingForm(props: ListingFormProps) {
     setDescription(listing.description);
     setPrice(String(Number(listing.price)));
     setImageUrl(listing.imageUrl ?? "");
-    setCategoryId(listing.categoryId ? String(listing.categoryId) : "");
+    setCategoryId(listing.categoryId ?? null);
     setStatus(listing.status);
   }, [listing]);
 
@@ -108,7 +109,7 @@ export default function ListingForm(props: ListingFormProps) {
       description: description.trim(),
       price: Number(price),
       imageUrl: imageUrl.trim() || null,
-      categoryId: categoryId ? Number(categoryId) : null,
+      categoryId,
     };
 
     setSubmitting(true);
@@ -216,27 +217,11 @@ export default function ListingForm(props: ListingFormProps) {
           placeholder="https://example.com/image.jpg"
         />
 
-        <div className="flex flex-col gap-1">
-          <label
-            className="text-sm font-medium text-zinc-700"
-            htmlFor="listing-category"
-          >
-            Category
-          </label>
-          <select
-            id="listing-category"
-            value={categoryId}
-            onChange={(event) => setCategoryId(event.target.value)}
-            className={selectClasses}
-          >
-            <option value="">No category</option>
-            {categories.map((category) => (
-              <option key={category.id} value={String(category.id)}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <CategorySelect
+          categories={categories}
+          value={categoryId}
+          onChange={setCategoryId}
+        />
 
         {isEdit && (
           <div className="flex flex-col gap-1">
