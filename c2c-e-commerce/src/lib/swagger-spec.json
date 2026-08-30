@@ -146,6 +146,7 @@
           "status": {
             "type": "string",
             "enum": [
+              "draft",
               "active",
               "sold",
               "removed"
@@ -1793,6 +1794,7 @@
                   "status": {
                     "type": "string",
                     "enum": [
+                      "draft",
                       "active",
                       "sold",
                       "removed"
@@ -2414,6 +2416,14 @@
                     "type": "integer",
                     "nullable": true,
                     "example": 2
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft"
+                    ],
+                    "description": "Omit for an immediately-published listing (the default, \"active\"). The only status a caller may request at creation time is \"draft\" — see the create-as-draft upload flow in the design doc.\n",
+                    "example": "draft"
                   }
                 }
               }
