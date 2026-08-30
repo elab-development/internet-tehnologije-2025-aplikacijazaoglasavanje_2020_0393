@@ -5,7 +5,13 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
-import { listingImages, type ListingImage, type NewListingImage } from "./schema";
+import {
+  listingImages,
+  listings,
+  type Listing,
+  type ListingImage,
+  type NewListingImage,
+} from "./schema";
 
 /** Spec §4.4. Enough for a second-hand listing; small enough to bound the upload cost. */
 export const MAX_IMAGES_PER_LISTING = 8;
@@ -50,6 +56,30 @@ export async function findImage(imageId: number): Promise<ListingImage | null> {
     .limit(1);
 
   return image ?? null;
+}
+
+/**
+ * An image plus enough of its parent listing to decide who may see it.
+ *
+ * `GET /api/images/[id]` (Part 2) needs the listing's publication status and seller —
+ * a photo of a `draft` or `removed` listing is private to its owner even though the
+ * image row itself carries no visibility of its own.
+ */
+export async function findImageWithListing(
+  imageId: number,
+): Promise<{ image: ListingImage; status: Listing["status"]; sellerId: number } | null> {
+  const [row] = await db
+    .select({
+      image: listingImages,
+      status: listings.status,
+      sellerId: listings.sellerId,
+    })
+    .from(listingImages)
+    .innerJoin(listings, eq(listings.id, listingImages.listingId))
+    .where(eq(listingImages.id, imageId))
+    .limit(1);
+
+  return row ?? null;
 }
 
 /**

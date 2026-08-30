@@ -1261,7 +1261,7 @@
           "Listings"
         ],
         "summary": "Fetch a listing photo",
-        "description": "Public. Streams the stored bytes same-origin. Storage keys are random, so a URL never outlives the bytes it names and the response is cached immutably.\n",
+        "description": "Publicly visible only for a published listing (`active` or `sold`) — matching when the listings API itself would show the parent listing to an anonymous caller, plus `sold` so a completed purchase's photos keep rendering. A `draft` or `removed` listing's photos are visible only to its owner or an admin. Streams the stored bytes same-origin. Storage keys are random, so a URL never outlives the bytes it names.\n",
         "parameters": [
           {
             "in": "path",
@@ -1288,7 +1288,7 @@
             "description": "Invalid image id"
           },
           "404": {
-            "description": "Image not found"
+            "description": "Image not found, or not visible to this caller"
           }
         }
       }
