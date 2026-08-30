@@ -114,7 +114,12 @@ export default function CategoryTreeFilter({
   // Collapsed by default, except along the chain of whatever is already selected — a
   // freshly loaded filter must not hide its own selection.
   const [expanded, setExpanded] = useState<Set<number>>(
-    () => new Set(ancestorChain(categories, value).map((category) => category.id)),
+    () =>
+      new Set(
+        (value === null ? [] : ancestorChain(categories, value)).map(
+          (category) => category.id,
+        ),
+      ),
   );
 
   function toggle(id: number) {
