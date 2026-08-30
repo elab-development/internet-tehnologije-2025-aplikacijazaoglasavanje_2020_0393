@@ -49,7 +49,12 @@ const MAX_BYTES = 5 * 1024 * 1024;
  *         required: true
  *         schema: { type: integer }
  *     responses:
- *       201: { description: The stored image }
+ *       201:
+ *         description: The stored image
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ListingImage'
  *       400: { description: "Not a JPEG, PNG or WebP" }
  *       401: { description: Missing or invalid token }
  *       403: { description: Not the listing's owner }

@@ -9,6 +9,7 @@ import {
   CreateCategorySchema,
   UpdateCategorySchema,
   CreateListingSchema,
+  UpdateListingSchema,
   CreateOrderSchema,
   CreateReviewSchema,
   UpdateOrderStatusSchema,
@@ -219,6 +220,20 @@ describe("CreateListingSchema", () => {
       price: 10,
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ─── UpdateListingSchema ──────────────────────────────────────────────────────
+
+describe("UpdateListingSchema", () => {
+  it("rejects an empty object (no updatable fields)", () => {
+    const result = UpdateListingSchema.safeParse({});
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a status-only update", () => {
+    const result = UpdateListingSchema.safeParse({ status: "sold" });
+    expect(result.success).toBe(true);
   });
 });
 

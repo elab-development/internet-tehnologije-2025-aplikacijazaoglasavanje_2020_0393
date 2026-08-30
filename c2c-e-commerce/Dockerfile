@@ -81,6 +81,12 @@ COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules  ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/.cache/transformers ./.cache/transformers
 ENV TRANSFORMERS_CACHE=/app/.cache/transformers
 
+# STORAGE_DIR (local driver). Compose mounts the uploads_data volume here, and Docker
+# creates an empty mountpoint owned by root before the container ever runs -- USER nextjs
+# below would then hit EACCES on the first upload's mkdir. Pre-creating it owned by
+# nextjs:nodejs avoids that.
+RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads
+
 USER nextjs
 
 EXPOSE 3000

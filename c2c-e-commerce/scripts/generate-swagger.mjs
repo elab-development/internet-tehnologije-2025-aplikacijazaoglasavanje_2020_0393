@@ -102,14 +102,17 @@ const swaggerDefinition = {
       },
       ListingImage: {
         type: "object",
+        description:
+          "The client-facing shape of a photo, as returned by the upload endpoint and " +
+          "GET /api/listings/{id}'s `images` array (db/listing-images.ts#toImageSummary). " +
+          "`storageKey`, `listingId`, `contentType` and `byteSize` are deliberately not " +
+          "sent — the row's other columns are server-only. Fetch the bytes from " +
+          "GET /api/images/{id}.",
         properties: {
           id: { type: "integer", example: 12 },
-          listingId: { type: "integer", example: 5 },
-          contentType: { type: "string", example: "image/webp" },
-          byteSize: { type: "integer", example: 48213 },
+          sortOrder: { type: "integer", example: 0 },
           width: { type: "integer", nullable: true, example: 800 },
           height: { type: "integer", nullable: true, example: 600 },
-          sortOrder: { type: "integer", example: 0 },
         },
       },
       Order: {

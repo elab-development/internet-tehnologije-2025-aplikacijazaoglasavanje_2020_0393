@@ -101,13 +101,13 @@ export type OrderDetail = Order & { items: OrderItem[] };
 /** `POST /api/orders` — only the id is consumed by the UI. */
 export type CreatedOrder = Pick<Order, "id">;
 
-/** An order line as returned by `GET /api/orders/seller` (image included). */
+/** An order line as returned by `GET /api/orders/seller` (cover image id included). */
 export type SellerOrderItem = Pick<
   OrderItemRow,
   "id" | "listingId" | "quantity" | "price"
 > & {
   listingTitle: string;
-  listingImageUrl: string | null;
+  coverImageId: number | null;
 };
 
 /** `GET /api/orders/seller` — the buyer is joined in, items are seller-scoped. */

@@ -173,22 +173,15 @@
       },
       "ListingImage": {
         "type": "object",
+        "description": "The client-facing shape of a photo, as returned by the upload endpoint and GET /api/listings/{id}'s `images` array (db/listing-images.ts#toImageSummary). `storageKey`, `listingId`, `contentType` and `byteSize` are deliberately not sent — the row's other columns are server-only. Fetch the bytes from GET /api/images/{id}.",
         "properties": {
           "id": {
             "type": "integer",
             "example": 12
           },
-          "listingId": {
+          "sortOrder": {
             "type": "integer",
-            "example": 5
-          },
-          "contentType": {
-            "type": "string",
-            "example": "image/webp"
-          },
-          "byteSize": {
-            "type": "integer",
-            "example": 48213
+            "example": 0
           },
           "width": {
             "type": "integer",
@@ -199,10 +192,6 @@
             "type": "integer",
             "nullable": true,
             "example": 600
-          },
-          "sortOrder": {
-            "type": "integer",
-            "example": 0
           }
         }
       },
@@ -1397,7 +1386,14 @@
         ],
         "responses": {
           "201": {
-            "description": "The stored image"
+            "description": "The stored image",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingImage"
+                }
+              }
+            }
           },
           "400": {
             "description": "Not a JPEG, PNG or WebP"

@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# local uploads (STORAGE_DRIVER=local default from .env.example)
+/.uploads
+
 # next.js
 /.next/
 /out/

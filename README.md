@@ -80,7 +80,7 @@ Izmenite `.env` fajl i postavite vrednosti:
 | `DATABASE_URL` | Connection string za bazu | `postgresql://postgres:postgres@db:5432/c2c_ecommerce` |
 | `JWT_SECRET` | Tajni ključ za JWT tokene | (dugačak random string) |
 | `STORAGE_DRIVER` | Provajder za skladištenje fotografija oglasa (`local` piše na disk) | `local` |
-| `STORAGE_DIR` | Direktorijum za `local` provajder — u Dockeru je to mount tačka `uploads_data` volumena | `/app/uploads` |
+| `STORAGE_DIR` | Direktorijum za `local` provajder — u Dockeru je to mount tačka `uploads_data` volumena. **Van Dockera** koristite obični lokalni direktorijum (npr. `./.uploads`) — `/app/uploads` ne postoji izvan kontejnera | `/app/uploads` |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth2 kredencijali za Google prijavu | (Google Cloud Console) |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth2 kredencijali za GitHub prijavu | (GitHub Developer settings) |
 | `OAUTH_REDIRECT_BASE_URL` | Javni origin aplikacije, iz koga se gradi callback URL | `http://localhost:3000` |
@@ -130,6 +130,10 @@ npm install
 ```
 
 Potrebna je lokalna PostgreSQL instanca. Postavite `DATABASE_URL` u `.env` da pokazuje na nju.
+
+`STORAGE_DIR` iz `.env.example` (`./.uploads`) već radi bez izmena — to je obični
+lokalni direktorijum, za razliku od `/app/uploads` koji koriste compose fajlovi i koji
+postoji samo unutar kontejnera.
 
 ```bash
 npm run db:migrate   # Pokreni migracije
