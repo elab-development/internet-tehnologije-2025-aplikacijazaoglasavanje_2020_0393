@@ -160,10 +160,10 @@ export function buildListingQuery(
   if (categoryId) {
     const id = parseInt(categoryId, 10);
     if (!isNaN(id)) {
-      // "N and everything beneath it" (spec §3.3). The correlated subquery reads the
-      // target's path and prefix-matches against the index, so this stays one round trip
-      // and never recurses. `id` is a parsed integer and the path comes from the
-      // database, so nothing user-supplied reaches the LIKE pattern.
+      // "N and everything beneath it" (spec §3.3). The inner scalar subquery reads the
+      // target's path once and the outer query prefix-matches it against the index, so
+      // this stays one round trip and never recurses. `id` is a parsed integer and the
+      // path comes from the database, so nothing user-supplied reaches the LIKE pattern.
       conditions.push(
         sql`${listings.categoryId} IN (
           SELECT c.id FROM ${categories} c

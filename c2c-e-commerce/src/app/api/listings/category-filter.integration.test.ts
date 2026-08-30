@@ -83,6 +83,31 @@ describe("GET /api/listings?categoryId= — descendants included", () => {
 
     expect(result.data.map((l) => l.id)).toEqual([listing.id]);
   });
+
+  it("does not treat a category whose id merely starts with the ancestor's id as a descendant", async () => {
+    // resetDb() restarts identity at 1, so the eleventh root category created here gets
+    // id 11 — whose decimal string '11' starts with '1' but is not a descendant of it.
+    // A LIKE pattern missing the '.' separator (e.g. '1%' instead of '1.%') would match
+    // '11' and wrongly include it; the dot is what rules that out.
+    let target: Awaited<ReturnType<typeof makeCategory>> | undefined;
+    let decoy: Awaited<ReturnType<typeof makeCategory>> | undefined;
+    for (let i = 1; i <= 11; i++) {
+      const root = await makeCategory();
+      if (root.id === 1) target = root;
+      if (root.id === 11) decoy = root;
+    }
+    if (!target || !decoy) {
+      throw new Error(
+        `expected roots with id 1 and 11, got target=${target?.id} decoy=${decoy?.id}`,
+      );
+    }
+
+    const decoyListing = await makeListing({ categoryId: decoy.id, sellerId });
+
+    const result = await listByCategory(target.id);
+
+    expect(result.data.map((l) => l.id)).not.toContain(decoyListing.id);
+  });
 });
 
 describe("POST /api/listings — leaf categories only", () => {
