@@ -45,12 +45,13 @@ describe("GET /api/listings", () => {
     expect(ids).not.toContain(draft.id);
   });
 
-  // Anonymous browsing already narrows to `status = active`, so a draft never reaches
-  // that path regardless of this exclusion — it is not what makes the case above pass.
-  // The exclusion is load-bearing precisely where a caller is otherwise allowed every
-  // status: the seller viewing their own inventory (`sellerId` = their own id, which
-  // flips `includeAllStatuses` on in listings-query.ts).
-  it("omits drafts from a seller's own inventory view too", async () => {
+  // Spec §4.3: "a half-finished listing is a draft its owner sees in their dashboard and
+  // can finish or delete." The draft exclusion in listings-query.ts is scoped to browse,
+  // search, similar-listings and recommendations — not to a seller's own inventory view
+  // (`sellerId` = their own id, which flips `includeAllStatuses` on). Without this, a
+  // draft becomes a permanently invisible, undeletable row holding uploaded blobs the
+  // moment the first image lands on it.
+  it("shows drafts in a seller's own inventory view", async () => {
     const seller = await makeUser({ role: "seller" });
     const token = signToken({ sub: seller.id, email: seller.email, role: seller.role });
     const draft = await makeListing({ sellerId: seller.id, status: "draft" });
@@ -65,9 +66,19 @@ describe("GET /api/listings", () => {
     const ids = ((await response.json()) as { data: { id: number }[] }).data.map((l) => l.id);
 
     // `sold` proves this really is the all-statuses branch (an anonymous or
-    // status-active-only query would have dropped it too) — so `draft`'s absence is
-    // attributable to the exclusion, not to some other filter already in effect.
+    // status-active-only query would have dropped it too) — so `draft`'s presence is
+    // attributable to the fix, not to some other filter already in effect.
     expect(ids).toContain(sold.id);
+    expect(ids).toContain(draft.id);
+  });
+
+  // Anonymous browsing must still never see a draft — this is the case the fix above
+  // must not regress.
+  it("still omits drafts from an anonymous browse", async () => {
+    const draft = await makeListing({ status: "draft" });
+
+    const ids = (await browse()).data.map((l) => l.id);
+
     expect(ids).not.toContain(draft.id);
   });
 });

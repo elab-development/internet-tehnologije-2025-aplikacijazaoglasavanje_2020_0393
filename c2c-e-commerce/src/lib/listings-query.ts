@@ -154,8 +154,13 @@ export function buildListingQuery(
   const conditions: SQL[] = includeAllStatuses ? [] : [eq(listings.status, "active")];
 
   // Drafts are a private authoring state: the listing exists so images can be uploaded
-  // against its id, but it is not for sale and must not appear anywhere public.
-  conditions.push(ne(listings.status, "draft"));
+  // against its id, but it is not for sale and must not appear anywhere public — browse,
+  // search, similar-listings and recommendations (spec §4.3). The owner's own inventory
+  // view is not on that list: "a half-finished listing is a draft its owner sees in
+  // their dashboard and can finish or delete" is the sentence that justifies drafts
+  // existing at all, so this exclusion must not apply when includeAllStatuses is set
+  // (i.e. the caller is viewing their own listings, or is an admin).
+  if (!includeAllStatuses) conditions.push(ne(listings.status, "draft"));
 
   if (sellerFilter !== null) conditions.push(eq(listings.sellerId, sellerFilter));
 
