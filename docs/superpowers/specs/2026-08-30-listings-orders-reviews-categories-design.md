@@ -51,7 +51,7 @@ express "Electronics › Phones › Smartphones".
 | D9 | **`listings.image_url` is dropped outright** | Keeping a nullable `external_url` beside `storage_key` would preserve the hotlinking surface being removed, keep `remotePatterns` alive, and leave two code paths in every renderer. `seed.ts` ships real sample files through the provider instead. |
 | D10 | **Uploads are re-encoded with `sharp`** | Strips EXIF — including home GPS coordinates on phone photos — and structurally neutralises polyglot files. Magic-byte validation alone validates rather than neutralises. |
 | D11 | **Category tree = `parent_id` + materialised `path`** | Descendant filtering becomes an indexed prefix match, off the recursive path on every browse query. Subtree rewrites on re-parent are rare and easy to test. |
-| D12 | **Listings attach to leaf categories only** | A listing filed under "Electronics" when "Electronics › Phones" exists is invisible to anyone drilling down. |
+| D12 | **Listings attach to leaf categories only**, and a category holding listings may not be given subcategories | A listing filed under "Electronics" when "Electronics › Phones" exists is invisible to anyone drilling down. Enforcing this only when a *listing* is written leaves the other direction open: giving a category children strands the listings already on it, and — because the edit form resends `categoryId` unchanged — locks their sellers out of editing them. Both directions are guarded. |
 | D13 | **Category depth is capped at 3** | Deeper taxonomies are unusable in a cascading select and nobody maintains them. |
 
 ## 3. Part 1 — Category tree
@@ -111,7 +111,19 @@ the tree from `parent_id` in one pass; at a few dozen categories a dedicated
 handles re-parenting. `DELETE` refuses a node with children.
 
 Validation rejects: an unknown `parentId`, a depth above the cap, a cycle, and —
-on listings — a `categoryId` that is not a leaf (D12). The path, depth and cycle
+on listings — a `categoryId` that is not a leaf (D12).
+
+D12 is enforced in **both** directions, because a rule stated as a property of the
+data has to be defended wherever the data can change. A listing write rejects a
+non-leaf `categoryId` with 400. A category write — `POST` with a `parentId`, or
+`PUT` re-parenting a category under another — rejects with 409 when the
+prospective parent already holds listings, instructing the admin to move them
+first. Guarding only the listing side would let an admin strand existing listings
+on a category that has just gained children, and the edit form resends
+`categoryId` unchanged, so those sellers could no longer edit their own listings
+at all.
+
+The path, depth and cycle
 rules live as pure functions in `src/lib/categories.ts` so they are unit-testable
 away from the database.
 
