@@ -27,13 +27,20 @@ describe("CategorySelect", () => {
 
   it("reveals the next level once a parent with children is chosen", async () => {
     const onChange = vi.fn();
-    render(<CategorySelect categories={CATEGORIES} value={null} onChange={onChange} />);
+    const { rerender } = render(
+      <CategorySelect categories={CATEGORIES} value={null} onChange={onChange} />,
+    );
 
     expect(screen.queryByLabelText("Subcategory")).not.toBeInTheDocument();
 
     await userEvent.selectOptions(screen.getByLabelText("Category"), "1");
 
     expect(onChange).toHaveBeenCalledWith(1);
+
+    // The component is controlled: it does not reveal the next level on its own. A real
+    // parent responds to onChange by passing the new value back down — simulate that here.
+    rerender(<CategorySelect categories={CATEGORIES} value={1} onChange={onChange} />);
+
     expect(screen.getByLabelText("Subcategory")).toBeInTheDocument();
   });
 
@@ -57,12 +64,18 @@ describe("CategorySelect", () => {
 
   it("clears deeper levels when a higher one changes", async () => {
     const onChange = vi.fn();
-    render(<CategorySelect categories={CATEGORIES} value={12} onChange={onChange} />);
+    const { rerender } = render(
+      <CategorySelect categories={CATEGORIES} value={12} onChange={onChange} />,
+    );
 
     await userEvent.selectOptions(screen.getByLabelText("Category"), "2");
 
     // Selecting a different root cannot leave the old grandchild selected underneath it.
     expect(onChange).toHaveBeenLastCalledWith(2);
+
+    // As above: a real parent would respond to onChange with a new value prop.
+    rerender(<CategorySelect categories={CATEGORIES} value={2} onChange={onChange} />);
+
     expect(screen.queryByLabelText("Subcategory")).not.toBeInTheDocument();
   });
 

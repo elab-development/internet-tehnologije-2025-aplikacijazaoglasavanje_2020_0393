@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { MAX_CATEGORY_DEPTH, ancestorChain, childrenOf } from "@/lib/categories";
 import type { Category } from "@/types/api";
 
@@ -19,25 +18,16 @@ export type CategorySelectProps = {
 /**
  * Cascading selects over the category tree.
  *
- * The selected chain is derived from `value` via the stored path — `value` stays the
- * single source of truth, the same one `ListingForm` holds. `localValue` is not a second,
- * independently-drifting copy of it: it is seeded from `value` and resynced by the effect
- * below whenever `value` changes externally (e.g. a different listing loads). It exists
- * only so a deeper level appears the instant it is chosen, without waiting on the
- * parent's state update to round-trip back down as a new prop.
+ * The component holds no state of its own: the selected chain is derived from `value`
+ * via the stored path. Keeping a parallel copy of the selection in state is how a picker
+ * like this ends up disagreeing with the form it belongs to — don't add one.
  */
 export default function CategorySelect({
   categories,
   value,
   onChange,
 }: CategorySelectProps) {
-  const [localValue, setLocalValue] = useState(value);
-
-  useEffect(() => {
-    setLocalValue(value);
-  }, [value]);
-
-  const chain = localValue === null ? [] : ancestorChain(categories, localValue);
+  const chain = value === null ? [] : ancestorChain(categories, value);
 
   // One select per already-chosen level, plus one for the next choice if the deepest
   // selection still has children and we are not at the cap.
@@ -56,9 +46,7 @@ export default function CategorySelect({
   function handleChange(depth: number, raw: string) {
     // Changing any level discards everything below it: the old deeper selection is not
     // a descendant of the new choice.
-    const next = raw === "" ? (depth === 0 ? null : (chain[depth - 1]?.id ?? null)) : Number(raw);
-    setLocalValue(next);
-    onChange(next);
+    onChange(raw === "" ? (depth === 0 ? null : (chain[depth - 1]?.id ?? null)) : Number(raw));
   }
 
   return (
