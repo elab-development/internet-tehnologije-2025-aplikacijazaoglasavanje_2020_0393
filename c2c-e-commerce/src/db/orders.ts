@@ -1,0 +1,153 @@
+// ─── Reservation and expiry ───────────────────────────────────────────────────
+// Part 3 of the 2026-08-30 redesign (spec §5.2, §5.4).
+//
+// Four statements. The reserve path runs all of them against one listing inside its own
+// transaction; the scheduled sweep runs the first two globally. Sharing the file is what
+// stops the lazy path and the sweep from drifting into two different definitions of
+// "expired" — D4 says correctness lives in the lazy path, and the sweep exists only so
+// listings return to browse promptly.
+//
+// Written as raw `sql` rather than through the query builder, for two reasons. The
+// statements are the spec's, verbatim, and a reviewer should be able to read one against
+// the other. And `listings.updatedAt` carries `$onUpdate`: a builder update would stamp
+// it on every reservation, and `updated_at` is what the embedding backfill's staleness
+// query compares against — every Buy click would queue a needless re-embed.
+
+import { sql } from "drizzle-orm";
+
+import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
+
+import { type Database } from "./index";
+
+/**
+ * Either the pool-backed client or a transaction handle.
+ *
+ * Every function here has to be callable inside the reserve transaction: expiring a
+ * stale order and claiming the listing it was holding are one atomic act, and committing
+ * them separately is the double-sell in slow motion.
+ *
+ * `Omit<Database, "$client">` rather than bare `Database`: `drizzle()`'s return type
+ * carries a `$client` handle nothing in this codebase reads, and the test database's own
+ * client is typed without it (`src/test/db.ts`'s `TestDatabase`). Requiring it here would
+ * make this type unsatisfiable from a test — accurate to nothing, since no caller needs
+ * `$client` to run a query.
+ */
+export type OrderExecutor =
+  | Omit<Database, "$client">
+  | Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+export type ClaimedListing = { id: number; price: string; sellerId: number };
+
+/**
+ * `now() + 48 hours`, computed by Postgres.
+ *
+ * The cast is deliberate and local. Drizzle types `expiresAt` as `Date` because the
+ * column is a timestamp; the value we want is an expression, not a value Node computed.
+ * The container clock and the host clock disagree on this project's dev machines, and a
+ * deadline set from the wrong one expires orders early or never.
+ */
+export function reservationDeadline(): Date {
+  return sql`now() + make_interval(hours => ${RESERVATION_HOURS})` as unknown as Date;
+}
+
+/**
+ * Marks every pending order past its deadline `expired`.
+ *
+ * @param listingId scope to one listing; omit to sweep globally.
+ * @returns how many orders were expired.
+ */
+export async function expireStalePendingOrders(
+  x: OrderExecutor,
+  listingId?: number,
+): Promise<number> {
+  const scope = listingId === undefined ? sql`` : sql` AND "listing_id" = ${listingId}`;
+
+  const result = await x.execute(sql`
+    UPDATE "orders" SET "status" = 'expired', "updated_at" = now()
+     WHERE "status" = 'pending' AND "expires_at" < now()${scope}
+     RETURNING "id"
+  `);
+
+  return result.rows.length;
+}
+
+/**
+ * Returns reserved listings to browse once nothing pending holds them.
+ *
+ * The `status = 'reserved'` clause is load-bearing: without it this republishes every
+ * listing whose seller withdrew it, since a `removed` listing also has no pending order.
+ *
+ * @param listingId scope to one listing; omit to sweep globally.
+ * @returns how many listings were released.
+ */
+export async function releaseUnheldListings(
+  x: OrderExecutor,
+  listingId?: number,
+): Promise<number> {
+  const scope = listingId === undefined ? sql`` : sql` AND "id" = ${listingId}`;
+
+  const result = await x.execute(sql`
+    UPDATE "listings" SET "status" = 'active'
+     WHERE "status" = 'reserved'${scope}
+       AND NOT EXISTS (
+         SELECT 1 FROM "orders"
+          WHERE "orders"."listing_id" = "listings"."id"
+            AND "orders"."status" = 'pending'
+       )
+     RETURNING "id"
+  `);
+
+  return result.rows.length;
+}
+
+/**
+ * Claims a listing for a buyer, or returns null if someone else already has it.
+ *
+ * This is the whole of D2. `WHERE status = 'active'` is what makes the race
+ * unrepresentable: the second caller's UPDATE matches no rows, rather than waiting for a
+ * lock and then succeeding against a listing that is no longer available.
+ *
+ * The price and seller come back from `RETURNING` so the order is priced from the
+ * database's row at the instant of the claim, never from anything the client sent.
+ */
+export async function claimListing(
+  x: OrderExecutor,
+  listingId: number,
+): Promise<ClaimedListing | null> {
+  const result = await x.execute(sql`
+    UPDATE "listings" SET "status" = 'reserved'
+     WHERE "id" = ${listingId} AND "status" = 'active'
+     RETURNING "id", "price", "seller_id"
+  `);
+
+  const row = result.rows[0] as
+    | { id: number; price: string; seller_id: number }
+    | undefined;
+
+  return row ? { id: row.id, price: row.price, sellerId: row.seller_id } : null;
+}
+
+/**
+ * Applies an order transition's effect on its listing (spec §5.3).
+ *
+ * Both statements are conditional on the status they expect to find, so a listing its
+ * seller has since withdrawn is not dragged back into browse by an order being settled.
+ */
+export async function applyListingSideEffect(
+  x: OrderExecutor,
+  listingId: number,
+  next: "active" | "sold",
+): Promise<void> {
+  if (next === "sold") {
+    await x.execute(sql`
+      UPDATE "listings" SET "status" = 'sold'
+       WHERE "id" = ${listingId} AND "status" = 'reserved'
+    `);
+    return;
+  }
+
+  await x.execute(sql`
+    UPDATE "listings" SET "status" = 'active'
+     WHERE "id" = ${listingId} AND "status" IN ('reserved', 'sold')
+  `);
+}
