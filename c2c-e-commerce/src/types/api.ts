@@ -12,7 +12,6 @@ import type {
   Category as CategoryRow,
   Listing as ListingRow,
   Order as OrderRow,
-  OrderItem as OrderItemRow,
   Review as ReviewRow,
 } from "@/db/schema";
 
@@ -110,20 +109,12 @@ export type OrderDetail = Order & {
 /** `POST /api/orders` — only the id is consumed by the UI. */
 export type CreatedOrder = Pick<Order, "id">;
 
-/** An order line as returned by `GET /api/orders/seller` (cover image id included). */
-export type SellerOrderItem = Pick<
-  OrderItemRow,
-  "id" | "listingId" | "quantity" | "price"
-> & {
-  listingTitle: string;
-  coverImageId: number | null;
-};
-
-/** `GET /api/orders/seller` — the buyer is joined in, items are seller-scoped. */
+/** `GET /api/orders/seller` — the buyer and the listing are joined in. */
 export type SellerOrder = Order & {
   buyerName: string;
   buyerEmail: string;
-  items: SellerOrderItem[];
+  listingTitle: string;
+  coverImageId: number | null;
 };
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────

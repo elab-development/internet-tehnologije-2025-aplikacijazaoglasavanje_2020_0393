@@ -7,6 +7,7 @@ import OrderCard from "@/components/orders/OrderCard";
 import { EmptyState, ErrorAlert, OrderCardSkeleton } from "@/components/ui";
 import type { UseFetchResult } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
+import type { OrderStatus } from "@/lib/order-lifecycle";
 import type { SellerOrder } from "@/types/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,25 +33,20 @@ export default function SellerOrdersTab({
 
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
-  async function handleStatusUpdate(
-    orderId: number,
-    newStatus: "confirmed" | "declined",
-  ) {
+  async function handleTransition(orderId: number, to: OrderStatus) {
     try {
       setUpdatingOrderId(orderId);
-      await api.put(`/api/orders/${orderId}`, { status: newStatus });
+      const updated = await api.put<SellerOrder>(`/api/orders/${orderId}`, { status: to });
 
       setData((current) =>
         (current ?? []).map((order) =>
-          order.id === orderId ? { ...order, status: newStatus } : order,
+          order.id === orderId ? { ...order, status: updated.status } : order,
         ),
       );
 
-      toast.success(
-        `Order #${orderId} ${newStatus === "confirmed" ? "confirmed" : "declined"}`,
-      );
+      toast.success(`Order #${orderId} is now ${updated.status}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update order";
+      const msg = err instanceof Error ? err.message : "Failed to update the order";
       toast.error(msg);
     } finally {
       setUpdatingOrderId(null);
@@ -89,10 +85,8 @@ export default function SellerOrdersTab({
                     key={order.id}
                     order={order}
                     formatConverted={formatConverted}
-                    showActions
                     updating={updatingOrderId === order.id}
-                    onApprove={() => handleStatusUpdate(order.id, "confirmed")}
-                    onReject={() => handleStatusUpdate(order.id, "declined")}
+                    onTransition={(to) => handleTransition(order.id, to)}
                   />
                 ))}
               </div>
@@ -102,7 +96,7 @@ export default function SellerOrdersTab({
           {processedOrders.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold text-zinc-900">
-                Processed Orders ({processedOrders.length})
+                Other Orders ({processedOrders.length})
               </h2>
               <div className="grid gap-4">
                 {processedOrders.map((order) => (
@@ -110,6 +104,8 @@ export default function SellerOrdersTab({
                     key={order.id}
                     order={order}
                     formatConverted={formatConverted}
+                    updating={updatingOrderId === order.id}
+                    onTransition={(to) => handleTransition(order.id, to)}
                   />
                 ))}
               </div>
