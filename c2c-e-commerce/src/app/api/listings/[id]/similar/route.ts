@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 
 import { db } from "@/db";
+import { coverImageIdsFor } from "@/db/listing-images";
 import { listings } from "@/db/schema";
 import { parseResourceId } from "@/lib/params";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -152,7 +153,14 @@ export async function GET(
       .orderBy(sql`${listings.embedding} <=> ${literal}`)
       .limit(limit);
 
-    return jsonOk(rows.map((row) => ({ ...row, similarity: Number(row.similarity) })));
+    const covers = await coverImageIdsFor(rows.map((row) => row.id));
+    const data = rows.map((row) => ({
+      ...row,
+      similarity: Number(row.similarity),
+      coverImageId: covers.get(row.id) ?? null,
+    }));
+
+    return jsonOk(data);
   } catch (err) {
     console.error("[GET /api/listings/[id]/similar]", err);
     return jsonError("Internal server error", 500);

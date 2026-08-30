@@ -53,12 +53,21 @@ export type ListingStatus = ListingRow["status"];
 export type Listing = Omit<
   Serialized<ListingRow>,
   "embedding" | "embeddingUpdatedAt"
-> & { similarity?: number };
+> & { similarity?: number; coverImageId: number | null };
+
+/** One photo, as the API exposes it. The bytes come from `/api/images/{id}`. */
+export type ListingImageSummary = {
+  id: number;
+  sortOrder: number;
+  width: number | null;
+  height: number | null;
+};
 
 /** `GET /api/listings/[id]` — adds the joined seller and category names. */
 export type ListingDetail = Listing & {
   sellerName: string | null;
   categoryName: string | null;
+  images: ListingImageSummary[];
 };
 
 /** `GET /api/listings/[id]/similar` — a listing plus how close it is to the source. */

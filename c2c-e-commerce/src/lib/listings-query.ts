@@ -8,7 +8,7 @@
  * client sees exactly what it saw before, and the thesis can compare keyword against
  * semantic on the same endpoint.
  */
-import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, ilike, inArray, lte, ne, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
 import { categories, listings } from "@/db/schema";
@@ -153,6 +153,10 @@ export function buildListingQuery(
   );
 
   const conditions: SQL[] = includeAllStatuses ? [] : [eq(listings.status, "active")];
+
+  // Drafts are a private authoring state: the listing exists so images can be uploaded
+  // against its id, but it is not for sale and must not appear anywhere public.
+  conditions.push(ne(listings.status, "draft"));
 
   if (sellerFilter !== null) conditions.push(eq(listings.sellerId, sellerFilter));
 

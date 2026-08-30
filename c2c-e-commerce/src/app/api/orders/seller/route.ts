@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
+import { coverImageIdsFor } from "@/db/listing-images";
 import { listings, orderItems, orders, users } from "@/db/schema";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
@@ -120,6 +121,8 @@ export async function GET(request: NextRequest) {
       return jsonOk([]);
     }
 
+    const covers = await coverImageIdsFor(relevantOrderItems.map((i) => i.listingId));
+
     const orderIds = [...new Set(relevantOrderItems.map((i) => i.orderId))];
 
     // 3. Get the orders with buyer info
@@ -154,6 +157,7 @@ export async function GET(request: NextRequest) {
           listingId: i.listingId,
           listingTitle: i.listingTitle,
           listingImageUrl: i.listingImageUrl,
+          coverImageId: covers.get(i.listingId) ?? null,
           quantity: i.quantity,
           price: i.price,
         })),

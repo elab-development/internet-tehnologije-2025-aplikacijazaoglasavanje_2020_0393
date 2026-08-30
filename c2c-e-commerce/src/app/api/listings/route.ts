@@ -5,6 +5,7 @@ import { listings, type NewListing } from "@/db/schema";
 import { isLeafCategory } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
+import { coverImageIdsFor } from "@/db/listing-images";
 import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
 import { buildListingQuery, listingColumns, runListingQuery } from "@/lib/listings-query";
 import { jsonOk, jsonError } from "@/lib/response";
@@ -178,7 +179,11 @@ export async function GET(request: NextRequest) {
     const parsed = buildListingQuery(request.nextUrl.searchParams, payload);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    return jsonOk(await runListingQuery(parsed.query));
+    const page = await runListingQuery(parsed.query);
+    const covers = await coverImageIdsFor(page.data.map((row) => row.id));
+    const data = page.data.map((row) => ({ ...row, coverImageId: covers.get(row.id) ?? null }));
+
+    return jsonOk({ ...page, data });
   } catch (err) {
     console.error("[GET /api/listings]", err);
     return jsonError("Internal server error", 500);

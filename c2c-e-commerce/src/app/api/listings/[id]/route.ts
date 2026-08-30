@@ -3,6 +3,7 @@ import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
 import { isLeafCategory } from "@/db/categories";
+import { listImagesFor, toImageSummary } from "@/db/listing-images";
 import { canMutateListing } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { listingColumns } from "@/lib/listings-query";
@@ -132,7 +133,10 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       );
     }
 
-    return jsonOk(listing);
+    // Summaries, not rows — `storageKey` must not reach the client.
+    const images = (await listImagesFor(listing.id)).map(toImageSummary);
+
+    return jsonOk({ ...listing, images });
   } catch (err) {
     console.error("[GET /api/listings/[id]]", err);
     return jsonError("Internal server error", 500);

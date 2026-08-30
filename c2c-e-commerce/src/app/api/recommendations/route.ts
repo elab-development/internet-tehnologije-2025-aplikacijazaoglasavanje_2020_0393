@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { and, desc, eq, inArray, isNotNull, ne, notInArray, sql } from "drizzle-orm";
 
 import { db } from "@/db";
+import { coverImageIdsFor } from "@/db/listing-images";
 import { listings, orderItems, orders, reviews } from "@/db/schema";
 import {
   buildTasteVector,
@@ -142,20 +143,20 @@ export async function GET(request: NextRequest) {
     // `strategy` reports what actually happened. A run that built a vector and then found
     // no candidates is still personalised — it is not a cold start.
     if (!taste) {
-      return jsonOk({ data: await popular(base, limit), strategy: "popular" });
+      return jsonOk({ data: await withCovers(await popular(base, limit)), strategy: "popular" });
     }
 
     // Bound rather than built as a string — see listings-query.ts.
     const literal = sql`${JSON.stringify(taste)}::vector`;
 
-    const data = await db
+    const rows = await db
       .select(listingColumns)
       .from(listings)
       .where(and(...base, isNotNull(listings.embedding)))
       .orderBy(sql`${listings.embedding} <=> ${literal}`)
       .limit(limit);
 
-    return jsonOk({ data, strategy: "personalised" });
+    return jsonOk({ data: await withCovers(rows), strategy: "personalised" });
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);
@@ -163,6 +164,14 @@ export async function GET(request: NextRequest) {
     console.error("[GET /api/recommendations]", err);
     return jsonError("Internal server error", 500);
   }
+}
+
+/** Attaches each row's cover image id, in the same two lines as the other list routes. */
+async function withCovers<T extends { id: number }>(
+  rows: T[],
+): Promise<(T & { coverImageId: number | null })[]> {
+  const covers = await coverImageIdsFor(rows.map((row) => row.id));
+  return rows.map((row) => ({ ...row, coverImageId: covers.get(row.id) ?? null }));
 }
 
 /**
