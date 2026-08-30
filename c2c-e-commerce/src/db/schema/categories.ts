@@ -33,7 +33,7 @@ export const categories = pgTable(
     sortOrder: integer("sort_order").default(0).notNull(),
   },
   (table) => [
-    index("categories_path_prefix_idx").on(table.path),
+    index("categories_path_prefix_idx").on(table.path.op("text_pattern_ops")),
     check("categories_depth_range", sql`${table.depth} >= 0 AND ${table.depth} <= 2`),
   ],
 );
