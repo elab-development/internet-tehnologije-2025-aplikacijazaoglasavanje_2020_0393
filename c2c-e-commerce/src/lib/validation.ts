@@ -217,28 +217,51 @@ export const UpdateOrderStatusSchema = z.object({
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
+/**
+ * Accepts "5" as well as 5: the handler used Number(rating) before, and this endpoint is
+ * driven from Swagger/API clients rather than the UI.
+ */
+const ratingField = z
+  .union([z.string(), z.number()])
+  .transform((val, ctx) => {
+    const num = Number(val);
+    if (!Number.isInteger(num) || num < 1 || num > 5) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "rating must be an integer between 1 and 5",
+      });
+      return z.NEVER;
+    }
+    return num;
+  });
+
 export const CreateReviewSchema = z.object({
-  // Accepts "5" as well as 5: the handler used Number(rating) before, and this
-  // endpoint is driven from Swagger/API clients rather than the UI.
-  rating: z
-    .union([z.string(), z.number()])
-    .transform((val, ctx) => {
-      const num = Number(val);
-      if (!Number.isInteger(num) || num < 1 || num > 5) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "rating must be an integer between 1 and 5",
-        });
-        return z.NEVER;
-      }
-      return num;
-    }),
+  rating: ratingField,
   // Blank comments are stored as null rather than an empty string.
   comment: z
     .union([z.string(), z.null()])
     .transform((val) => (val === null || !val.trim() ? null : val.trim()))
     .optional(),
 });
+
+/**
+ * A partial edit of an existing review. Both fields optional, at least one required.
+ *
+ * The rating transformer is `CreateReviewSchema`'s, hoisted rather than copied: two
+ * copies of a bounds check drift, and this one is the difference between a `CHECK`
+ * violation surfacing as a 400 and as a 500.
+ */
+export const UpdateReviewSchema = z
+  .object({
+    rating: ratingField.optional(),
+    comment: z
+      .union([z.string(), z.null()])
+      .transform((val) => (val === null || !val.trim() ? null : val.trim()))
+      .optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "No updatable fields provided",
+  });
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 

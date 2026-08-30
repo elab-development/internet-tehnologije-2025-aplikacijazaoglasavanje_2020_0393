@@ -13,8 +13,8 @@ import { describe, expect, it } from "vitest";
 
 import type { TokenPayload } from "./auth";
 import {
-  canDeleteReview,
   canMutateListing,
+  canMutateReview,
   canViewOrder,
   isAdmin,
   isSelfOrAdmin,
@@ -134,24 +134,30 @@ describe("Part 3 — canViewOrder", () => {
   });
 });
 
-describe("C2C-SEC-10 AC6 — canDeleteReview", () => {
+describe("C2C-SEC-10 AC6 / Part 4 §6.3 — canMutateReview", () => {
   const review = { reviewerId: BUYER.sub };
 
   it("allows the author", () => {
-    expect(canDeleteReview(BUYER, review)).toBe(true);
+    expect(canMutateReview(BUYER, review)).toBe(true);
   });
 
   it("refuses anyone else", () => {
-    expect(canDeleteReview(actor(9, "buyer"), review)).toBe(false);
-    expect(canDeleteReview(SELLER, review)).toBe(false);
+    expect(canMutateReview(actor(9, "buyer"), review)).toBe(false);
+    expect(canMutateReview(SELLER, review)).toBe(false);
   });
 
   it("allows an admin, for moderation", () => {
-    expect(canDeleteReview(ADMIN, review)).toBe(true);
+    expect(canMutateReview(ADMIN, review)).toBe(true);
   });
 
   it("refuses the seller of the reviewed listing", () => {
     // Otherwise a seller could delete criticism of their own goods.
-    expect(canDeleteReview(SELLER, { reviewerId: BUYER.sub })).toBe(false);
+    expect(canMutateReview(SELLER, { reviewerId: BUYER.sub })).toBe(false);
+  });
+
+  it("refuses the seller being reviewed", () => {
+    // Part 4 moves the subject from a listing to a person, which makes this the rule that
+    // keeps a seller from curating their own reputation.
+    expect(canMutateReview(SELLER, { reviewerId: BUYER.sub })).toBe(false);
   });
 });

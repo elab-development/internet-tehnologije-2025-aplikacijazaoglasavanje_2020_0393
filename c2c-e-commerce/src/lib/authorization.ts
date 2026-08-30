@@ -81,13 +81,18 @@ export function canViewOrder(
 }
 
 /**
- * Whether the caller may delete a review.
+ * Whether the caller may edit or delete a review.
  *
- * The author, or an admin moderating. Explicitly not the seller of the reviewed
- * listing — otherwise a seller could delete criticism of their own goods, which is the
- * one deletion that would make the ratings worthless.
+ * The author, or an admin moderating. Explicitly not the seller being reviewed —
+ * otherwise a seller could delete criticism of themselves, which is the one deletion that
+ * would make the ratings worthless. Part 4 makes that risk sharper, not softer: the
+ * subject of a review is now a person rather than a listing that is about to go quiet.
+ *
+ * Named for both verbs it governs. `PATCH` and `DELETE` share this rule (spec §6.3), and
+ * a predicate named `canDeleteReview` invites the next reader to write a second one for
+ * the other verb.
  */
-export function canDeleteReview(
+export function canMutateReview(
   actor: TokenPayload,
   review: { reviewerId: number },
 ): boolean {

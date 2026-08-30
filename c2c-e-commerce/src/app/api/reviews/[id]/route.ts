@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { reviews } from "@/db/schema";
-import { canDeleteReview } from "@/lib/authorization";
+import { canMutateReview } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
@@ -83,7 +83,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
 
     // Author or admin. Deliberately not the seller of the reviewed listing -- that is
     // the one deletion that would make the ratings worthless.
-    if (!canDeleteReview(payload, review)) {
+    if (!canMutateReview(payload, review)) {
       return jsonError("Forbidden", 403);
     }
 

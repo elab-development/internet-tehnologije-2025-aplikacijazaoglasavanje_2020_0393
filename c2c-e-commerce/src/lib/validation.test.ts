@@ -13,6 +13,7 @@ import {
   CreateOrderSchema,
   CreateReviewSchema,
   UpdateOrderStatusSchema,
+  UpdateReviewSchema,
   UpdateUserSchema,
 } from "./validation";
 import { z } from "zod";
@@ -285,6 +286,35 @@ describe("CreateReviewSchema", () => {
   it("rejects non-integer rating", () => {
     const result = CreateReviewSchema.safeParse({ rating: 3.5 });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("UpdateReviewSchema", () => {
+  it("accepts a rating alone", () => {
+    const parsed = UpdateReviewSchema.safeParse({ rating: 4 });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data).toEqual({ rating: 4 });
+  });
+
+  it("accepts a comment alone, trimmed", () => {
+    const parsed = UpdateReviewSchema.safeParse({ comment: "  fine  " });
+    expect(parsed.success && parsed.data).toEqual({ comment: "fine" });
+  });
+
+  it("treats a blank comment as clearing it", () => {
+    const parsed = UpdateReviewSchema.safeParse({ comment: "   " });
+    expect(parsed.success && parsed.data).toEqual({ comment: null });
+  });
+
+  it("refuses an empty body", () => {
+    // Otherwise a PATCH with no fields would report success having changed nothing.
+    expect(UpdateReviewSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("refuses a rating outside 1-5, the same as on create", () => {
+    expect(UpdateReviewSchema.safeParse({ rating: 0 }).success).toBe(false);
+    expect(UpdateReviewSchema.safeParse({ rating: 6 }).success).toBe(false);
+    expect(UpdateReviewSchema.safeParse({ rating: 3.5 }).success).toBe(false);
   });
 });
 
