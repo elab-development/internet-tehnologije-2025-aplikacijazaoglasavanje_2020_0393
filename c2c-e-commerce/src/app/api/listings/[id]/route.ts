@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, listings, users } from "@/db/schema";
+import { isLeafCategory } from "@/db/categories";
 import { canMutateListing } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { listingColumns } from "@/lib/listings-query";
@@ -256,6 +257,15 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { title, description, price, imageUrl, categoryId, status } = parsed.data;
+
+    if (categoryId !== undefined && categoryId !== null) {
+      if (!(await isLeafCategory(categoryId))) {
+        return jsonError(
+          "Listings must be filed under a category with no subcategories",
+          400,
+        );
+      }
+    }
 
     // ── Build update payload (only provided fields) ───────────────────────────
     // The schema guarantees at least one field is present and that every value

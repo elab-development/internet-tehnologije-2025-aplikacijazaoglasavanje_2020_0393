@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
+import { isLeafCategory } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import type { TokenPayload } from "@/lib/auth";
 import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
@@ -51,7 +52,9 @@ import { parseRequest, CreateListingSchema } from "@/lib/validation";
  *         name: categoryId
  *         schema:
  *           type: integer
- *         description: Filter by category ID
+ *         description: >
+ *           Category id. Includes every descendant category, so filtering by a parent
+ *           returns listings filed under its subcategories.
  *       - in: query
  *         name: sellerId
  *         schema:
@@ -263,6 +266,17 @@ export async function POST(request: NextRequest) {
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
     const { title, description, price, imageUrl, categoryId } = parsed.data;
+
+    // Leaf-only (spec D12): a listing under "Electronics" when "Electronics › Phones"
+    // exists cannot be found by anyone drilling down.
+    if (categoryId !== undefined && categoryId !== null) {
+      if (!(await isLeafCategory(categoryId))) {
+        return jsonError(
+          "Listings must be filed under a category with no subcategories",
+          400,
+        );
+      }
+    }
 
     // Embed before the insert so the happy path is a single write. The failure cannot be
     // logged yet — AC2 wants the listing id, which does not exist until the row does — so

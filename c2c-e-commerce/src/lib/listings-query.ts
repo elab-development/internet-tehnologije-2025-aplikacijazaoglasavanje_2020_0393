@@ -11,7 +11,7 @@
 import { and, asc, count, desc, eq, gte, ilike, inArray, lte, sql, type SQL } from "drizzle-orm";
 
 import { db } from "@/db";
-import { listings } from "@/db/schema";
+import { categories, listings } from "@/db/schema";
 import type { TokenPayload } from "@/lib/auth";
 import { getEmbeddingProvider } from "@/lib/ai/embeddings";
 import { resolveListingVisibility } from "@/lib/listing-visibility";
@@ -159,7 +159,19 @@ export function buildListingQuery(
   const categoryId = searchParams.get("categoryId");
   if (categoryId) {
     const id = parseInt(categoryId, 10);
-    if (!isNaN(id)) conditions.push(eq(listings.categoryId, id));
+    if (!isNaN(id)) {
+      // "N and everything beneath it" (spec §3.3). The correlated subquery reads the
+      // target's path and prefix-matches against the index, so this stays one round trip
+      // and never recurses. `id` is a parsed integer and the path comes from the
+      // database, so nothing user-supplied reaches the LIKE pattern.
+      conditions.push(
+        sql`${listings.categoryId} IN (
+          SELECT c.id FROM ${categories} c
+          WHERE c.id = ${id}
+             OR c.path LIKE (SELECT p.path FROM ${categories} p WHERE p.id = ${id}) || '.%'
+        )`,
+      );
+    }
   }
 
   const minPrice = searchParams.get("minPrice");

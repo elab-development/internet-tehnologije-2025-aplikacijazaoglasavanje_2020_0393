@@ -2035,7 +2035,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Filter by category ID"
+            "description": "Category id. Includes every descendant category, so filtering by a parent returns listings filed under its subcategories.\n"
           },
           {
             "in": "query",
