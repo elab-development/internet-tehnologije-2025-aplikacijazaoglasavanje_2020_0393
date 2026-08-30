@@ -132,10 +132,22 @@ export const LoginBodySchema = z.object({
 
 // ─── Categories ───────────────────────────────────────────────────────────────
 
+/**
+ * `parentId` is nullable *and* optional, and the two mean different things: an explicit
+ * `null` makes the category a root, while omitting it leaves the parent untouched. Route
+ * code must branch on `=== undefined`, never on falsiness.
+ */
 export const CreateCategorySchema = z.object({
   name: z.string().trim().min(1, "name is required"),
   slug: z.string().trim().min(1, "slug is required"),
   description: z.string().trim().nullable().optional(),
+  parentId: z
+    .number()
+    .int("parentId must be an integer")
+    .positive("parentId must be a positive integer")
+    .nullable()
+    .optional(),
+  sortOrder: z.number().int("sortOrder must be an integer").optional(),
 });
 
 export const UpdateCategorySchema = z
@@ -143,6 +155,13 @@ export const UpdateCategorySchema = z
     name: z.string().trim().min(1, "name must be a non-empty string").optional(),
     slug: z.string().trim().min(1, "slug must be a non-empty string").optional(),
     description: z.string().trim().nullable().optional(),
+    parentId: z
+      .number()
+      .int("parentId must be an integer")
+      .positive("parentId must be a positive integer")
+      .nullable()
+      .optional(),
+    sortOrder: z.number().int("sortOrder must be an integer").optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "No updatable fields provided",

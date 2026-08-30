@@ -7,6 +7,7 @@ import {
   RegisterBodySchema,
   LoginBodySchema,
   CreateCategorySchema,
+  UpdateCategorySchema,
   CreateListingSchema,
   UpdateListingSchema,
   CreateOrderSchema,
@@ -449,5 +450,63 @@ describe("RegisterBodySchema role restrictions", () => {
 
   it("requires a valid email", () => {
     expect(RegisterBodySchema.safeParse({ ...base, email: "not-an-email" }).success).toBe(false);
+  });
+});
+
+describe("Part 1 — category tree fields", () => {
+  it("accepts a parentId on create", () => {
+    const result = CreateCategorySchema.safeParse({
+      name: "Phones",
+      slug: "phones",
+      parentId: 3,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.parentId).toBe(3);
+  });
+
+  it("accepts an explicit null parentId, meaning a root", () => {
+    const result = CreateCategorySchema.safeParse({
+      name: "Electronics",
+      slug: "electronics",
+      parentId: null,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.parentId).toBeNull();
+  });
+
+  it("leaves parentId undefined when it is not sent", () => {
+    const result = CreateCategorySchema.safeParse({ name: "Books", slug: "books" });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.parentId).toBeUndefined();
+  });
+
+  it("rejects a non-integer parentId", () => {
+    const result = CreateCategorySchema.safeParse({
+      name: "Phones",
+      slug: "phones",
+      parentId: 1.5,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a zero or negative parentId", () => {
+    expect(
+      CreateCategorySchema.safeParse({ name: "a", slug: "a", parentId: 0 }).success,
+    ).toBe(false);
+  });
+
+  it("accepts sortOrder on update", () => {
+    const result = UpdateCategorySchema.safeParse({ sortOrder: 5 });
+
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.sortOrder).toBe(5);
+  });
+
+  it("still rejects an empty update body", () => {
+    expect(UpdateCategorySchema.safeParse({}).success).toBe(false);
   });
 });
