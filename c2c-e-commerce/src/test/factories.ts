@@ -11,6 +11,7 @@ import { eq } from "drizzle-orm";
 import { hashPassword } from "@/lib/auth";
 import {
   categories,
+  listingImages,
   oauthAccounts,
   listings,
   orderItems,
@@ -18,6 +19,7 @@ import {
   reviews,
   users,
   type Category,
+  type ListingImage,
   type OAuthAccount,
   type Listing,
   type Order,
@@ -68,6 +70,12 @@ export type MakeListingOptions = Partial<
   categoryId?: number | null;
   embedding?: number[];
   embeddingUpdatedAt?: Date;
+};
+
+export type MakeListingImageOptions = Partial<
+  Pick<ListingImage, "storageKey" | "contentType" | "byteSize" | "width" | "height" | "sortOrder">
+> & {
+  listingId?: number;
 };
 
 export type MakeOrderOptions = Partial<Pick<Order, "status" | "totalPrice">> & {
@@ -178,6 +186,33 @@ export async function makeListing(options: MakeListingOptions = {}): Promise<Lis
     .returning();
 
   return listing;
+}
+
+export async function makeListingImage(
+  options: MakeListingImageOptions = {},
+): Promise<ListingImage> {
+  const db = await getTestDb();
+  const n = next();
+
+  const listingId = options.listingId ?? (await makeListing()).id;
+
+  const [image] = await db
+    .insert(listingImages)
+    .values({
+      listingId,
+      // Shaped like a real key so a test that accidentally passes one to the storage
+      // layer gets a realistic answer rather than an immediate validation error.
+      storageKey:
+        options.storageKey ?? `listings/${listingId}/${n.toString(16).padStart(32, "0")}.webp`,
+      contentType: options.contentType ?? "image/webp",
+      byteSize: options.byteSize ?? 1024,
+      width: options.width ?? 800,
+      height: options.height ?? 600,
+      sortOrder: options.sortOrder ?? 0,
+    })
+    .returning();
+
+  return image;
 }
 
 export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> {

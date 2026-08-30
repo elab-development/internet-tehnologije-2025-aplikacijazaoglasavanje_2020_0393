@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import { categories } from "./categories";
+import { listingImages } from "./listing-images";
 import { listings } from "./listings";
 import { oauthAccounts } from "./oauth-accounts";
 import { orderItems } from "./order-items";
@@ -10,6 +11,7 @@ import { users } from "./users";
 
 // ─── Re-exports ───────────────────────────────────────────────────────────────
 export * from "./categories";
+export * from "./listing-images";
 export * from "./listings";
 export * from "./oauth-accounts";
 export * from "./order-items";
@@ -44,6 +46,13 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
 
 export const categoriesRelations = relations(categories, ({ many }) => ({
   listings: many(listings),
+}));
+
+export const listingImagesRelations = relations(listingImages, ({ one }) => ({
+  listing: one(listings, {
+    fields: [listingImages.listingId],
+    references: [listings.id],
+  }),
 }));
 
 export const listingsRelations = relations(listings, ({ one, many }) => ({

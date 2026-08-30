@@ -17,6 +17,7 @@ import { categories } from "./categories";
 import { users } from "./users";
 
 export const listingStatusEnum = pgEnum("listing_status", [
+  "draft",
   "active",
   "sold",
   "removed",
