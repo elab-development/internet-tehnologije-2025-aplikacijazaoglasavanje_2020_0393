@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { isUniqueViolation } from "@/db/pg-errors";
+import { USERS_EMAIL_LOWER_INDEX } from "@/db/users";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
 import {
@@ -144,10 +146,21 @@ export async function POST(request: NextRequest) {
     // ── Create user ───────────────────────────────────────────────────────────
     const passwordHash = await hashPassword(password);
 
-    const [user] = await db
-      .insert(users)
-      .values({ email, passwordHash, name, phoneNumber: phoneNumber ?? null, role })
-      .returning();
+    let user;
+    try {
+      [user] = await db
+        .insert(users)
+        .values({ email, passwordHash, name, phoneNumber: phoneNumber ?? null, role })
+        .returning();
+    } catch (err) {
+      // The pre-check above is a courtesy; two simultaneous registrations both pass it
+      // and only the index decides. Reaching here is a real conflict, not a server
+      // fault, and it used to surface as a 500.
+      if (isUniqueViolation(err, USERS_EMAIL_LOWER_INDEX)) {
+        return jsonError("An account with that email already exists", 409);
+      }
+      throw err;
+    }
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 

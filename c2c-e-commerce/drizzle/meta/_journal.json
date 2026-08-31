@@ -134,6 +134,13 @@
       "when": 1771947300000,
       "tag": "0018_drop_review_listing_id",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1771947400000,
+      "tag": "0019_users_email_lower",
+      "breakpoints": true
     }
   ]
 }

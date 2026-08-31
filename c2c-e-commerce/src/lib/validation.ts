@@ -169,7 +169,14 @@ function validateDecimalString(raw: string, ctx: z.RefinementCtx): string {
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export const RegisterBodySchema = z.object({
-  email: z.string().email("email must be a valid email address"),
+  // Normalised on the way in: the column is lowercase (migration 0019), so storing
+  // whatever casing the caller typed would let `A@x.com` and `a@x.com` become two
+  // accounts.
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("email must be a valid email address"),
   password: z.string().min(8, "password must be at least 8 characters"),
   name: z.string().min(1, "name is required"),
   phoneNumber: z.string().trim().min(1).nullable().optional(),
@@ -181,7 +188,10 @@ export const RegisterBodySchema = z.object({
 });
 
 export const LoginBodySchema = z.object({
-  email: z.string().min(1, "email is required"),
+  // Normalised for the same reason the register schema is, and it has to happen here
+  // too: the stored column is lowercase, so a lookup with the caller's original casing
+  // would miss their own row.
+  email: z.string().trim().toLowerCase().min(1, "email is required"),
   password: z.string().min(1, "password is required"),
 });
 

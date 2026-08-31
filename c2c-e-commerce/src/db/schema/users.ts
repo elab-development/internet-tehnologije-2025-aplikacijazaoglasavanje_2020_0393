@@ -12,7 +12,15 @@ export const userRoleEnum = pgEnum("user_role", ["buyer", "seller", "admin"]);
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  email: text("email").unique().notNull(),
+  /**
+   * Uniqueness is enforced by `users_email_lower_idx` (migration 0019), a
+   * case-insensitive expression index, not by a column-level constraint here. Declaring
+   * `.unique()` on top of it would create a second, redundant exact-match constraint --
+   * exactly the one 0019 drops, because with both present Postgres reports an
+   * exact-case duplicate against the older constraint, not this one, and
+   * `isUniqueViolation` in the register route stops matching.
+   */
+  email: text("email").notNull(),
   /**
    * Null for accounts that authenticate only through an external provider
    * (C2C-SEC-5). Every reader must handle null -- see the login route, where doing so

@@ -195,10 +195,14 @@ async function resolveUser(
   // link nor seed a new account under that address.
   if (!profile.emailVerified) return { outcome: "email_unverified" };
 
+  // The column is lowercase (migration 0019); a provider may return any casing, and
+  // comparing against it verbatim would miss an account that already exists.
+  const email = profile.email.trim().toLowerCase();
+
   const [existing] = await db
     .select()
     .from(users)
-    .where(eq(users.email, profile.email))
+    .where(eq(users.email, email))
     .limit(1);
 
   if (existing) return { outcome: "needs_link", userId: existing.id, profile };
@@ -206,7 +210,7 @@ async function resolveUser(
   const [created] = await db
     .insert(users)
     .values({
-      email: profile.email,
+      email,
       // Never from the provider: SEC-1's rule holds on this path too.
       role: "buyer",
       passwordHash: null,
