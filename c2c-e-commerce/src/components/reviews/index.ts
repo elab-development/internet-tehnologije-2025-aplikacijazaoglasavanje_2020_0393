@@ -1,6 +1,9 @@
 export { default as StarRating } from "./StarRating";
 export type { StarRatingProps } from "./StarRating";
 
+export { default as SellerReviewFeed } from "./SellerReviewFeed";
+export type { SellerReviewFeedProps } from "./SellerReviewFeed";
+
 export { default as SellerReviews } from "./SellerReviews";
 export type { SellerReviewsProps } from "./SellerReviews";
 

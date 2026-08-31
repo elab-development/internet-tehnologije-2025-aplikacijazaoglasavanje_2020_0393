@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
-import SellerReviews from "@/components/reviews/SellerReviews";
+import SellerReviewFeed from "@/components/reviews/SellerReviewFeed";
 import StarRating from "@/components/reviews/StarRating";
 import { ErrorAlert, Skeleton } from "@/components/ui";
 import { useFetch } from "@/hooks/useFetch";
@@ -16,13 +16,16 @@ import type { ListingsResponse, SellerReviewsResponse } from "@/types/api";
  * `GET /api/listings?sellerId=`, which already knows that a stranger sees only `active`
  * rows. Duplicating that visibility rule in a new endpoint is how the two would drift.
  */
+/** Also the `limit` the first page is fetched with -- the feed continues from it. */
+const REVIEWS_PER_PAGE = 20;
+
 export default function SellerProfilePage() {
   const params = useParams<{ id: string }>();
   const sellerId = Number(params.id);
   const hasValidId = Number.isInteger(sellerId) && sellerId > 0;
 
   const { data, loading, error } = useFetch<SellerReviewsResponse>(
-    hasValidId ? `/api/users/${sellerId}/reviews?limit=50` : null,
+    hasValidId ? `/api/users/${sellerId}/reviews?limit=${REVIEWS_PER_PAGE}` : null,
   );
 
   const { data: listingData } = useFetch<ListingsResponse>(
@@ -67,7 +70,12 @@ export default function SellerProfilePage() {
         <h2 className="text-xl font-semibold text-zinc-900">
           Reviews {seller.reviewCount > 0 && `(${seller.reviewCount})`}
         </h2>
-        <SellerReviews reviews={data.data} />
+        <SellerReviewFeed
+          sellerId={sellerId}
+          initialReviews={data.data}
+          total={seller.reviewCount}
+          pageSize={REVIEWS_PER_PAGE}
+        />
       </section>
 
       {listings.length > 0 && (
