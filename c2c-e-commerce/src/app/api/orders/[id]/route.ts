@@ -8,7 +8,7 @@ import {
   releaseUnheldListings,
   transitionOrder,
 } from "@/db/orders";
-import { listings, orders } from "@/db/schema";
+import { listings, orders, reviews } from "@/db/schema";
 import { HIDE_EXISTENCE_MESSAGE, canViewOrder, orderActorFor } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { canTransition, listingStatusAfter } from "@/lib/order-lifecycle";
@@ -68,6 +68,10 @@ class ListingNotSellableError extends Error {}
  *                       type: integer
  *                       nullable: true
  *                       example: 42
+ *                     reviewId:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: The review of this order, if the buyer has left one
  *       400:
  *         description: Invalid order id
  *         content:
@@ -118,12 +122,22 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const covers = await coverImageIdsFor([row.order.listingId]);
 
+    // Whether this order has been reviewed, so the order page can offer the affordance
+    // once and not again. Sent to both parties: a review of this seller is public the
+    // moment it exists, so there is nothing here the seller cannot already read.
+    const [review] = await db
+      .select({ id: reviews.id })
+      .from(reviews)
+      .where(eq(reviews.orderId, row.order.id))
+      .limit(1);
+
     return jsonOk({
       ...row.order,
       // The FK is RESTRICT, so the join cannot miss. The fallback is for a database that
       // has been edited by hand rather than for a case the code can reach.
       listingTitle: row.listingTitle ?? `Listing #${row.order.listingId}`,
       coverImageId: covers.get(row.order.listingId) ?? null,
+      reviewId: review?.id ?? null,
     });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);

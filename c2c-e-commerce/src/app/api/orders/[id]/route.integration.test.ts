@@ -9,7 +9,7 @@ import { listings, orders } from "@/db/schema";
 import type { OrderStatus } from "@/lib/order-lifecycle";
 import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
-import { makeListing, makeOrder, makeUser } from "@/test/factories";
+import { makeListing, makeOrder, makeReview, makeUser } from "@/test/factories";
 
 beforeEach(async () => {
   await resetDb();
@@ -339,5 +339,24 @@ describe("GET /api/orders/[id]", () => {
     const { status } = await read(order.id, authHeaderFor(stranger));
 
     expect(status).toBe(404);
+  });
+
+  it("reports reviewId as null on an order nobody has reviewed", async () => {
+    const buyer = await makeUser({ role: "buyer" });
+    const order = await makeOrder({ buyerId: buyer.id, status: "completed" });
+
+    const { body } = await read(order.id, authHeaderFor(buyer));
+
+    expect(body.reviewId).toBeNull();
+  });
+
+  it("reports the review's id once one exists", async () => {
+    const buyer = await makeUser({ role: "buyer" });
+    const order = await makeOrder({ buyerId: buyer.id, status: "completed" });
+    const review = await makeReview({ orderId: order.id, reviewerId: buyer.id });
+
+    const { body } = await read(order.id, authHeaderFor(buyer));
+
+    expect(body.reviewId).toBe(review.id);
   });
 });
