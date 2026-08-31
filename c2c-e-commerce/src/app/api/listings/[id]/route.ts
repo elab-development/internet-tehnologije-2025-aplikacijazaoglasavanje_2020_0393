@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { categories, listings, users } from "@/db/schema";
+import { categories, listings, orders, users } from "@/db/schema";
 import { isLeafCategory } from "@/db/categories";
 import { listImagesFor, toImageSummary } from "@/db/listing-images";
 import { hasLiveOrder } from "@/db/orders";
@@ -383,7 +383,17 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
  *   delete:
  *     tags: [Listings]
  *     summary: Delete a listing
- *     description: Permanently removes a listing. Only the owner seller or an admin may delete.
+ *     description: |
+ *       Only the owner seller or an admin may delete. A listing with no order history is
+ *       deleted outright, along with its stored images. A listing any order references is
+ *       withdrawn instead: `orders.listing_id` is RESTRICT, so the row cannot be deleted
+ *       while an order still points at it. Withdrawing sets `status` to `removed`, which
+ *       is outside PUBLIC_LISTING_STATUSES and so leaves browse, search and the public
+ *       detail route -- the buyer's order keeps pointing at something real, and its
+ *       images are left alone.
+ *
+ *       The response body's `status` field tells the two outcomes apart: `"deleted"` for
+ *       a hard delete, `"removed"` for a withdrawal.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -395,7 +405,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
  *         description: Listing ID
  *     responses:
  *       200:
- *         description: Listing deleted
+ *         description: Listing deleted or withdrawn — see `status` in the response body.
  *         content:
  *           application/json:
  *             schema:
@@ -404,6 +414,12 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
  *                 message:
  *                   type: string
  *                   example: Listing deleted successfully
+ *                 status:
+ *                   type: string
+ *                   enum: [deleted, removed]
+ *                   description: >
+ *                     `deleted` when the row was hard-deleted; `removed` when it was
+ *                     withdrawn instead because an order still references it.
  *       401:
  *         description: Missing or invalid token
  *         content:
@@ -454,6 +470,34 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       return jsonError("Forbidden", 403);
     }
 
+    // `orders.listing_id` is RESTRICT, and rightly so: an order that pointed at nothing
+    // would be a receipt for a purchase the system could no longer describe. So a listing
+    // with history is withdrawn rather than deleted.
+    //
+    // `removed` is outside PUBLIC_LISTING_STATUSES, so this takes the listing out of
+    // browse, search and the public detail route -- which is what the seller asked for --
+    // while the buyer's order keeps pointing at something real.
+    const [referencingOrder] = await db
+      .select({ id: orders.id })
+      .from(orders)
+      .where(eq(orders.listingId, id))
+      .limit(1);
+
+    if (referencingOrder) {
+      await db
+        .update(listings)
+        .set({ status: "removed" })
+        .where(eq(listings.id, id));
+
+      // The images stay. The row still exists and an order still links to it, so removing
+      // its objects would leave that order pointing at a listing with no photos.
+      return jsonOk({
+        message:
+          "Listing withdrawn. It is no longer visible to buyers, but it cannot be deleted outright because it has order history.",
+        status: "removed",
+      });
+    }
+
     // Read the image rows *before* the delete: migration 0012's ON DELETE CASCADE takes
     // listing_images (and with it, the only record of the storage keys) down with the
     // listing row. After the cascade nothing can enumerate the orphaned objects.
@@ -472,7 +516,7 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       }
     }
 
-    return jsonOk({ message: "Listing deleted successfully" });
+    return jsonOk({ message: "Listing deleted successfully", status: "deleted" });
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);
