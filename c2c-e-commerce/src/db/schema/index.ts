@@ -22,7 +22,12 @@ export * from "./users";
 
 export const usersRelations = relations(users, ({ many }) => ({
   listings: many(listings),
-  orders: many(orders),
+  // Part 3 denormalised `sellerId` onto `orders`, which put a user in two relationships
+  // to it — the orders they placed and the sales they made — exactly as with `reviews`
+  // below. A single `many(orders)` cannot say which `one(users)` on `ordersRelations` it
+  // pairs with, and D5 means everyone is eventually both.
+  ordersPlaced: many(orders, { relationName: "orderBuyer" }),
+  ordersSold: many(orders, { relationName: "orderSeller" }),
   // A user now stands in two different relationships to `reviews` — the reviews they
   // wrote and the reviews written about them — so a single `many(reviews)` is ambiguous:
   // Drizzle resolves it by finding the *unique* matching `one(users)` on the other side,
@@ -74,10 +79,12 @@ export const ordersRelations = relations(orders, ({ one }) => ({
   buyer: one(users, {
     fields: [orders.buyerId],
     references: [users.id],
+    relationName: "orderBuyer",
   }),
   seller: one(users, {
     fields: [orders.sellerId],
     references: [users.id],
+    relationName: "orderSeller",
   }),
   listing: one(listings, {
     fields: [orders.listingId],
