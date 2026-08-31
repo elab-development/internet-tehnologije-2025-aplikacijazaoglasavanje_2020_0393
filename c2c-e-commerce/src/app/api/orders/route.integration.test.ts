@@ -316,10 +316,10 @@ describe("POST /api/orders — the residual conflict the unique index catches", 
     const listing = await makeListing({ sellerId: seller.id, status: "sold" });
     await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "confirmed" });
 
-    const { PUT } = await import("../listings/[id]/route");
-    const relist = await PUT(
+    const { PATCH } = await import("../listings/[id]/route");
+    const relist = await PATCH(
       new NextRequest(`http://localhost/api/listings/${listing.id}`, {
-        method: "PUT",
+        method: "PATCH",
         headers: { "content-type": "application/json", ...authHeaderFor(admin) },
         body: JSON.stringify({ status: "active" }),
       }),

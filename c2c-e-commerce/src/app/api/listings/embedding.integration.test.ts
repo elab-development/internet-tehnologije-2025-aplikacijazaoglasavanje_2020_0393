@@ -53,11 +53,11 @@ async function post(body: unknown, headers: Record<string, string>) {
   );
 }
 
-async function put(id: number, body: unknown, headers: Record<string, string>) {
-  const { PUT } = await import("./[id]/route");
-  return PUT(
+async function patch(id: number, body: unknown, headers: Record<string, string>) {
+  const { PATCH } = await import("./[id]/route");
+  return PATCH(
     new NextRequest(`http://localhost/api/listings/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),
@@ -196,7 +196,7 @@ describe("C2C-AI-4 — POST /api/listings", () => {
   });
 });
 
-describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
+describe("C2C-AI-4 — PATCH /api/listings/[id]", () => {
   it("AC3: changing the title recomputes the embedding and advances embedding_updated_at", async () => {
     const seller = await makeUser({ role: "seller" });
     const listing = await makeListing({
@@ -207,7 +207,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
       embeddingUpdatedAt: new Date("2020-01-01T00:00:00Z"),
     });
 
-    const response = await put(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
+    const response = await patch(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
     expect(response.status).toBe(200);
 
     const row = await rowById(listing.id);
@@ -222,7 +222,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     const listing = await makeListing({ sellerId: seller.id, title: "Bike" });
 
     control.embedCalls = 0;
-    await put(listing.id, { description: "Now with new tyres." }, authHeaderFor(seller));
+    await patch(listing.id, { description: "Now with new tyres." }, authHeaderFor(seller));
 
     expect(control.embedCalls).toBeGreaterThan(0);
     expect((await rowById(listing.id)).embedding).not.toBeNull();
@@ -243,7 +243,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     // Positive control: a title change on this same listing does embed. Without it,
     // "no embed call" would hold trivially against a route that never embeds.
     control.embedCalls = 0;
-    await put(listing.id, { title: "Some other bike" }, authHeaderFor(seller));
+    await patch(listing.id, { title: "Some other bike" }, authHeaderFor(seller));
     expect(control.embedCalls).toBeGreaterThan(0);
 
     // The control just re-embedded, so the baseline for "unchanged" is what it left
@@ -252,7 +252,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     expect(afterControl.embeddingUpdatedAt!.getTime()).toBeGreaterThan(stamped.getTime());
 
     control.embedCalls = 0;
-    const response = await put(listing.id, { price: 150 }, authHeaderFor(seller));
+    const response = await patch(listing.id, { price: 150 }, authHeaderFor(seller));
     expect(response.status).toBe(200);
 
     expect(control.embedCalls).toBe(0);
@@ -269,11 +269,11 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     const listing = await makeListing({ sellerId: seller.id });
 
     control.embedCalls = 0;
-    await put(listing.id, { description: "Rewritten." }, authHeaderFor(seller));
+    await patch(listing.id, { description: "Rewritten." }, authHeaderFor(seller));
     expect(control.embedCalls).toBeGreaterThan(0);
 
     control.embedCalls = 0;
-    await put(
+    await patch(
       listing.id,
       { status: "sold", categoryId: category.id },
       authHeaderFor(seller),
@@ -287,11 +287,11 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     const listing = await makeListing({ sellerId: seller.id, title: "Aluminium mountain bike" });
 
     control.embedCalls = 0;
-    await put(listing.id, { title: "A different title" }, authHeaderFor(seller));
+    await patch(listing.id, { title: "A different title" }, authHeaderFor(seller));
     expect(control.embedCalls).toBeGreaterThan(0);
 
     control.embedCalls = 0;
-    await put(
+    await patch(
       listing.id,
       { title: "A different title", price: 150 },
       authHeaderFor(seller),
@@ -308,7 +308,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
       embeddingUpdatedAt: new Date("2020-01-01T00:00:00Z"),
     });
 
-    await put(listing.id, { price: 150 }, authHeaderFor(seller));
+    await patch(listing.id, { price: 150 }, authHeaderFor(seller));
     const row = await rowById(listing.id);
 
     // This is exactly the staleness signal the backfill queries on:
@@ -326,7 +326,7 @@ describe("C2C-AI-4 — PUT /api/listings/[id]", () => {
     control.embedCalls = 0;
     control.shouldThrow = true;
 
-    const response = await put(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
+    const response = await patch(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
 
     expect(control.embedCalls).toBeGreaterThan(0);
     expect(response.status).toBe(200);
@@ -375,11 +375,11 @@ describe("C2C-AI-7 AC1 — the embedding never leaves the server", () => {
     for (const key of internal) expect(body).not.toHaveProperty(key);
   });
 
-  it("AC1: PUT /api/listings/[id] omits the embedding columns from the updated row", async () => {
+  it("AC1: PATCH /api/listings/[id] omits the embedding columns from the updated row", async () => {
     const seller = await makeUser({ role: "seller" });
     const listing = await makeListing({ sellerId: seller.id });
 
-    const response = await put(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
+    const response = await patch(listing.id, { title: "Carbon road bike" }, authHeaderFor(seller));
     const body = await response.json();
 
     expect(response.status).toBe(200);

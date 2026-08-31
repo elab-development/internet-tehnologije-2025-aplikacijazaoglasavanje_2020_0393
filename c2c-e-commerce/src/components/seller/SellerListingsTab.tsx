@@ -64,7 +64,7 @@ export default function SellerListingsTab({
 
     try {
       setUpdatingListingId(listingId);
-      await api.put(`/api/listings/${listingId}`, { status: newStatus });
+      await api.patch(`/api/listings/${listingId}`, { status: newStatus });
       replaceListings((current) =>
         current.map((listing) =>
           listing.id === listingId

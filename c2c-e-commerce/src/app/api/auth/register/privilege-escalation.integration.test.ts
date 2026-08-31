@@ -65,11 +65,11 @@ async function updateUser(
   body: unknown,
   headers: Record<string, string>,
 ): Promise<{ status: number; body: { role?: string; error?: string } }> {
-  const { PUT } = await import("../../users/[id]/route");
+  const { PATCH } = await import("../../users/[id]/route");
 
-  const response = await PUT(
+  const response = await PATCH(
     new NextRequest(`http://localhost/api/users/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),
@@ -164,7 +164,7 @@ describe("C2C-SEC-1 — self-registration cannot escalate to admin", () => {
   });
 });
 
-describe("C2C-SEC-1 — PUT /api/users/[id] is the only path that grants admin", () => {
+describe("C2C-SEC-1 — PATCH /api/users/[id] is the only path that grants admin", () => {
   beforeEach(async () => {
     await resetDb();
     resetRateLimits();

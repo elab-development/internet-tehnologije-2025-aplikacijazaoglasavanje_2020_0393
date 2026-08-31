@@ -20,7 +20,7 @@
  * wait for that transaction to commit -- whether it then discovers the cycle is not a
  * matter of luck.
  *
- * Written against PUT, matching the handler as it exists now; Task 18 renames it to PATCH.
+ * Written against PATCH, per Task 18.
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -36,7 +36,7 @@ beforeEach(async () => {
 
 function moveRequest(token: string, parentId: number | null): NextRequest {
   return new NextRequest("http://localhost/api/categories/0", {
-    method: "PUT",
+    method: "PATCH",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
@@ -46,8 +46,8 @@ function moveRequest(token: string, parentId: number | null): NextRequest {
 }
 
 async function move(id: number, parentId: number | null, adminToken: string) {
-  const { PUT } = await import("./[id]/route");
-  return PUT(moveRequest(adminToken, parentId), {
+  const { PATCH } = await import("./[id]/route");
+  return PATCH(moveRequest(adminToken, parentId), {
     params: Promise.resolve({ id: String(id) }),
   });
 }
@@ -152,7 +152,7 @@ describe("concurrent moves of the same node", () => {
 
     try {
       // Connection A plays a first move of X, already complete: parentId/path/depth for
-      // X itself, and the subtree rewrite for C, exactly what a real first PUT commits.
+      // X itself, and the subtree rewrite for C, exactly what a real first PATCH commits.
       // It locks X's row under FOR UPDATE (the row the second move also has to lock) and
       // stays open, uncommitted, so the second move below is provably still queued behind
       // it rather than racing it.

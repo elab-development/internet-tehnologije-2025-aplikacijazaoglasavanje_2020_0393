@@ -13,7 +13,7 @@ import ListingForm from "./ListingForm";
 
 const auth = vi.hoisted(() => ({ role: "seller" as string | null }));
 const post = vi.hoisted(() => vi.fn());
-const put = vi.hoisted(() => vi.fn());
+const patch = vi.hoisted(() => vi.fn());
 const push = vi.hoisted(() => vi.fn());
 
 vi.mock("@/context/AuthContext", () => ({
@@ -32,7 +32,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { post, get: vi.fn(), put, delete: vi.fn() },
+  api: { post, get: vi.fn(), patch, delete: vi.fn() },
 }));
 
 // URL-aware, not blanket: the form calls useFetch twice — once for categories and once,
@@ -64,7 +64,7 @@ const generateButton = () => screen.getByRole("button", { name: /generate with a
 beforeEach(() => {
   auth.role = "seller";
   post.mockReset();
-  put.mockReset();
+  patch.mockReset();
   push.mockReset();
 });
 
@@ -141,7 +141,7 @@ describe("C2C-AI-6 — AC3: what gets saved", () => {
     await user.click(screen.getByRole("button", { name: /create listing|save/i }));
 
     // Create-as-draft, then publish: the listing is created with status "draft" and only
-    // made visible by the follow-up PUT, so a failed upload in between leaves a draft
+    // made visible by the follow-up PATCH, so a failed upload in between leaves a draft
     // rather than a half-published listing.
     await waitFor(() => {
       const create = post.mock.calls.find(([url]) => url === "/api/listings");
@@ -152,7 +152,7 @@ describe("C2C-AI-6 — AC3: what gets saved", () => {
       });
     });
     await waitFor(() => {
-      expect(put).toHaveBeenCalledWith("/api/listings/1", { status: "active" });
+      expect(patch).toHaveBeenCalledWith("/api/listings/1", { status: "active" });
     });
   });
 

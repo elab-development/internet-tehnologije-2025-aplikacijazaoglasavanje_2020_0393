@@ -40,13 +40,13 @@ class CategoryHasListingsError extends Error {}
 /** The node itself was deleted between the pre-lock read and the lock. */
 class CategoryGoneMidMove extends Error {}
 
-// ─── PUT /api/categories/[id] ─────────────────────────────────────────────────
+// ─── PATCH /api/categories/[id] ───────────────────────────────────────────────
 // Admin only.
 
 /**
  * @swagger
  * /api/categories/{id}:
- *   put:
+ *   patch:
  *     tags: [Categories]
  *     summary: Update a category
  *     description: Updates an existing category. Admin only. Partial updates supported.
@@ -120,7 +120,7 @@ class CategoryGoneMidMove extends Error {}
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-export async function PUT(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
     authorize("admin")(payload);
@@ -283,7 +283,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       return jsonError("Move this category's listings before giving it subcategories", 409);
     }
     if (err instanceof CategoryGoneMidMove) return jsonError("Category not found", 404);
-    console.error("[PUT /api/categories/[id]]", err);
+    console.error("[PATCH /api/categories/[id]]", err);
     return jsonError("Internal server error");
   }
 }

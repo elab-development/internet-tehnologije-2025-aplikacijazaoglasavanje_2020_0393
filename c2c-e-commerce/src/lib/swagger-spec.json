@@ -920,7 +920,7 @@
       }
     },
     "/api/categories/{id}": {
-      "put": {
+      "patch": {
         "tags": [
           "Categories"
         ],
@@ -1538,7 +1538,7 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "Listings"
         ],
@@ -1684,7 +1684,7 @@
           "Listings"
         ],
         "summary": "Delete a listing",
-        "description": "Permanently removes a listing. Only the owner seller or an admin may delete.",
+        "description": "Only the owner seller or an admin may delete. A listing with no order history is\ndeleted outright, along with its stored images. A listing any order references is\nwithdrawn instead: `orders.listing_id` is RESTRICT, so the row cannot be deleted\nwhile an order still points at it. Withdrawing sets `status` to `removed`, which\nis outside PUBLIC_LISTING_STATUSES and so leaves browse, search and the public\ndetail route -- the buyer's order keeps pointing at something real, and its\nimages are left alone.\n\nThe response body's `status` field tells the two outcomes apart: `\"deleted\"` for\na hard delete, `\"removed\"` for a withdrawal.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1703,7 +1703,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Listing deleted",
+            "description": "Listing deleted or withdrawn — see `status` in the response body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1712,6 +1712,14 @@
                     "message": {
                       "type": "string",
                       "example": "Listing deleted successfully"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "deleted",
+                        "removed"
+                      ],
+                      "description": "`deleted` when the row was hard-deleted; `removed` when it was withdrawn instead because an order still references it.\n"
                     }
                   }
                 }
@@ -1767,7 +1775,7 @@
           "Listings"
         ],
         "summary": "Listings similar to this one",
-        "description": "Nearest neighbours of a listing by embedding cosine distance. Public — this needs no user history at all, so it works on a visitor's first page view.\nOnly `active` listings with a computed embedding are returned, and the source listing is never among them. A listing whose own embedding has not been computed yet answers `200` with an empty array rather than an error.\n",
+        "description": "Nearest neighbours of a listing by embedding cosine distance. Public for a published source listing — this needs no user history at all, so it works on a visitor's first page view. A `draft` or `removed` source is visible only to its owner or an admin, same rule as `GET /api/images/{id}`: neighbours would otherwise disclose what an unpublished listing is about.\nOnly `active` listings with a computed embedding are returned as neighbours, and the source listing is never among them. A source listing whose own embedding has not been computed yet answers `200` with an empty array rather than an error.\n",
         "parameters": [
           {
             "in": "path",
@@ -2723,15 +2731,53 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of orders",
+            "description": "Paginated orders",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Order"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -2875,59 +2921,97 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of seller orders",
+            "description": "Paginated seller orders",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "integer"
-                      },
-                      "buyerId": {
-                        "type": "integer"
-                      },
-                      "sellerId": {
-                        "type": "integer"
-                      },
-                      "buyerName": {
-                        "type": "string"
-                      },
-                      "buyerEmail": {
-                        "type": "string"
-                      },
-                      "listingId": {
-                        "type": "integer"
-                      },
-                      "listingTitle": {
-                        "type": "string"
-                      },
-                      "coverImageId": {
-                        "type": "integer",
-                        "nullable": true
-                      },
-                      "price": {
-                        "type": "string"
-                      },
-                      "status": {
-                        "type": "string"
-                      },
-                      "expiresAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
-                      "updatedAt": {
-                        "type": "string",
-                        "format": "date-time"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "buyerId": {
+                            "type": "integer"
+                          },
+                          "sellerId": {
+                            "type": "integer"
+                          },
+                          "buyerName": {
+                            "type": "string"
+                          },
+                          "buyerEmail": {
+                            "type": "string"
+                          },
+                          "listingId": {
+                            "type": "integer"
+                          },
+                          "listingTitle": {
+                            "type": "string"
+                          },
+                          "coverImageId": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "price": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
                       }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
                     }
                   }
                 }
@@ -3466,7 +3550,7 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "Users"
         ],
@@ -3675,21 +3759,59 @@
           "Users"
         ],
         "summary": "List all users",
-        "description": "Returns all users sorted by creation date. Admin only. Passwords are excluded.",
+        "description": "Returns paginated users sorted by creation date. Admin only. Passwords are excluded.",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of users",
+            "description": "Paginated users",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/User"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }

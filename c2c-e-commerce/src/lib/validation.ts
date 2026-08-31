@@ -181,7 +181,7 @@ export const RegisterBodySchema = z.object({
   name: z.string().min(1, "name is required"),
   phoneNumber: z.string().trim().min(1).nullable().optional(),
   // Deliberately excludes "admin": self-registration must never mint an admin.
-  // Admin is granted by an existing admin via PUT /api/users/[id].
+  // Admin is granted by an existing admin via PATCH /api/users/[id].
   role: z.enum(["buyer", "seller"], {
     error: "role must be 'buyer' or 'seller'",
   }).default("buyer"),

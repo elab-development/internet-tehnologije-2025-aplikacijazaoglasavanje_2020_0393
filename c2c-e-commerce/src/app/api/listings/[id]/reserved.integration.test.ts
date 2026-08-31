@@ -29,10 +29,10 @@ async function readListing(id: number, headers: Record<string, string> = {}) {
 }
 
 async function editListing(id: number, headers: Record<string, string>, body: unknown) {
-  const { PUT } = await import("./route");
-  const response = await PUT(
+  const { PATCH } = await import("./route");
+  const response = await PATCH(
     new NextRequest(`http://localhost/api/listings/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),

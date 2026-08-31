@@ -152,7 +152,7 @@ export default function ListingForm(props: ListingFormProps) {
 
     try {
       if (props.mode === "edit") {
-        await api.put(`/api/listings/${props.listingId}`, {
+        await api.patch(`/api/listings/${props.listingId}`, {
           ...payload,
           status,
         });
@@ -170,7 +170,7 @@ export default function ListingForm(props: ListingFormProps) {
 
         await uploadFiles(created.id);
 
-        await api.put(`/api/listings/${created.id}`, { status: "active" });
+        await api.patch(`/api/listings/${created.id}`, { status: "active" });
 
         toast.success("Listing created successfully!");
         router.push(`/listings/${created.id}`);

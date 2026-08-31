@@ -80,8 +80,8 @@ describe("C2C-AI-4 — needsReembedding", () => {
   });
 
   it("AC4: resubmitting the identical title does not count as a change", () => {
-    // Presence in the payload is not the test — the value is. A client that PUTs the whole
-    // object every time would otherwise re-embed on every save.
+    // Presence in the payload is not the test — the value is. A client that PATCHes the
+    // whole object every time would otherwise re-embed on every save.
     expect(needsReembedding(current, { title: "Mountain bike" })).toBe(false);
   });
 

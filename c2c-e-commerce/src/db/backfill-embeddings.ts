@@ -43,8 +43,8 @@ const DEFAULT_BATCH_SIZE = 32;
  * vector was written.
  *
  * `embedding_updated_at IS NULL` is listed separately from `embedding IS NULL` because
- * PUT clears both on a failed re-embed, and a row could in principle carry one without the
- * other.
+ * PATCH clears both on a failed re-embed, and a row could in principle carry one without
+ * the other.
  */
 const isStale = or(
   isNull(listings.embedding),

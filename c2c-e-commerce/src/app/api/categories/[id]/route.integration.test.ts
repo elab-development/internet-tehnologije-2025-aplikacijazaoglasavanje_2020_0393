@@ -23,10 +23,10 @@ beforeEach(async () => {
 });
 
 async function updateCategory(id: number, body: unknown) {
-  const { PUT } = await import("./route");
-  return PUT(
+  const { PATCH } = await import("./route");
+  return PATCH(
     new NextRequest(`http://localhost/api/categories/${id}`, {
-      method: "PUT",
+      method: "PATCH",
       headers: {
         "content-type": "application/json",
         authorization: `Bearer ${adminToken}`,
@@ -54,7 +54,7 @@ async function row(id: number) {
   return found;
 }
 
-describe("PUT /api/categories/[id] — re-parenting", () => {
+describe("PATCH /api/categories/[id] — re-parenting", () => {
   it("rewrites the moved node and its whole subtree", async () => {
     const electronics = await makeCategory({ slug: "electronics" });
     const phones = await makeCategory({ slug: "phones", parentId: electronics.id });

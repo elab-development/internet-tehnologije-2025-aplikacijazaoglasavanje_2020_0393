@@ -30,7 +30,7 @@ export function buildEmbeddingText(listing: EmbeddableListing): string {
 /**
  * Whether an update changes the embedded text, and so requires a new vector.
  *
- * Compares the *built text*, not which fields are present. A client that PUTs the whole
+ * Compares the *built text*, not which fields are present. A client that PATCHes the whole
  * object on every save would otherwise re-embed on every price change, and a title
  * differing only in whitespace would produce an identical vector at full cost.
  */
@@ -68,7 +68,7 @@ export type EmbeddingOutcome =
  * outcome than a listing that is temporarily unsearchable by meaning — it is still fully
  * keyword-searchable, and the backfill will catch it.
  *
- * Absorbing the failure here rather than in each route means `POST` and `PUT` cannot get
+ * Absorbing the failure here rather than in each route means `POST` and `PATCH` cannot get
  * it subtly differently. AI-2 propagates so that this layer can decide; this is the layer.
  */
 export async function computeListingEmbedding(

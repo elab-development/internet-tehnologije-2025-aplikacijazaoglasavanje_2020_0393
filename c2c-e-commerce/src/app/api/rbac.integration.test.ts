@@ -66,12 +66,12 @@ async function call(
 
 // ─── Listings ─────────────────────────────────────────────────────────────────
 
-describe("C2C-SEC-10 AC2 — PUT/DELETE /api/listings/[id]", () => {
+describe("C2C-SEC-10 AC2 — PATCH/DELETE /api/listings/[id]", () => {
   it("lets the owning seller update", async () => {
     const seller = await makeUser({ role: "seller" });
     const listing = await makeListing({ sellerId: seller.id });
 
-    const response = await call("./listings/[id]/route", "PUT", `/api/listings/${listing.id}`, {
+    const response = await call("./listings/[id]/route", "PATCH", `/api/listings/${listing.id}`, {
       headers: authHeaderFor(seller),
       body: { title: "Updated" },
       params: { id: String(listing.id) },
@@ -85,7 +85,7 @@ describe("C2C-SEC-10 AC2 — PUT/DELETE /api/listings/[id]", () => {
     const stranger = await makeUser({ role: "seller" });
     const listing = await makeListing({ sellerId: owner.id, title: "Original" });
 
-    const response = await call("./listings/[id]/route", "PUT", `/api/listings/${listing.id}`, {
+    const response = await call("./listings/[id]/route", "PATCH", `/api/listings/${listing.id}`, {
       headers: authHeaderFor(stranger),
       body: { title: "Hijacked" },
       params: { id: String(listing.id) },
@@ -119,7 +119,7 @@ describe("C2C-SEC-10 AC2 — PUT/DELETE /api/listings/[id]", () => {
     const seller = await makeUser({ role: "seller" });
     const listing = await makeListing({ sellerId: seller.id });
 
-    const response = await call("./listings/[id]/route", "PUT", `/api/listings/${listing.id}`, {
+    const response = await call("./listings/[id]/route", "PATCH", `/api/listings/${listing.id}`, {
       body: { title: "x" },
       params: { id: String(listing.id) },
     });
@@ -132,7 +132,7 @@ describe("C2C-SEC-10 AC2 — PUT/DELETE /api/listings/[id]", () => {
     const admin = await makeUser({ role: "admin" });
     const listing = await makeListing({ sellerId: seller.id });
 
-    const response = await call("./listings/[id]/route", "PUT", `/api/listings/${listing.id}`, {
+    const response = await call("./listings/[id]/route", "PATCH", `/api/listings/${listing.id}`, {
       headers: authHeaderFor(admin),
       body: { title: "Moderated" },
       params: { id: String(listing.id) },
@@ -410,11 +410,11 @@ describe("C2C-SEC-10 AC6 / Part 4 §6.3 — PATCH and DELETE /api/reviews/[id]",
 
 // ─── Users ────────────────────────────────────────────────────────────────────
 
-describe("C2C-SEC-10 AC7 — PUT /api/users/[id] and roles", () => {
+describe("C2C-SEC-10 AC7 — PATCH /api/users/[id] and roles", () => {
   it("refuses a self-service role change with 403", async () => {
     const buyer = await makeUser({ role: "buyer" });
 
-    const response = await call("./users/[id]/route", "PUT", `/api/users/${buyer.id}`, {
+    const response = await call("./users/[id]/route", "PATCH", `/api/users/${buyer.id}`, {
       headers: authHeaderFor(buyer),
       body: { role: "admin" },
       params: { id: String(buyer.id) },
@@ -430,7 +430,7 @@ describe("C2C-SEC-10 AC7 — PUT /api/users/[id] and roles", () => {
   it("lets a user update their own name", async () => {
     const buyer = await makeUser({ role: "buyer" });
 
-    const response = await call("./users/[id]/route", "PUT", `/api/users/${buyer.id}`, {
+    const response = await call("./users/[id]/route", "PATCH", `/api/users/${buyer.id}`, {
       headers: authHeaderFor(buyer),
       body: { name: "New Name" },
       params: { id: String(buyer.id) },
@@ -443,7 +443,7 @@ describe("C2C-SEC-10 AC7 — PUT /api/users/[id] and roles", () => {
     const a = await makeUser({ role: "buyer" });
     const b = await makeUser({ role: "buyer" });
 
-    const response = await call("./users/[id]/route", "PUT", `/api/users/${b.id}`, {
+    const response = await call("./users/[id]/route", "PATCH", `/api/users/${b.id}`, {
       headers: authHeaderFor(a),
       body: { name: "Hijacked" },
       params: { id: String(b.id) },
@@ -456,7 +456,7 @@ describe("C2C-SEC-10 AC7 — PUT /api/users/[id] and roles", () => {
     const admin = await makeUser({ role: "admin" });
     const target = await makeUser({ role: "buyer" });
 
-    const response = await call("./users/[id]/route", "PUT", `/api/users/${target.id}`, {
+    const response = await call("./users/[id]/route", "PATCH", `/api/users/${target.id}`, {
       headers: authHeaderFor(admin),
       body: { role: "admin" },
       params: { id: String(target.id) },
@@ -480,7 +480,7 @@ describe("C2C-SEC-10 AC9 — no response ever carries a password hash", () => {
         headers: authHeaderFor(buyer),
         params: { id: String(buyer.id) },
       }),
-      call("./users/[id]/route", "PUT", `/api/users/${buyer.id}`, {
+      call("./users/[id]/route", "PATCH", `/api/users/${buyer.id}`, {
         headers: authHeaderFor(buyer),
         body: { name: "Renamed" },
         params: { id: String(buyer.id) },

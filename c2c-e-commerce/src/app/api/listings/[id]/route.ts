@@ -161,13 +161,13 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
   }
 }
 
-// ─── PUT /api/listings/[id] ───────────────────────────────────────────────────
+// ─── PATCH /api/listings/[id] ─────────────────────────────────────────────────
 // Authenticated. Role: owner seller or admin.
 
 /**
  * @swagger
  * /api/listings/{id}:
- *   put:
+ *   patch:
  *     tags: [Listings]
  *     summary: Update a listing
  *     description: Updates an existing listing. Only the owner seller or an admin may update. Partial updates supported.
@@ -250,7 +250,7 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-export async function PUT(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
     authorize("seller", "admin")(payload);
@@ -330,8 +330,8 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (status !== undefined) updates.status = status;
 
     // Re-embed only when the embedded *text* actually changed. Comparing values rather
-    // than which fields were sent means a client that PUTs the whole object on every save
-    // does not pay for a new vector on a price edit (AC4).
+    // than which fields were sent means a client that PATCHes the whole object on every
+    // save does not pay for a new vector on a price edit (AC4).
     let outcome: EmbeddingOutcome | undefined;
     if (needsReembedding(listing, parsed.data)) {
       outcome = await computeListingEmbedding({
@@ -359,7 +359,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     if (outcome?.status === "failed") {
       console.error(
-        `[PUT /api/listings/[id]] embedding failed for listing ${updated.id}; stored without one`,
+        `[PATCH /api/listings/[id]] embedding failed for listing ${updated.id}; stored without one`,
         outcome.error,
       );
     }
@@ -369,7 +369,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);
     }
-    console.error("[PUT /api/listings/[id]]", err);
+    console.error("[PATCH /api/listings/[id]]", err);
     return jsonError("Internal server error", 500);
   }
 }

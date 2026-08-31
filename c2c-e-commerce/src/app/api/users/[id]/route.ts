@@ -93,7 +93,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   }
 }
 
-// ─── PUT /api/users/[id] ──────────────────────────────────────────────────────
+// ─── PATCH /api/users/[id] ─────────────────────────────────────────────────────
 // Admin or self.
 // Editable fields:
 //   - self:  name, phoneNumber, password
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 /**
  * @swagger
  * /api/users/{id}:
- *   put:
+ *   patch:
  *     tags: [Users]
  *     summary: Update a user
  *     description: |
@@ -179,7 +179,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-export async function PUT(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
@@ -249,7 +249,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     return jsonOk(sanitizeUser(updated));
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
-    console.error("[PUT /api/users/[id]]", err);
+    console.error("[PATCH /api/users/[id]]", err);
     return jsonError("Internal server error");
   }
 }

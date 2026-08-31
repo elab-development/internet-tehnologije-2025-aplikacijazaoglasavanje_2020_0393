@@ -2,8 +2,7 @@
  * Changing a password is what a person does *after* they believe they were compromised.
  * Leaving the attacker's 30-day refresh token live makes the remediation theatre.
  *
- * Written against `PUT` — the handler's current export. Task 18 renames it to `PATCH`
- * and updates this file alongside it; do not rename it here.
+ * Written against `PATCH`, per Task 18.
  */
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -43,7 +42,7 @@ async function seedOAuthOnlyUserWithSession(): Promise<{ user: User; accessToken
 
 function authed(accessToken: string, body: Record<string, unknown>): NextRequest {
   return new NextRequest("http://localhost/api/users/0", {
-    method: "PUT",
+    method: "PATCH",
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${accessToken}`,
@@ -86,9 +85,9 @@ beforeEach(async () => {
 describe("password change", () => {
   it("revokes every refresh family for that user", async () => {
     const { user, accessToken, refreshToken } = await seedUserWithSession("old-password-1");
-    const { PUT } = await import("./route");
+    const { PATCH } = await import("./route");
 
-    const response = await PUT(
+    const response = await PATCH(
       authed(accessToken, {
         currentPassword: "old-password-1",
         password: "new-password-2",
@@ -103,14 +102,14 @@ describe("password change", () => {
 
   it("rejects a self-change that does not prove the current password", async () => {
     const { user, accessToken } = await seedUserWithSession("old-password-1");
-    const { PUT } = await import("./route");
+    const { PATCH } = await import("./route");
 
-    const missing = await PUT(authed(accessToken, { password: "new-password-2" }), {
+    const missing = await PATCH(authed(accessToken, { password: "new-password-2" }), {
       params: Promise.resolve({ id: String(user.id) }),
     });
     expect(missing.status).toBe(400);
 
-    const wrong = await PUT(
+    const wrong = await PATCH(
       authed(accessToken, {
         currentPassword: "not-the-password",
         password: "new-password-2",
@@ -129,9 +128,9 @@ describe("password change", () => {
     // demanding it would break the one case the reset exists for.
     const { user } = await seedUserWithSession("old-password-1");
     const admin = await seedAdminWithSession();
-    const { PUT } = await import("./route");
+    const { PATCH } = await import("./route");
 
-    const response = await PUT(authed(admin.accessToken, { password: "reset-password-3" }), {
+    const response = await PATCH(authed(admin.accessToken, { password: "reset-password-3" }), {
       params: Promise.resolve({ id: String(user.id) }),
     });
 
@@ -143,9 +142,9 @@ describe("password change", () => {
     // OAuth-only accounts have passwordHash null: there is nothing to verify against, and
     // setting a first password must stay possible.
     const { user, accessToken } = await seedOAuthOnlyUserWithSession();
-    const { PUT } = await import("./route");
+    const { PATCH } = await import("./route");
 
-    const response = await PUT(authed(accessToken, { password: "first-password-1" }), {
+    const response = await PATCH(authed(accessToken, { password: "first-password-1" }), {
       params: Promise.resolve({ id: String(user.id) }),
     });
 
