@@ -146,10 +146,10 @@ describe("Task 5 — the collision match is case-insensitive", () => {
   it("finds the existing account regardless of the provider's casing, and creates no second row", async () => {
     // The column is lowercased (migration 0019); a provider returning a different casing
     // for the same address must still resolve to this row. Before the callback's
-    // `resolveUser` normalised `profile.email`, an exact-match `eq(users.email, …)` here
-    // would miss it and fall through to creating a brand-new account under the
-    // differently-cased address -- the second-account bug this task closes, reached
-    // through the collision path instead of plain registration.
+    // `findOrCreateOAuthUser` normalised `profile.email`, an exact-match
+    // `eq(users.email, …)` here would miss it and fall through to creating a brand-new
+    // account under the differently-cased address -- the second-account bug this task
+    // closes, reached through the collision path instead of plain registration.
     const existing = await makeUser({ email: MOCK_EMAIL, password: PASSWORD });
 
     // The mock provider derives the profile email from the code verbatim, so a

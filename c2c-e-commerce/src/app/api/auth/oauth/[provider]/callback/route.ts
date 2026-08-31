@@ -135,7 +135,7 @@ export async function GET(
     }
 
     // ── Resolve the user ──────────────────────────────────────────────────────
-    const resolved = await resolveUser(provider.id, profile);
+    const resolved = await findOrCreateOAuthUser(provider.id, profile);
 
     if (resolved.outcome === "email_unverified") return fail("email_unverified");
 
@@ -171,7 +171,7 @@ type Resolution =
  *      provider-supplied address is the account-takeover vector decision D9 exists to
  *      close; SEC-8 owns the flow that lets the real owner prove ownership.
  */
-async function resolveUser(
+export async function findOrCreateOAuthUser(
   provider: ProviderName,
   profile: NormalizedProfile,
 ): Promise<Resolution> {
@@ -207,24 +207,32 @@ async function resolveUser(
 
   if (existing) return { outcome: "needs_link", userId: existing.id, profile };
 
-  const [created] = await db
-    .insert(users)
-    .values({
-      email,
-      // Never from the provider: SEC-1's rule holds on this path too.
-      role: "buyer",
-      passwordHash: null,
-      name: profile.name ?? profile.email,
-      emailVerified: profile.emailVerified,
-      avatarUrl: profile.avatarUrl,
-    })
-    .returning();
+  // One transaction, because the pair is the account. A `users` row without its provider
+  // link is not a partial success -- it is an account nobody can ever sign into: password
+  // login rejects it (passwordHash is null), and the next OAuth callback matches the
+  // email, answers `needs_link`, and asks for the password that does not exist.
+  const created = await db.transaction(async (tx) => {
+    const [user] = await tx
+      .insert(users)
+      .values({
+        email,
+        // Never from the provider: SEC-1's rule holds on this path too.
+        role: "buyer",
+        passwordHash: null,
+        name: profile.name ?? profile.email,
+        emailVerified: profile.emailVerified,
+        avatarUrl: profile.avatarUrl,
+      })
+      .returning();
 
-  await db.insert(oauthAccounts).values({
-    userId: created.id,
-    provider,
-    providerAccountId: profile.providerAccountId,
-    providerEmail: profile.email,
+    await tx.insert(oauthAccounts).values({
+      userId: user.id,
+      provider,
+      providerAccountId: profile.providerAccountId,
+      providerEmail: profile.email,
+    });
+
+    return user;
   });
 
   return { outcome: "ok", user: created };
