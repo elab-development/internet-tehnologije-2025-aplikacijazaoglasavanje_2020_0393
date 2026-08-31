@@ -39,7 +39,7 @@ type Ctx = { params: Promise<Record<string, string>> };
 
 async function call(
   modulePath: string,
-  method: "GET" | "POST" | "PUT" | "DELETE",
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   url: string,
   opts: { headers?: Record<string, string>; body?: unknown; params?: Record<string, string> } = {},
 ) {
@@ -326,7 +326,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-describe("C2C-SEC-10 AC6 — DELETE /api/reviews/[id]", () => {
+describe("C2C-SEC-10 AC6 / Part 4 §6.3 — PATCH and DELETE /api/reviews/[id]", () => {
   it("refuses someone else's review with 403", async () => {
     const author = await makeUser({ role: "buyer" });
     const stranger = await makeUser({ role: "buyer" });
@@ -376,6 +376,35 @@ describe("C2C-SEC-10 AC6 — DELETE /api/reviews/[id]", () => {
     });
 
     expect(response.status).toBe(401);
+  });
+
+  it("refuses an edit of someone else's review with 403", async () => {
+    const author = await makeUser({ role: "buyer" });
+    const other = await makeUser({ role: "buyer" });
+    const review = await makeReview({ reviewerId: author.id });
+
+    const response = await call("./reviews/[id]/route", "PATCH", `/api/reviews/${review.id}`, {
+      headers: authHeaderFor(other),
+      body: { rating: 1 },
+      params: { id: String(review.id) },
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("refuses the seller being reviewed, who is the one person with a motive", async () => {
+    const author = await makeUser({ role: "buyer" });
+    const review = await makeReview({ reviewerId: author.id });
+    const db = await getTestDb();
+    const [row] = await db.select().from(users).where(eq(users.id, review.sellerId));
+
+    const response = await call("./reviews/[id]/route", "DELETE", `/api/reviews/${review.id}`, {
+      headers: authHeaderFor(row),
+      params: { id: String(review.id) },
+    });
+
+    expect(response.status).toBe(403);
+    expect(await db.select().from(reviews)).toHaveLength(1);
   });
 });
 
@@ -469,7 +498,7 @@ describe("C2C-SEC-10 AC9 — no response ever carries a password hash", () => {
 });
 
 describe("C2C-SEC-10 AC8 — 401 before 403, consistently", () => {
-  const protectedRoutes: Array<[string, "GET" | "POST" | "PUT" | "DELETE", string, Record<string, string>?]> = [
+  const protectedRoutes: Array<[string, "GET" | "POST" | "PUT" | "PATCH" | "DELETE", string, Record<string, string>?]> = [
     ["./orders/route", "GET", "/api/orders"],
     ["./orders/seller/route", "GET", "/api/orders/seller"],
     ["./users/route", "GET", "/api/users"],
