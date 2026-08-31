@@ -1,6 +1,5 @@
 import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
-import sharp from "sharp";
 
 import { db } from "@/db";
 import {
@@ -13,7 +12,7 @@ import {
 } from "@/db/listing-images";
 import { listings } from "@/db/schema";
 import { canMutateListing } from "@/lib/authorization";
-import { sniffImageType } from "@/lib/image-type";
+import { ImageProcessingError, processUploadedImage } from "@/lib/image-pipeline";
 import { AuthError, authenticate } from "@/lib/middleware";
 import { parseResourceId } from "@/lib/params";
 import {
@@ -120,42 +119,23 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return jsonError("That image is larger than 5 MB", 413);
     }
 
-    // The bytes decide, not the multipart Content-Type and not the filename.
-    if (sniffImageType(incoming) === null) {
-      return jsonError("That file is not a JPEG, PNG or WebP image", 400);
-    }
-
-    // Re-encoding is the point, not a formatting nicety: it drops EXIF — including the
-    // GPS coordinates phone cameras attach — and a decode-then-encode cycle cannot carry
-    // a polyglot payload through (D10).
-    //
-    // The size checks above bound the *compressed* bytes only. Without a decode-side
-    // bound, a 5 MB PNG or WebP can still be crafted to decode to ~200 megapixels —
-    // sharp's own default ceiling — which allocates roughly 600 MB of raw pixels in this
-    // process. `limitInputPixels` caps that; `resize` additionally caps what gets stored,
-    // which nothing else here does.
-    let webp: Buffer;
-    let width: number | null = null;
-    let height: number | null = null;
+    let processed;
     try {
-      const output = await sharp(incoming, { limitInputPixels: 40_000_000 })
-        .rotate()
-        .resize({ width: 4000, height: 4000, fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 82 })
-        .toBuffer({ resolveWithObject: true });
-      webp = output.data;
-      width = output.info.width;
-      height = output.info.height;
+      processed = await processUploadedImage(incoming);
     } catch (err) {
-      // Sniffed as an image but undecodable: truncated, crafted to look like one, or
-      // rejected by limitInputPixels. This branch failing broadly (a broken sharp
-      // binary, an OOM) would look like "every upload is suddenly invalid" with no
-      // server-side trace otherwise, so it's logged even though the response stays 400.
-      console.warn("[POST /api/listings/[id]/images] decode failed", err);
-      return jsonError("That image could not be processed", 400);
+      if (err instanceof ImageProcessingError) {
+        // Logged even though the response is a 400: this branch failing broadly (a
+        // broken sharp binary, an OOM) would otherwise look like "every upload is
+        // suddenly invalid" with no server-side trace.
+        if (err.kind === "undecodable") {
+          console.warn("[POST /api/listings/[id]/images] decode failed", err.cause);
+        }
+        return jsonError(err.message, 400);
+      }
+      throw err;
     }
 
-    const stored = await getStorageProvider().put(webp, {
+    const stored = await getStorageProvider().put(processed.webp, {
       contentType: "image/webp",
       prefix: `listings/${listingId}`,
     });
@@ -165,8 +145,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       storageKey: stored.key,
       contentType: stored.contentType,
       byteSize: stored.byteSize,
-      width,
-      height,
+      width: processed.width,
+      height: processed.height,
       sortOrder: await nextSortOrder(listingId),
     });
 
