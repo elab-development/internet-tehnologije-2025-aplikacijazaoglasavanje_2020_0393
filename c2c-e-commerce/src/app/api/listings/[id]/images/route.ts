@@ -27,8 +27,6 @@ import {
 import { jsonError, jsonOk } from "@/lib/response";
 import { StorageError, getStorageProvider, storageKey } from "@/lib/storage";
 
-export { MAX_IMAGES_PER_LISTING };
-
 type RouteContext = { params: Promise<{ id: string }> };
 
 /** Spec §4.4. Bytes, not megabytes, so the comparison is unambiguous. */
@@ -36,6 +34,9 @@ const MAX_BYTES = 5 * 1024 * 1024;
 
 /** The cap was reached while holding the listing's row lock. */
 class ImageLimitReached extends Error {}
+
+/** The listing was deleted between the ownership check and the row lock. */
+class ListingGoneMidUpload extends Error {}
 
 /**
  * `order` no longer matched the listing's actual image set once its row lock was held.
@@ -116,16 +117,30 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     //
     // A missing header is not zero. `Number(null)` is 0 -- finite, and under any cap --
     // so treating it as a size let a chunked body skip this gate entirely and buffer
-    // without limit. 411 is the status that actually means "tell me how big it is".
+    // without limit. 411 (RFC 9110) means specifically "you never declared a length"; a
+    // header that was sent but is garbage (`0`, `abc`, negative) is a different mistake
+    // and gets 400, not 411.
     const rawLength = request.headers.get("content-length");
-    const contentLength = rawLength === null ? Number.NaN : Number(rawLength);
-
-    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+    if (rawLength === null) {
       return jsonError("A Content-Length header is required for uploads", 411);
+    }
+
+    const contentLength = Number(rawLength);
+    if (!Number.isFinite(contentLength) || contentLength <= 0) {
+      return jsonError("Invalid Content-Length header", 400);
     }
     // The allowance above MAX_BYTES accounts for the multipart envelope.
     if (contentLength > MAX_BYTES + 1024 * 1024) {
       return jsonError("That image is larger than 5 MB", 413);
+    }
+
+    // Cheap pre-filter, not the source of truth -- the authoritative check is the locked
+    // one inside the transaction below, and a concurrent upload can still slip past this
+    // unlocked read (that TOCTOU is exactly what the lock closes). Without this, a client
+    // already at the cap pays for multipart buffering and a full sharp decode/re-encode
+    // just to be told what an indexed count query could have said up front.
+    if ((await countImagesFor(listingId)) >= MAX_IMAGES_PER_LISTING) {
+      return jsonError(`A listing may have at most ${MAX_IMAGES_PER_LISTING} images`, 409);
     }
 
     const form = await request.formData();
@@ -179,8 +194,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         .for("update")
         .limit(1);
 
-      // Deleted between the authorisation read and this lock.
-      if (!locked) return null;
+      // Deleted between the authorisation read and this lock. A `return null` here would
+      // still commit -- nothing has been written yet in this branch either way, but the
+      // callback below is not so lucky, so this throws to match: an early exit from a
+      // transaction callback must never depend on happening to precede the first write.
+      if (!locked) throw new ListingGoneMidUpload();
 
       if ((await countImagesFor(listingId, tx)) >= MAX_IMAGES_PER_LISTING) {
         throw new ImageLimitReached();
@@ -199,8 +217,6 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         tx,
       );
     });
-
-    if (image === null) return jsonError("Listing not found", 404);
 
     try {
       await getStorageProvider().put(processed.webp, {
@@ -230,6 +246,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return jsonOk(toImageSummary(image), 201);
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
+    if (err instanceof ListingGoneMidUpload) return jsonError("Listing not found", 404);
     if (err instanceof ImageLimitReached) {
       return jsonError(`A listing may have at most ${MAX_IMAGES_PER_LISTING} images`, 409);
     }

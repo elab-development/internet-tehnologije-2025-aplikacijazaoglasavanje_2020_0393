@@ -15,6 +15,7 @@ import { resetRateLimits } from "@/lib/rate-limit";
 import { __resetStorageProvider } from "@/lib/storage";
 import { resetDb } from "@/test/db";
 import { makeListing, makeListingImage, makeUser } from "@/test/factories";
+import { uploadRequest } from "@/test/upload-request";
 
 let clientCounter = 0;
 const nextIp = () => `10.7.0.${(clientCounter += 1) % 250}`;
@@ -28,40 +29,16 @@ async function pngBytes(): Promise<Buffer> {
     .toBuffer();
 }
 
-/**
- * A real client's fetch() computes Content-Length while serialising a multipart body
- * before it ever reaches the wire; a NextRequest built in-process, as here, skips that
- * step and leaves the header absent. Task 9's gate now requires it (a missing header
- * used to silently bypass the size check entirely), so it is computed and set
- * explicitly -- via the same multipart encoder (Response) a browser would otherwise
- * apply invisibly.
- */
-async function uploadRequest(listingId: number, token: string, file: Blob, filename = "photo.png") {
-  const form = new FormData();
-  form.set("file", file, filename);
-
-  const encoded = new Response(form);
-  const bytes = await encoded.arrayBuffer();
-  const contentType = encoded.headers.get("content-type") ?? "multipart/form-data";
-
-  return new NextRequest(`http://localhost/api/listings/${listingId}/images`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "x-forwarded-for": nextIp(),
-      "content-type": contentType,
-      "content-length": String(bytes.byteLength),
-    },
-    body: bytes,
-  });
-}
-
 async function upload(listingId: number, token: string, bytes: Buffer, filename?: string) {
   const { POST } = await import("./route");
   // Buffer's `.buffer` types as ArrayBufferLike (it may back onto a SharedArrayBuffer),
   // which BlobPart does not accept; a plain Uint8Array copy satisfies the type.
   const file = new Blob([new Uint8Array(bytes)], { type: "image/png" });
-  return POST(await uploadRequest(listingId, token, file, filename), {
+  const request = await uploadRequest(listingId, token, file, {
+    filename,
+    headers: { "x-forwarded-for": nextIp() },
+  });
+  return POST(request, {
     params: Promise.resolve({ id: String(listingId) }),
   });
 }
