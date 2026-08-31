@@ -12,6 +12,18 @@ import { parseRequest, UpdateReviewSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+/**
+ * Thrown inside `PATCH`'s transaction when the locked re-read finds nothing, to roll the
+ * transaction back without committing anything.
+ *
+ * The outer read that decided authorisation can be stale by the time this transaction's
+ * `FOR UPDATE` runs -- a `DELETE` may have committed in between. That is not a server
+ * error: the review really is gone, and a thrown error is the only way out of a Drizzle
+ * transaction that must not commit, matching how `PUT /api/orders/[id]` unwinds its own
+ * transaction with `ListingNotSellableError`.
+ */
+class ReviewGoneError extends Error {}
+
 
 // ─── PATCH /api/reviews/[id] ──────────────────────────────────────────────────
 // Authenticated. Author or admin. Both fields optional, at least one required.
@@ -129,6 +141,11 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         .where(eq(reviews.id, id))
         .for("update");
 
+      // The outer read found the row, but a `DELETE` may have committed between that
+      // read and this lock. `current` would then be `undefined` -- not a server error,
+      // just a review that stopped existing while this request was in flight.
+      if (!current) throw new ReviewGoneError();
+
       const [row] = await tx
         .update(reviews)
         .set({
@@ -152,6 +169,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return jsonOk(updated);
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
+    if (err instanceof ReviewGoneError) return jsonError("Review not found", 404);
     console.error("[PATCH /api/reviews/[id]]", err);
     return jsonError("Internal server error");
   }
@@ -237,8 +255,27 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     }
 
     await db.transaction(async (tx) => {
-      await tx.delete(reviews).where(eq(reviews.id, id));
-      await applyRatingDelta(tx, review.sellerId, deleteDelta(review.rating));
+      // The delete itself is the lock: no separate `SELECT ... FOR UPDATE` needed. Two
+      // concurrent `DELETE`s of one review both used to read the outer, unlocked
+      // `review.rating` and both applied a delta -- the loser matched no row but still
+      // decremented the seller's totals, driving `review_count` negative. A `PATCH`
+      // racing a `DELETE` had the same shape: the delete's stale read missed whatever
+      // rating the edit had just committed. `RETURNING` off the `DELETE` itself fixes
+      // both: only the transaction that actually removed the row gets a value back, and
+      // that value carries whatever rating was last committed -- a racing PATCH's or the
+      // original's.
+      const [removed] = await tx
+        .delete(reviews)
+        .where(eq(reviews.id, id))
+        .returning({ rating: reviews.rating, sellerId: reviews.sellerId });
+
+      // Only the transaction that actually removed the row adjusts the totals. A second
+      // concurrent DELETE matches nothing here, so it must not decrement anything -- and
+      // the row this one removed carries whatever rating a racing PATCH had just
+      // committed.
+      if (removed) {
+        await applyRatingDelta(tx, removed.sellerId, deleteDelta(removed.rating));
+      }
     });
 
     return jsonOk({ message: "Review deleted successfully" });

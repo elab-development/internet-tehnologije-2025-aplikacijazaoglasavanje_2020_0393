@@ -229,4 +229,63 @@ describe("DELETE /api/reviews/[id]", () => {
     expect(status).toBe(403);
     expect(await aggregatesOf(seller.id)).toEqual({ reviewCount: 1, ratingSum: 3 });
   });
+
+  it("never lets a losing concurrent DELETE decrement totals it didn't remove", async () => {
+    // Two DELETEs of the same review. Both used to read the outer, unlocked
+    // `review.rating` and both applied `deleteDelta` -- the loser matched no row (the
+    // winner had already removed it) but still decremented `review_count`/`rating_sum`,
+    // driving the seller negative. Whichever DELETE actually removes the row is not
+    // deterministic from here, and the fix does not need it to be: Postgres serialises
+    // the two `DELETE`s on the same row regardless of scheduling, so exactly one of them
+    // gets a row back from `RETURNING` no matter which fires first.
+    const { seller, buyer, review } = await reviewed();
+    const admin = await makeUser({ role: "admin" });
+
+    const [first, second] = await Promise.all([
+      remove(review.id, authHeaderFor(buyer)),
+      remove(review.id, authHeaderFor(admin)),
+    ]);
+
+    // Both answer 200 -- the caller asked for the review to be gone and it is, whether
+    // this request or the other one removed it. Which of the two actually matched the
+    // row in `RETURNING` is not the point -- the aggregate must land at zero either way,
+    // never negative.
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(await aggregatesOf(seller.id)).toEqual({ reviewCount: 0, ratingSum: 0 });
+  });
+});
+
+describe("PATCH /api/reviews/[id] — races a concurrent DELETE", () => {
+  it("answers 404, not 500, when the review is deleted between the outer read and the lock", async () => {
+    // The interleaving this covers -- PATCH's outer read finds the review, then a
+    // concurrent DELETE commits before PATCH's `SELECT ... FOR UPDATE` runs -- has no
+    // hook to synchronise on from a test: nothing observable marks the instant PATCH is
+    // between its outer read and its transaction. `Promise.all` alone lands in that
+    // window often enough to demonstrate it (observed ~60% of single attempts in this
+    // environment) but not every time, so this retries with a fresh review each attempt
+    // instead of asserting on one. The "never 500" assertion runs on every attempt
+    // regardless of whether that attempt hit the race -- it is what would catch a
+    // regression on `ReviewGoneError`'s handling even on an unlucky run.
+    let hitTheRace = false;
+
+    for (let attempt = 0; attempt < 25 && !hitTheRace; attempt++) {
+      const { buyer, review } = await reviewed();
+
+      const [delRes, patchRes] = await Promise.all([
+        remove(review.id, authHeaderFor(buyer)),
+        patch(review.id, { rating: 5 }, authHeaderFor(buyer)),
+      ]);
+
+      expect(patchRes.status).not.toBe(500);
+
+      if (patchRes.status === 404) {
+        hitTheRace = true;
+        expect(delRes.status).toBe(200);
+        expect(patchRes.body).toMatchObject({ error: "Review not found" });
+      }
+    }
+
+    expect(hitTheRace).toBe(true);
+  });
 });
