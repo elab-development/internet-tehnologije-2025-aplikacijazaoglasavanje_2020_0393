@@ -49,6 +49,22 @@ UPDATE "reviews" AS r
 -- cannot hold both. The old duplicate check was a SELECT followed by an INSERT, which is
 -- exactly the check two concurrent posts both pass — so this is not hypothetical. Keep
 -- the earliest; it is the one the buyer wrote first.
+--
+-- This one is real reviews of real transactions, unlike the orphan case below — deleted
+-- only because the index cannot hold two — and it is the less defensible of the two to
+-- drop without a word. Announce it the same way (spec §6.5).
+DO $$
+DECLARE duplicated integer;
+BEGIN
+  SELECT count(*) - count(DISTINCT "order_id") INTO duplicated
+    FROM "reviews"
+   WHERE "order_id" IS NOT NULL;
+
+  IF duplicated > 0 THEN
+    RAISE NOTICE '0017: deleting % duplicate review(s) that share an order with an earlier one', duplicated;
+  END IF;
+END $$;
+--> statement-breakpoint
 DELETE FROM "reviews" AS r
  USING "reviews" AS other
  WHERE r."order_id" IS NOT NULL

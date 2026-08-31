@@ -23,7 +23,12 @@ export * from "./users";
 export const usersRelations = relations(users, ({ many }) => ({
   listings: many(listings),
   orders: many(orders),
-  reviews: many(reviews),
+  // A user now stands in two different relationships to `reviews` — the reviews they
+  // wrote and the reviews written about them — so a single `many(reviews)` is ambiguous:
+  // Drizzle resolves it by finding the *unique* matching `one(users)` on the other side,
+  // and `reviewsRelations` now has two. Named to say which is which.
+  reviewsWritten: many(reviews, { relationName: "reviewAuthor" }),
+  reviewsReceived: many(reviews, { relationName: "reviewSubject" }),
   refreshTokens: many(refreshTokens),
   oauthAccounts: many(oauthAccounts),
 }));
@@ -84,10 +89,12 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
   reviewer: one(users, {
     fields: [reviews.reviewerId],
     references: [users.id],
+    relationName: "reviewAuthor",
   }),
   seller: one(users, {
     fields: [reviews.sellerId],
     references: [users.id],
+    relationName: "reviewSubject",
   }),
   order: one(orders, {
     fields: [reviews.orderId],

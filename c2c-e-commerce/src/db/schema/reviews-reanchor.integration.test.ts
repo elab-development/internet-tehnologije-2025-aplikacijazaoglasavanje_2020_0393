@@ -9,45 +9,15 @@
  * `orders-collapse.integration.test.ts`). That cost buys the thing a data migration that
  * deletes rows needs and nothing else provides: evidence about which rows it deletes.
  */
-import { readFileSync, readdirSync } from "node:fs";
-import path from "node:path";
-
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { TEST_DB_IMAGE } from "@/test/db";
-
-const MIGRATIONS = path.resolve(__dirname, "../../../drizzle");
+import { apply, migrationFiles } from "@/test/migration-replay";
 
 const REANCHOR = "0017_reviews_reanchor.sql";
 const PREVIOUS = "0016_drop_order_items.sql";
-
-function migrationFiles(): string[] {
-  return readdirSync(MIGRATIONS)
-    .filter((name) => name.endsWith(".sql"))
-    .sort();
-}
-
-/** Applies one migration file: split on the breakpoint marker, run it in a transaction. */
-async function apply(client: Client, file: string): Promise<void> {
-  const contents = readFileSync(path.join(MIGRATIONS, file), "utf8");
-  const statements = contents
-    .split("--> statement-breakpoint")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !/^(--[^\n]*\n?)+$/.test(s));
-
-  await client.query("BEGIN");
-  try {
-    for (const statement of statements) {
-      await client.query(statement);
-    }
-    await client.query("COMMIT");
-  } catch (err) {
-    await client.query("ROLLBACK");
-    throw new Error(`${file} failed: ${(err as Error).message}`);
-  }
-}
 
 let container: StartedPostgreSqlContainer;
 let client: Client;
