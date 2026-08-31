@@ -239,7 +239,11 @@ describe("X-Forwarded-For is no longer a fresh-bucket button", () => {
         new NextRequest(`http://test${ENDPOINT}`, {
           method: "POST",
           headers: asClient(`1.2.3.${i}`),
-          body: JSON.stringify(CREDENTIALS),
+          // A different email every iteration. This matters: the account key added in
+          // this same task would otherwise fill on the constant address and answer 429
+          // on its own, so the test would pass whether the IP fix worked or not. Varying
+          // the email leaves the IP key as the only thing that can block.
+          body: JSON.stringify({ ...CREDENTIALS, email: `rotator${i}@example.test` }),
         }),
       );
       last = response.status;
