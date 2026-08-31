@@ -9,19 +9,30 @@ import type { NextRequest } from "next/server";
 // platforms where each invocation may get a fresh process. If this app is ever
 // scaled out, swap the Map for Redis — the exported API can stay the same.
 
-type Timestamps = number[];
+/**
+ * One caller's hits against one policy, carrying the window they were recorded under.
+ *
+ * The window is stored per bucket rather than passed to `sweep`, because the sweep runs
+ * on behalf of whichever policy happened to be the 500th caller. Filtering every bucket
+ * against *that* policy's window is how a flood on a 5-minute limit used to prune the
+ * 1-hour limits down to 5 minutes.
+ */
+type Bucket = {
+  windowMs: number;
+  hits: number[];
+};
 
-const buckets = new Map<string, Timestamps>();
+const buckets = new Map<string, Bucket>();
 
 /** Opportunistic sweep so keys from one-off IPs cannot grow the Map forever. */
 const SWEEP_EVERY_N_CALLS = 500;
 let callsSinceSweep = 0;
 
-function sweep(now: number, windowMs: number): void {
-  for (const [key, hits] of buckets) {
-    const live = hits.filter((t) => now - t < windowMs);
+function sweep(now: number): void {
+  for (const [key, bucket] of buckets) {
+    const live = bucket.hits.filter((t) => now - t < bucket.windowMs);
     if (live.length === 0) buckets.delete(key);
-    else buckets.set(key, live);
+    else bucket.hits = live;
   }
 }
 
@@ -56,14 +67,14 @@ export function rateLimit(
 
   if (++callsSinceSweep >= SWEEP_EVERY_N_CALLS) {
     callsSinceSweep = 0;
-    sweep(now, windowMs);
+    sweep(now);
   }
 
-  // Drop hits that have aged out of the window.
-  const hits = (buckets.get(key) ?? []).filter((t) => now - t < windowMs);
+  // Drop hits that have aged out of *this* policy's window.
+  const hits = (buckets.get(key)?.hits ?? []).filter((t) => now - t < windowMs);
 
   if (hits.length >= limit) {
-    buckets.set(key, hits);
+    buckets.set(key, { windowMs, hits });
     const oldest = hits[0];
     return {
       allowed: false,
@@ -73,7 +84,7 @@ export function rateLimit(
   }
 
   hits.push(now);
-  buckets.set(key, hits);
+  buckets.set(key, { windowMs, hits });
 
   return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
 }

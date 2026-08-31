@@ -159,3 +159,50 @@ describe("shared policies", () => {
     expect(REGISTER_RATE_LIMIT.windowMs).toBe(60 * 60 * 1000);
   });
 });
+
+describe("sweep isolation", () => {
+  beforeEach(() => {
+    resetRateLimits();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The regression test for the 12x amplification. A flood against a short-window policy
+  // used to prune long-window buckets against the *short* window, silently shortening
+  // every other policy in the process.
+  it("does not shorten another policy's window when a cheap policy triggers the sweep", () => {
+    const HOURLY = { limit: 5, windowMs: 60 * 60 * 1000 };
+    const SHORT = { limit: 10_000, windowMs: 5 * 60 * 1000 };
+
+    // One hit against the long-window policy.
+    const first = rateLimit("hourly:victim", HOURLY);
+    expect(first.remaining).toBe(4);
+
+    // Ten minutes later that hit is still live — it is well inside the hour — but it is
+    // now older than the short policy's whole window, which is what makes it vulnerable.
+    vi.advanceTimersByTime(10 * 60 * 1000);
+
+    // A flood on the cheap policy. SWEEP_EVERY_N_CALLS is 500, so 600 guarantees at
+    // least one sweep runs while the short window is the one being applied.
+    for (let i = 0; i < 600; i += 1) {
+      rateLimit(`short:${i}`, SHORT);
+    }
+
+    // The hourly bucket must still be holding its hit.
+    const second = rateLimit("hourly:victim", HOURLY);
+    expect(second.remaining).toBe(3);
+  });
+
+  it("still evicts a bucket once its own window has passed", () => {
+    const POLICY = { limit: 3, windowMs: 60 * 1000 };
+
+    rateLimit("minutely:someone", POLICY);
+    vi.advanceTimersByTime(61 * 1000);
+
+    // Past its own window, so the earlier hit no longer counts against the caller.
+    expect(rateLimit("minutely:someone", POLICY).remaining).toBe(2);
+  });
+});
