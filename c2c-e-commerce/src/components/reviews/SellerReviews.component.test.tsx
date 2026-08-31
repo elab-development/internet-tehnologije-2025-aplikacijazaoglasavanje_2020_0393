@@ -15,7 +15,6 @@ const review = (overrides: Partial<SellerReview> = {}): SellerReview => ({
   reviewerId: 7,
   sellerId: 2,
   orderId: 11,
-  listingId: null,
   rating: 5,
   comment: "Packed well.",
   createdAt: "2026-08-01T10:00:00.000Z",

@@ -9,7 +9,6 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { listings } from "./listings";
 import { orders } from "./orders";
 import { users } from "./users";
 
@@ -35,13 +34,6 @@ export const reviews = pgTable(
     orderId: integer("order_id")
       .references(() => orders.id, { onDelete: "cascade" })
       .notNull(),
-    /**
-     * Nullable and unwritten since 0017; 0018 drops it. The listing is reachable through
-     * the order now.
-     */
-    listingId: integer("listing_id").references(() => listings.id, {
-      onDelete: "cascade",
-    }),
     rating: integer("rating").notNull(),
     comment: text("comment"),
     createdAt: timestamp("created_at").defaultNow().notNull(),

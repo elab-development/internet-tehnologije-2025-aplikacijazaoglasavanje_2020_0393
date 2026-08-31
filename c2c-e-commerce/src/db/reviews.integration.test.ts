@@ -177,3 +177,15 @@ describe("the one-review-per-order index", () => {
     expect(await db.select().from(reviews).where(eq(reviews.sellerId, seller.id))).toHaveLength(2);
   });
 });
+
+describe("0018", () => {
+  it("has dropped listing_id from reviews", async () => {
+    const db = await getTestDb();
+    const result = await db.execute(
+      `SELECT column_name FROM information_schema.columns
+        WHERE table_name = 'reviews' AND column_name = 'listing_id'`,
+    );
+
+    expect(result.rows).toHaveLength(0);
+  });
+});
