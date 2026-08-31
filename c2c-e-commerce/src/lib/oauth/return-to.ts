@@ -4,11 +4,16 @@
 /** Where a user lands when no safe destination was captured. */
 export const DEFAULT_RETURN_TO = "/";
 
-// Control characters and Unicode line terminators -- what the old `/[ -\s]/` was trying
-// to express. That pattern actually parses as {space, literal hyphen, whitespace}, so it
-// rejected `/link-account` and let several control characters through. Header and URL
-// parsers disagree about these characters, which is what makes them useful for smuggling.
-const FORBIDDEN_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
+// Control characters and all whitespace. The old predicate was written with RAW control
+// bytes rather than escapes -- a literal NUL, a literal DEL, and the text `\s` -- which is
+// why every reader, including this plan's first draft, misread it. It was really
+// `[\x00-\x1f\x7f\s]`, and it did NOT reject `/link-account`.
+//
+// The real gap was the C1 block (U+0080-U+009F). Keep `\s` so the 18 whitespace
+// codepoints the old class covered -- plain space, NBSP, the U+2000 block, U+FEFF -- stay
+// covered; dropping it would be a regression hiding inside a readability cleanup, and
+// would contradict this function's own docstring.
+const FORBIDDEN_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]|\s/;
 
 /**
  * Reduces a caller-supplied `returnTo` to a same-site path, or the default.

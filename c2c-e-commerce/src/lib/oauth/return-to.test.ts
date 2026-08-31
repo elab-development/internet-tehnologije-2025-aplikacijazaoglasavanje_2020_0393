@@ -69,12 +69,11 @@ describe("C2C-SEC-7 AC10 — rejected destinations", () => {
 });
 
 describe("safeReturnTo character handling", () => {
-  // The predicate is `/[ -\s]/`, which parses as the three-member set {space, literal
-  // hyphen, whitespace} -- not the "space through whitespace" range its comment
-  // describes. So it rejects ordinary paths containing a hyphen and admits several
-  // control characters. It fails closed, so this is hygiene rather than a hole -- but the
-  // existing tests cover only tab and newline, which the pattern matches either way, so
-  // they do not demonstrate what they claim.
+  // The old predicate was written with raw control bytes instead of escapes -- a
+  // literal NUL, a literal DEL, and the text `\s` -- which is why it read as `/[ -\s]/`
+  // to the eye. It never rejected a hyphen: the `-` sat between two raw control bytes
+  // and was a range operator there, not a literal character. What it actually missed
+  // was the C1 block (U+0080-U+009F), which the fixed predicate now covers.
   it("accepts an ordinary path containing a hyphen", () => {
     expect(safeReturnTo("/link-account")).toBe("/link-account");
     expect(safeReturnTo("/listings/new-item")).toBe("/listings/new-item");
@@ -88,6 +87,9 @@ describe("safeReturnTo character handling", () => {
     ["escape", "/a\u001bb"],
     ["delete", "/a\u007fb"],
     ["line separator", "/a\u2028b"],
+    ["space", "/a\u0020b"],
+    ["no-break space", "/a\u00a0b"],
+    ["byte order mark", "/a\ufeffb"],
   ])("rejects a path containing %s", (_label, candidate) => {
     expect(safeReturnTo(candidate)).toBe("/");
   });
