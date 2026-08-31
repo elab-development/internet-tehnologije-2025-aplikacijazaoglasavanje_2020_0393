@@ -220,27 +220,94 @@ describe("POST /api/listings/[id]/images", () => {
 });
 
 describe("PATCH /api/listings/[id]/images", () => {
+  function reorderRequest(listingId: number, token: string, order: unknown) {
+    return new NextRequest(`http://localhost/api/listings/${listingId}/images`, {
+      method: "PATCH",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "x-forwarded-for": nextIp(),
+      },
+      body: JSON.stringify({ order }),
+    });
+  }
+
   it("reorders", async () => {
     const listing = await makeListing({ sellerId });
     const a = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
     const b = await makeListingImage({ listingId: listing.id, sortOrder: 1 });
 
     const { PATCH } = await import("./route");
+    const response = await PATCH(reorderRequest(listing.id, sellerToken, [b.id, a.id]), {
+      params: Promise.resolve({ id: String(listing.id) }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await listImagesFor(listing.id)).map((i) => i.id)).toEqual([b.id, a.id]);
+  });
+
+  // A rotation, not a swap -- every id leaves and lands in a new place in one call, which
+  // is what actually exercises reorderImages's negative-staging phase for all three rows
+  // instead of just two. Checking sortOrder itself (not just the id order listImagesFor
+  // derives from it) is what would catch a row left behind at its negative staging value.
+  it("reorders a full three-way rotation and leaves no row at a negative sort_order", async () => {
+    const listing = await makeListing({ sellerId });
+    const a = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
+    const b = await makeListingImage({ listingId: listing.id, sortOrder: 1 });
+    const c = await makeListingImage({ listingId: listing.id, sortOrder: 2 });
+
+    const { PATCH } = await import("./route");
     const response = await PATCH(
-      new NextRequest(`http://localhost/api/listings/${listing.id}/images`, {
-        method: "PATCH",
-        headers: {
-          authorization: `Bearer ${sellerToken}`,
-          "content-type": "application/json",
-          "x-forwarded-for": nextIp(),
-        },
-        body: JSON.stringify({ order: [b.id, a.id] }),
-      }),
+      reorderRequest(listing.id, sellerToken, [c.id, a.id, b.id]),
       { params: Promise.resolve({ id: String(listing.id) }) },
     );
 
     expect(response.status).toBe(200);
-    expect((await listImagesFor(listing.id)).map((i) => i.id)).toEqual([b.id, a.id]);
+    const images = await listImagesFor(listing.id);
+    expect(images.map((i) => i.id)).toEqual([c.id, a.id, b.id]);
+    expect(images.map((i) => i.sortOrder)).toEqual([0, 1, 2]);
+    expect(images.every((i) => i.sortOrder >= 0)).toBe(true);
+  });
+
+  // C2C-SEC / task 8 fix round 1: before the unique index existed, an `order` that
+  // omitted one of the listing's images, or repeated an id, silently produced a
+  // duplicate sort_order. After the index, the same input made reorderImages's second
+  // phase collide with a row nobody staged, which fell through to the route's generic
+  // catch as a 500 on client-controlled input. The route now rejects both shapes before
+  // ever calling reorderImages, since nothing in the frontend calls this endpoint yet
+  // (there is no reorder UI) and its documented contract already describes `order` as
+  // the complete set of the listing's image ids in their new order.
+  it("rejects an order that omits one of the listing's images, rather than 500ing", async () => {
+    const listing = await makeListing({ sellerId });
+    const a = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
+    const b = await makeListingImage({ listingId: listing.id, sortOrder: 1 });
+    await makeListingImage({ listingId: listing.id, sortOrder: 2 });
+
+    const { PATCH } = await import("./route");
+    const response = await PATCH(reorderRequest(listing.id, sellerToken, [b.id, a.id]), {
+      params: Promise.resolve({ id: String(listing.id) }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "`order` must contain each of the listing's image ids exactly once",
+    });
+  });
+
+  it("rejects an order that repeats an id, rather than 500ing", async () => {
+    const listing = await makeListing({ sellerId });
+    const a = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
+    await makeListingImage({ listingId: listing.id, sortOrder: 1 });
+
+    const { PATCH } = await import("./route");
+    const response = await PATCH(reorderRequest(listing.id, sellerToken, [a.id, a.id]), {
+      params: Promise.resolve({ id: String(listing.id) }),
+    });
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "`order` must contain each of the listing's image ids exactly once",
+    });
   });
 });
 

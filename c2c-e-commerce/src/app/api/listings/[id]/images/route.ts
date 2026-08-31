@@ -6,6 +6,7 @@ import {
   MAX_IMAGES_PER_LISTING,
   countImagesFor,
   insertImage,
+  listImagesFor,
   nextSortOrder,
   reorderImages,
   toImageSummary,
@@ -216,8 +217,27 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return jsonError("`order` must be an array of image ids", 400);
     }
 
-    // reorderImages scopes every update to this listing, so a foreign id in the array is
-    // ignored rather than renumbered.
+    // `reorderImages` stages every id in `order` at a negative sort_order before writing
+    // final positions 0..order.length-1, which only guarantees no collision *among the
+    // ids it stages* (see its own comment). An `order` that omits one of the listing's
+    // images, repeats one, or substitutes a foreign id asks phase two to write a final
+    // position that collides with a row nobody staged -- the unique index now rejects
+    // that as a 500 on client-controlled input, where before it silently produced a
+    // duplicate sort_order. The documented contract above is "image ids in their new
+    // order", i.e. the complete set, so anything short of that is a 400, not a guess.
+    const currentIds = (await listImagesFor(listingId)).map((image) => image.id);
+    const isCompleteReordering =
+      order.length === currentIds.length &&
+      new Set(order).size === order.length &&
+      currentIds.every((id) => order.includes(id));
+
+    if (!isCompleteReordering) {
+      return jsonError(
+        "`order` must contain each of the listing's image ids exactly once",
+        400,
+      );
+    }
+
     await reorderImages(listingId, order as number[]);
 
     return jsonOk({ message: "Images reordered" });

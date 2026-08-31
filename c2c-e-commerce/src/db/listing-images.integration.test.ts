@@ -88,7 +88,14 @@ describe("findImage / deleteImage", () => {
 });
 
 describe("reorderImages", () => {
-  it("rewrites sortOrder to match the given sequence", async () => {
+  // A three-way rotation, not a swap: every one of the three ids both leaves its slot and
+  // lands in a different one in the same call, so the staging phase (every row parked at
+  // a negative, id-derived sort_order before final positions are written -- see the
+  // function's own comment) has to actually earn its keep for all three rows rather than
+  // just the two a swap would exercise. Asserting sortOrder itself, not just the id order
+  // listImagesFor derives from it, is what would catch a row left stranded at its
+  // negative staging value.
+  it("rewrites sortOrder to match the given sequence, staging through negatives and back", async () => {
     const listing = await makeListing();
     const a = await makeListingImage({ listingId: listing.id, sortOrder: 0 });
     const b = await makeListingImage({ listingId: listing.id, sortOrder: 1 });
@@ -98,6 +105,8 @@ describe("reorderImages", () => {
 
     const images = await listImagesFor(listing.id);
     expect(images.map((i) => i.id)).toEqual([c.id, a.id, b.id]);
+    expect(images.map((i) => i.sortOrder)).toEqual([0, 1, 2]);
+    expect(images.every((i) => i.sortOrder >= 0)).toBe(true);
   });
 
   it("ignores ids that belong to another listing", async () => {
