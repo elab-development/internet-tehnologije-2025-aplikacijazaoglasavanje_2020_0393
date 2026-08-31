@@ -1205,11 +1205,18 @@ DO $$
 DECLARE
   collisions text;
 BEGIN
-  SELECT string_agg(DISTINCT lower(email), ', ')
+  -- Aggregate OUTSIDE the grouping. Aggregating inside it produces one row per colliding
+  -- group, and plpgsql's non-STRICT SELECT INTO keeps only the first -- so the operator
+  -- would be told one address while the message promised "these addresses", and would
+  -- have to re-run the migration once per collision to discover them all.
+  SELECT string_agg(e, ', ')
     INTO collisions
-    FROM "users"
-   GROUP BY lower(email)
-  HAVING count(*) > 1;
+    FROM (
+      SELECT lower(email) AS e
+        FROM "users"
+       GROUP BY 1
+      HAVING count(*) > 1
+    ) AS colliding;
 
   IF collisions IS NOT NULL THEN
     RAISE EXCEPTION
