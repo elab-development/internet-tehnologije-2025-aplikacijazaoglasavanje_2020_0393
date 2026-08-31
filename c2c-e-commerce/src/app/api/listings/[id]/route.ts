@@ -57,6 +57,13 @@ type RouteContext = { params: Promise<{ id: string }> };
  *                     sellerName:
  *                       type: string
  *                       example: John Doe
+ *                     sellerAvatarUrl:
+ *                       type: string
+ *                       nullable: true
+ *                     sellerReviewCount:
+ *                       type: integer
+ *                     sellerRatingSum:
+ *                       type: integer
  *                     categoryName:
  *                       type: string
  *                       nullable: true
@@ -102,6 +109,9 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
         categoryId: listings.categoryId,
         createdAt: listings.createdAt,
         sellerName: users.name,
+        sellerAvatarUrl: users.avatarUrl,
+        sellerReviewCount: users.reviewCount,
+        sellerRatingSum: users.ratingSum,
         categoryName: categories.name,
       })
       .from(listings)
