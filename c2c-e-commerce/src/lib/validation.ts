@@ -376,6 +376,14 @@ export const UpdateUserSchema = z
       .string()
       .min(8, "password must be at least 8 characters")
       .optional(),
+    /**
+     * Proof that the caller knows the password they are replacing.
+     *
+     * Optional in the schema and conditionally required in the handler, because the
+     * condition depends on *who is calling* -- self or admin -- which a body schema cannot
+     * see.
+     */
+    currentPassword: z.string().min(1).optional(),
     role: z
       .enum(["buyer", "seller", "admin"], {
         error: "role must be one of: buyer, seller, admin",

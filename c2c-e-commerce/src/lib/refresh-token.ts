@@ -12,7 +12,7 @@ import { createHash, randomBytes, randomUUID } from "node:crypto";
 
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { db } from "@/db";
+import { db, type Database } from "@/db";
 import { refreshTokens } from "@/db/schema";
 
 /** Token entropy. 32 bytes of CSPRNG output is not guessable and not worth stretching. */
@@ -44,6 +44,17 @@ export type RefreshTokenContext = {
   userAgent?: string | null;
   ip?: string | null;
 };
+
+/**
+ * Either the pool-backed client or a transaction handle, following `OrderExecutor`
+ * (`src/db/orders.ts`). `revokeAllRefreshFamiliesForUser` has to be callable inside the
+ * caller's own transaction — a password change writing the new hash and revoking the
+ * old sessions is one atomic act, and committing them separately would let a crash
+ * between the two leave the new hash live and the attacker's session live alongside it.
+ */
+export type RefreshExecutor =
+  | Omit<Database, "$client">
+  | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export type IssuedRefreshToken = {
   /** The raw token. Returned once, to be set as a cookie; never stored. */
@@ -222,6 +233,26 @@ export async function revokeRefreshTokenFamily(familyId: string): Promise<number
     .where(
       and(eq(refreshTokens.familyId, familyId), isNull(refreshTokens.revokedAt)),
     )
+    .returning({ id: refreshTokens.id });
+
+  return revoked.length;
+}
+
+/**
+ * Revokes every live refresh token a user holds, across all families.
+ *
+ * `revokeRefreshTokenFamily` handles one family, which is right for reuse detection --
+ * that is a statement about one lineage. A password change is a statement about the whole
+ * account, so it takes all of them.
+ */
+export async function revokeAllRefreshFamiliesForUser(
+  x: RefreshExecutor,
+  userId: number,
+): Promise<number> {
+  const revoked = await x
+    .update(refreshTokens)
+    .set({ revokedAt: sql`now()` })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)))
     .returning({ id: refreshTokens.id });
 
   return revoked.length;

@@ -5,9 +5,10 @@ import { repairAggregatesBeforeUserDelete } from "@/db/reviews";
 import { users } from "@/db/schema";
 import { isSelfOrAdmin } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
-import { sanitizeUser, hashPassword } from "@/lib/auth";
+import { sanitizeUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseResourceId } from "@/lib/params";
+import { revokeAllRefreshFamiliesForUser } from "@/lib/refresh-token";
 import { parseRequest, UpdateUserSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -195,13 +196,30 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const parsed = await parseRequest(request, UpdateUserSchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, phoneNumber, password, role } = parsed.data;
+    const { name, phoneNumber, password, currentPassword, role } = parsed.data;
 
     const updates: Partial<typeof users.$inferInsert> = {};
 
     if (name !== undefined) updates.name = name;
     if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
-    if (password !== undefined) updates.passwordHash = await hashPassword(password);
+
+    const isSelfChange = payload.sub === id;
+
+    if (password !== undefined) {
+      // A self-change must prove knowledge of what it replaces. An admin reset is exempt:
+      // an admin recovering a compromised account does not know the current password, and
+      // requiring it would break the case the reset exists for. An account with no
+      // password -- OAuth-only -- has nothing to prove against.
+      if (isSelfChange && user.passwordHash !== null) {
+        if (currentPassword === undefined) {
+          return jsonError("currentPassword is required to change your own password", 400);
+        }
+        if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+          return jsonError("Current password is incorrect", 403);
+        }
+      }
+      updates.passwordHash = await hashPassword(password);
+    }
 
     if (role !== undefined) {
       // The schema permits "admin" because admins may grant it; authorisation,
@@ -210,11 +228,23 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       updates.role = role;
     }
 
-    const [updated] = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning();
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, id))
+        .returning();
+
+      // A password change is remediation. Leaving every existing refresh family live
+      // means the credential the person is trying to invalidate still works for another
+      // 30 days -- so the revocation belongs in the same transaction as the new hash,
+      // not beside it where a failure could commit one without the other.
+      if (updates.passwordHash !== undefined) {
+        await revokeAllRefreshFamiliesForUser(tx, id);
+      }
+
+      return rows;
+    });
 
     return jsonOk(sanitizeUser(updated));
   } catch (err) {
