@@ -257,7 +257,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     let updated;
     try {
       updated = await db.transaction(async (tx) => {
-        const row = await transitionOrder(tx, id, order.status, status);
+        // Only the sale itself is guarded: a lapsed order must still be declinable or
+        // cancellable, or it would be stranded in a status nobody can leave.
+        const row = await transitionOrder(tx, id, order.status, status, status === "confirmed");
         if (!row) return null;
 
         // Same transaction as the status change, per §5.3: an order that confirmed while

@@ -109,19 +109,21 @@ describe("releaseUnheldListings", () => {
     expect(await statusOf(listing.id)).toBe("reserved");
   });
 
-  it("never resurrects a draft, removed or sold listing", async () => {
-    // The predicate is `status = 'reserved'`, not `NOT EXISTS(...)`. Without the status
-    // clause this would republish every listing its seller had withdrawn.
+  it("never resurrects a draft or removed listing", async () => {
+    // The predicate is `status IN ('reserved', 'sold')`, not `NOT EXISTS(...)`. Without
+    // the status clause this would republish every listing its seller had withdrawn.
+    // `sold` is deliberately not tested here since task 15: an orphaned sold listing —
+    // one with no live order at all — is exactly what this function is now meant to
+    // release; see "releaseUnheldListings and sold listings" below for that case and its
+    // guard.
     const db = await getTestDb();
     const draft = await makeListing({ status: "draft" });
     const removed = await makeListing({ status: "removed" });
-    const sold = await makeListing({ status: "sold" });
 
     await releaseUnheldListings(db);
 
     expect(await statusOf(draft.id)).toBe("draft");
     expect(await statusOf(removed.id)).toBe("removed");
-    expect(await statusOf(sold.id)).toBe("sold");
   });
 
   it("scopes to one listing when given one", async () => {
@@ -319,5 +321,41 @@ describe("transitionOrder", () => {
       b.release();
       await pool.end();
     }
+  });
+});
+
+describe("releaseUnheldListings and sold listings", () => {
+  async function seedConfirmedOrder() {
+    const listing = await makeListing({ status: "sold" });
+    const order = await makeOrder({ listingId: listing.id, status: "confirmed" });
+    return { listing, order };
+  }
+
+  async function deleteOrder(orderId: number): Promise<void> {
+    const db = await getTestDb();
+    await db.delete(orders).where(eq(orders.id, orderId));
+  }
+
+  it("returns a sold listing to active when its order is deleted", async () => {
+    // Only `reserved` was released, so deleting a confirmed order left the listing sold
+    // forever: unbuyable, with no order left to explain why.
+    const db = await getTestDb();
+    const { listing, order } = await seedConfirmedOrder();
+    expect(await statusOf(listing.id)).toBe("sold");
+
+    await deleteOrder(order.id);
+    await releaseUnheldListings(db, listing.id);
+
+    expect(await statusOf(listing.id)).toBe("active");
+  });
+
+  it("leaves a sold listing alone while a live order still holds it", async () => {
+    // The guard that keeps this from becoming "any sold listing goes back on sale".
+    const db = await getTestDb();
+    const { listing } = await seedConfirmedOrder();
+
+    await releaseUnheldListings(db, listing.id);
+
+    expect(await statusOf(listing.id)).toBe("sold");
   });
 });

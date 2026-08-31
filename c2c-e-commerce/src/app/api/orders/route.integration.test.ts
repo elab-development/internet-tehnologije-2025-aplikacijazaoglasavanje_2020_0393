@@ -152,9 +152,14 @@ describe("POST /api/orders — the refusals", () => {
     expect(status).toBe(409);
   });
 
-  it("answers 409 for a sold listing", async () => {
+  it("answers 409 for a sold listing with a live order still holding it", async () => {
+    // A confirmed order, not a bare status: since task 15, a `sold` listing whose order
+    // was deleted is meant to become purchasable again (that is the fix), so what keeps
+    // this one off the market has to be the order behind it, not the label alone.
     const buyer = await makeUser({ role: "buyer" });
-    const listing = await makeListing({ status: "sold" });
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "sold" });
+    await makeOrder({ listingId: listing.id, sellerId: seller.id, status: "confirmed" });
 
     const { status } = await place(authHeaderFor(buyer), { listingId: listing.id });
 

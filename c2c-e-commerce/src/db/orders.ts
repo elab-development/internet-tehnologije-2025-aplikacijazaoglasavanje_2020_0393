@@ -13,7 +13,7 @@
 // it on every reservation, and `updated_at` is what the embedding backfill's staleness
 // query compares against — every Buy click would queue a needless re-embed.
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
 
 import { RESERVATION_HOURS, type OrderStatus } from "@/lib/order-lifecycle";
 
@@ -74,10 +74,19 @@ export async function expireStalePendingOrders(
 }
 
 /**
- * Returns reserved listings to browse once nothing pending holds them.
+ * Returns reserved or sold listings to browse once no live order holds them.
  *
- * The `status = 'reserved'` clause is load-bearing: without it this republishes every
- * listing whose seller withdrew it, since a `removed` listing also has no pending order.
+ * Covers both statuses a listing takes on account of an order (`reserved` for a pending
+ * one, `sold` for a confirmed one) and both statuses that count as "still holding it"
+ * (`pending`, `confirmed`). Widening only one axis would be wrong on its own: releasing
+ * `sold` listings without also checking for a live `confirmed` order would republish a
+ * listing whose sale is still standing, which is a double-sell waiting to happen. This is
+ * what lets `DELETE /api/orders/[id]` free a listing whose *confirmed* order was deleted,
+ * not just a pending one — before this, deleting a confirmed order left its listing
+ * `sold` forever, unbuyable and with no order left to explain why.
+ *
+ * The `status IN (...)` clause is still load-bearing: without it this republishes every
+ * listing whose seller withdrew it, since a `removed` listing also has no live order.
  *
  * @param listingId scope to one listing; omit to sweep globally.
  * @returns how many listings were released.
@@ -90,11 +99,11 @@ export async function releaseUnheldListings(
 
   const result = await x.execute(sql`
     UPDATE "listings" SET "status" = 'active'
-     WHERE "status" = 'reserved'${scope}
+     WHERE "status" IN ('reserved', 'sold')${scope}
        AND NOT EXISTS (
          SELECT 1 FROM "orders"
           WHERE "orders"."listing_id" = "listings"."id"
-            AND "orders"."status" = 'pending'
+            AND "orders"."status" IN ('pending', 'confirmed')
        )
      RETURNING "id"
   `);
@@ -166,7 +175,8 @@ export async function applyListingSideEffect(
 }
 
 /**
- * Moves an order from one status to another, or returns null if it has already moved.
+ * Moves an order from one status to another, or returns null if it has already moved (or,
+ * with `requireUnexpired`, if it lapsed).
  *
  * Compare-and-set on the status the caller made its decision against, not just the id.
  * Between a route reading the order and writing it, another party may have driven a
@@ -175,6 +185,17 @@ export async function applyListingSideEffect(
  * leaving, for instance, a `confirmed` order beside an `active` listing anyone else can
  * reserve. That is the double-sell this part exists to make unrepresentable, reached
  * through a different door.
+ *
+ * `requireUnexpired` folds "and it has not lapsed" into the same compare-and-set, so
+ * whether a lapsed reservation can still be confirmed no longer depends on whether the
+ * scheduled sweep happened to run first (D4). It is a parameter rather than a condition
+ * this function infers from `to`, so the rule is visible at the call site rather than
+ * buried here — and it must be passed only for `pending -> confirmed`: expiry blocks the
+ * sale, not the tidy-up. A lapsed order that could not also be declined or cancelled
+ * would be stranded in a status nobody can leave, a worse bug than the one this guards.
+ * Compared against `now()` computed by Postgres, not `new Date()`, for the reason
+ * `reservationDeadline` above is: the container clock and the host clock disagree on this
+ * project's dev machines.
  *
  * The query builder rather than raw `sql`, unlike everything else in this file: the
  * reason those are raw is `listings.updatedAt`'s `$onUpdate`, which must not fire on a
@@ -185,11 +206,20 @@ export async function transitionOrder(
   orderId: number,
   from: OrderStatus,
   to: OrderStatus,
+  requireUnexpired = false,
 ): Promise<Order | null> {
+  const notLapsed = or(isNull(orders.expiresAt), gt(orders.expiresAt, sql`now()`));
+
   const [row] = await x
     .update(orders)
     .set({ status: to })
-    .where(and(eq(orders.id, orderId), eq(orders.status, from)))
+    .where(
+      and(
+        eq(orders.id, orderId),
+        eq(orders.status, from),
+        ...(requireUnexpired ? [notLapsed] : []),
+      ),
+    )
     .returning();
 
   return row ?? null;
