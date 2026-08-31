@@ -148,7 +148,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       return row;
     });
 
-    return jsonOk(created, 201);
+    return jsonOk(created, 201, { Location: `/api/reviews/${created.id}` });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     // The duplicate check. A `SELECT` before the `INSERT` is exactly the check two

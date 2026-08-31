@@ -127,7 +127,7 @@ describe("PUT /api/orders/[id] — who may drive what", () => {
 
     const { status } = await transition(order.id, authHeaderFor(buyer), "confirmed");
 
-    expect(status).toBe(400);
+    expect(status).toBe(409);
     expect(await orderStatus(order.id)).toBe("pending");
     expect(await listingStatus(listing.id)).toBe("reserved");
   });
@@ -139,7 +139,7 @@ describe("PUT /api/orders/[id] — who may drive what", () => {
 
     const { status } = await transition(order.id, authHeaderFor(seller), "cancelled");
 
-    expect(status).toBe(400);
+    expect(status).toBe(409);
     expect(await orderStatus(order.id)).toBe("pending");
   });
 
@@ -160,8 +160,8 @@ describe("PUT /api/orders/[id] — who may drive what", () => {
     const buyer = await makeUser({ role: "buyer" });
     const { order } = await pendingOrder(seller, buyer);
 
-    expect((await transition(order.id, authHeaderFor(buyer), "expired")).status).toBe(400);
-    expect((await transition(order.id, authHeaderFor(seller), "expired")).status).toBe(400);
+    expect((await transition(order.id, authHeaderFor(buyer), "expired")).status).toBe(409);
+    expect((await transition(order.id, authHeaderFor(seller), "expired")).status).toBe(409);
   });
 });
 
@@ -228,8 +228,34 @@ describe("PUT /api/orders/[id] — the rest of the graph", () => {
     for (const from of ["completed", "cancelled", "declined", "expired"] as const) {
       const order = await makeOrder({ buyerId: buyer.id, sellerId: seller.id, status: from });
       const { status } = await transition(order.id, authHeaderFor(admin), "confirmed");
-      expect(status, from).toBe(400);
+      expect(status, from).toBe(409);
     }
+  });
+});
+
+describe("PUT /api/orders/[id] — illegal transitions vs. malformed bodies", () => {
+  it("answers 409, not 400, for a transition the graph forbids", async () => {
+    // The body is well-formed and the status is a real one; what is wrong is the *state*.
+    // Its two siblings in this same handler -- "already moved to another status" and "no
+    // longer available to sell" -- already answer 409.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const order = await makeOrder({ buyerId: buyer.id, sellerId: seller.id, status: "completed" });
+
+    const { status } = await transition(order.id, authHeaderFor(buyer), "confirmed");
+
+    expect(status).toBe(409);
+  });
+
+  it("still answers 400 for a status that is not in the enum at all", async () => {
+    // The distinction being drawn: a malformed body is still a 400.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const { order } = await pendingOrder(seller, buyer);
+
+    const { status } = await transition(order.id, authHeaderFor(buyer), "teleported");
+
+    expect(status).toBe(400);
   });
 });
 

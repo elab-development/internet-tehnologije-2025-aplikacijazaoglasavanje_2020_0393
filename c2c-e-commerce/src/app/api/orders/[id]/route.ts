@@ -196,7 +196,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/Order'
  *       400:
- *         description: Validation error or illegal transition for this caller
+ *         description: Validation error — malformed body, or a status outside the enum
  *         content:
  *           application/json:
  *             schema:
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
- *         description: Another party moved the order first, or the listing is no longer available to sell
+ *         description: The transition is not legal for this caller, another party moved the order first, or the listing is no longer available to sell
  *         content:
  *           application/json:
  *             schema:
@@ -249,7 +249,10 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     const { status } = parsed.data;
 
     if (!canTransition(order.status, status, actor)) {
-      return jsonError(`Cannot move an order from ${order.status} to ${status}`, 400);
+      // 409, not 400: the body parsed and the status is a real one. What is wrong is the
+      // resource's current state, which is what 409 means -- and the two sibling
+      // conflicts in this handler already say so.
+      return jsonError(`Cannot move an order from ${order.status} to ${status}`, 409);
     }
 
     const nextListingStatus = listingStatusAfter(status);

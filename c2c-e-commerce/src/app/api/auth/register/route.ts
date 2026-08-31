@@ -171,7 +171,9 @@ export async function POST(request: NextRequest) {
       ip: identity.kind === "ip" ? identity.value : null,
     });
 
-    const response = jsonOk({ user: sanitizeUser(user), token }, 201);
+    const response = jsonOk({ user: sanitizeUser(user), token }, 201, {
+      Location: `/api/users/${user.id}`,
+    });
     response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
     response.cookies.set(REFRESH_COOKIE, refresh.token, refreshCookieOptions());
     return response;

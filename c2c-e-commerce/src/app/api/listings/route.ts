@@ -326,7 +326,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return jsonOk(created, 201);
+    return jsonOk(created, 201, { Location: `/api/listings/${created.id}` });
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);

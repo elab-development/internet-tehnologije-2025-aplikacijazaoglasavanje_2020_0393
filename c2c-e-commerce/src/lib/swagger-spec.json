@@ -2586,7 +2586,7 @@
             }
           },
           "400": {
-            "description": "Validation error or illegal transition for this caller",
+            "description": "Validation error — malformed body, or a status outside the enum",
             "content": {
               "application/json": {
                 "schema": {
@@ -2616,7 +2616,7 @@
             }
           },
           "409": {
-            "description": "Another party moved the order first, or the listing is no longer available to sell",
+            "description": "The transition is not legal for this caller, another party moved the order first, or the listing is no longer available to sell",
             "content": {
               "application/json": {
                 "schema": {

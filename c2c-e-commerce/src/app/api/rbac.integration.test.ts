@@ -304,8 +304,9 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
   });
 
   it("AC5: refuses a buyer confirming their own order, without hiding it from them", async () => {
-    // The buyer IS a party, so this is 400 rather than 404: they may see their order,
-    // they may not take the seller's decision for them.
+    // The buyer IS a party, so this is 409 rather than 404: they may see their order,
+    // they may not take the seller's decision for them. 409, not 400: the body parsed
+    // and the status is real -- what is wrong is the order's current state.
     const seller = await makeUser({ role: "seller" });
     const buyer = await makeUser({ role: "buyer" });
     const order = await orderFor(seller, buyer);
@@ -316,7 +317,7 @@ describe("C2C-SEC-10 AC4/AC5 — PUT /api/orders/[id]", () => {
       params: { id: String(order.id) },
     });
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(409);
 
     const db = await getTestDb();
     const [row] = await db.select().from(orders).where(eq(orders.id, order.id));

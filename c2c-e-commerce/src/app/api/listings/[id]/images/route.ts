@@ -243,7 +243,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
     // Summary, not the row: `storageKey` is an internal address and never leaves the
     // server, not even to the listing's owner.
-    return jsonOk(toImageSummary(image), 201);
+    return jsonOk(toImageSummary(image), 201, {
+      Location: `/api/listings/${listingId}/images/${image.id}`,
+    });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     if (err instanceof ListingGoneMidUpload) return jsonError("Listing not found", 404);

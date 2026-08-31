@@ -2,8 +2,12 @@ import { NextResponse } from "next/server";
 
 // ─── jsonOk ───────────────────────────────────────────────────────────────────
 
-export function jsonOk<T>(data: T, status: 200 | 201 = 200): NextResponse {
-  return NextResponse.json(data, { status });
+export function jsonOk<T>(
+  data: T,
+  status: 200 | 201 = 200,
+  headers?: Record<string, string>
+): NextResponse {
+  return NextResponse.json(data, { status, headers });
 }
 
 // ─── jsonError ────────────────────────────────────────────────────────────────
