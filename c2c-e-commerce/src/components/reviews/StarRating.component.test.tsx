@@ -10,15 +10,27 @@ import { describe, expect, it } from "vitest";
 
 import StarRating from "./StarRating";
 
+/** The glyphs of the five `[data-star]` nodes, in order, e.g. "★★★★☆". */
+function starGlyphs(container: HTMLElement): string {
+  return Array.from(container.querySelectorAll("[data-star]"))
+    .map((node) => node.textContent)
+    .join("");
+}
+
 describe("StarRating", () => {
   it("fills the nearest whole number of stars", () => {
-    render(<StarRating value={4.2} />);
+    const { container } = render(<StarRating value={4.2} />);
     expect(screen.getByLabelText("Rated 4.2 out of 5")).toBeInTheDocument();
+    // Math.round(4.2) === 4: four filled stars, one empty.
+    expect(starGlyphs(container)).toBe("★★★★☆");
   });
 
   it("rounds up at the halfway point", () => {
-    render(<StarRating value={3.5} />);
+    const { container } = render(<StarRating value={3.5} />);
     expect(screen.getByLabelText("Rated 3.5 out of 5")).toBeInTheDocument();
+    // Math.round(3.5) === 4: four filled stars, one empty. A Math.floor implementation
+    // would stop at three and this assertion is what catches it.
+    expect(starGlyphs(container)).toBe("★★★★☆");
   });
 
   it("says there is no rating rather than showing zero stars", () => {
@@ -37,5 +49,6 @@ describe("StarRating", () => {
   it("renders one star per point, always five", () => {
     const { container } = render(<StarRating value={2} />);
     expect(container.querySelectorAll("[data-star]")).toHaveLength(5);
+    expect(starGlyphs(container)).toBe("★★☆☆☆");
   });
 });
