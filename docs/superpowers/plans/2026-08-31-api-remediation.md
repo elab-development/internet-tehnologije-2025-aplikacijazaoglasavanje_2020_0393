@@ -18,7 +18,11 @@
 - **`TRUSTED_PROXY_HOPS` defaults to `0`, which means no proxy is trusted.** At `0`, IP-keyed limits are **skipped**, never collapsed into one shared bucket — a shared bucket is worse than no limit, because one abuser would lock out every user.
 - **The `X-Forwarded-For` client index is `entries[entries.length - hops]`.** Not `length - 1 - hops`. With one proxy setting `XFF: "client"`, that index is `-1`.
 - **No `any`, no `as unknown as`, no non-null assertions** in new code. The reviewed API surface currently contains none; keep it that way. The one existing `as unknown as` (`auth.ts:88`) is removed by Task 6.
-- **Run the full suite with no background flag and no polling.** Wait inside the call, timeout `900000` ms. Backgrounding `npm test` has stalled this project's agents five times.
+- **Implementers never run the full suite.** `npm test` takes roughly 14 minutes because the integration project starts a Postgres container, and the Bash tool's foreground cap is 600 s — so a foreground `npm test` is auto-moved to the background, and every agent that has tried it in this project has then stalled waiting on a notification. Instead run only what your task touches, each in the foreground with `run_in_background` absent and `timeout: 570000`:
+  - `npx vitest run --project unit` (seconds)
+  - `npx vitest run --project component` (under a minute)
+  - `npx vitest run --project integration <the specific file(s) you changed>` — one container start, a few minutes
+  The controller runs the full suite at each group boundary and owns any fallout. If a task's step says "run the full suite", run the three focused commands above instead and say so in your report.
 - **Every security guard gets the deliberate-break check.** Remove the guard, run the *named* test, confirm it fails, restore. A guard whose test still passes without it is not a guard, and this project has already shipped several.
 - **Test helpers are never invented.** Every seeding helper a task's test uses (`seedListing`, `seedPendingOrder`, `seedAdmin`, `authed`, and the rest) comes from `src/test/harness/factories.ts` or from the test file neighbouring the one you are writing. Read that neighbour first and reuse its helpers and its style; if a helper genuinely does not exist, add it to `factories.ts` where the next task can find it, rather than defining a private one inline.
 - **Commit after every task.** Conventional-commit prefixes, matching the existing log (`feat(sec-11):`, `fix(listings):`, `docs(api):`).
