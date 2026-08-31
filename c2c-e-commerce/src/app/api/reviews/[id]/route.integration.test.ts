@@ -82,7 +82,11 @@ describe("PATCH /api/reviews/[id]", () => {
 
     await patch(review.id, { rating: 1 }, authHeaderFor(buyer));
 
-    expect((await aggregatesOf(seller.id)).reviewCount).toBe(1);
+    // The whole aggregate, not just the count: `updateDelta`'s countDelta is always 0 by
+    // definition, so a count-only assertion here passes even if the sum moved by the
+    // wrong amount -- a `from`/`to` swap or a sign error inside `updateDelta` would slip
+    // past it. 3 -> 1 must land on sum 1.
+    expect(await aggregatesOf(seller.id)).toEqual({ reviewCount: 1, ratingSum: 1 });
   });
 
   it("lets the author change only the comment, touching no aggregate", async () => {
@@ -146,6 +150,37 @@ describe("PATCH /api/reviews/[id]", () => {
 
     expect(status).toBe(400);
     expect(await aggregatesOf(seller.id)).toEqual({ reviewCount: 1, ratingSum: 3 });
+  });
+
+  it("computes each edit's delta from what actually committed, not a stale pre-transaction read", async () => {
+    // Two overlapping edits of the same review. Each request reads the review once,
+    // outside any transaction, to decide 404/403 -- that read is what the handler used
+    // to compute its delta from too, before this fix. Fire both concurrently: if the
+    // delta is still computed from that outer, pre-transaction read, both requests
+    // capture rating 3, apply their deltas against that stale value (+2 and -2), and the
+    // sum ends up unmoved (3) while the stored rating ends up wherever the later UPDATE
+    // left it (1 or 5) -- a seller with one review whose ratingSum no longer equals that
+    // review's rating, and nothing afterwards can tell which write went missing.
+    //
+    // With the fix, the losing request blocks on the winner's `FOR UPDATE` lock and then
+    // re-reads the row it just waited on, so its delta is computed against what the
+    // winner actually committed -- not the value both requests started from. For a
+    // seller with exactly one review, ratingSum must equal that review's rating no
+    // matter which edit lands last.
+    const { seller, buyer, review } = await reviewed();
+
+    await Promise.all([
+      patch(review.id, { rating: 5 }, authHeaderFor(buyer)),
+      patch(review.id, { rating: 1 }, authHeaderFor(buyer)),
+    ]);
+
+    const db = await getTestDb();
+    const [finalReview] = await db.select().from(reviews).where(eq(reviews.id, review.id));
+
+    expect(await aggregatesOf(seller.id)).toEqual({
+      reviewCount: 1,
+      ratingSum: finalReview.rating,
+    });
   });
 });
 

@@ -115,6 +115,20 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     const { rating, comment } = parsed.data;
 
     const updated = await db.transaction(async (tx) => {
+      // Re-read and lock the row inside the transaction rather than trusting the `review`
+      // fetched above. That earlier read still decides authorisation and the 404 -- that
+      // ordering does not change -- but it happened before this transaction opened, so
+      // two concurrent edits can both read rating 3, one set 5 (+2) and the other set 1
+      // (-2), and whichever commits last wins the stored rating while the sum has moved
+      // by net zero. `FOR UPDATE` makes the second edit block on the first's row lock and
+      // compute its delta against what the first actually committed, so the two compose
+      // instead of one silently erasing the other's contribution to the sum.
+      const [current] = await tx
+        .select({ rating: reviews.rating, sellerId: reviews.sellerId })
+        .from(reviews)
+        .where(eq(reviews.id, id))
+        .for("update");
+
       const [row] = await tx
         .update(reviews)
         .set({
@@ -128,8 +142,8 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       // returns a zero delta for an unchanged rating, so the guard is an optimisation
       // rather than the correctness — but a no-op UPDATE on `users` for every comment
       // edit is a row lock nobody asked for.
-      if (rating !== undefined && rating !== review.rating) {
-        await applyRatingDelta(tx, review.sellerId, updateDelta(review.rating, rating));
+      if (rating !== undefined && rating !== current.rating) {
+        await applyRatingDelta(tx, current.sellerId, updateDelta(current.rating, rating));
       }
 
       return row;
