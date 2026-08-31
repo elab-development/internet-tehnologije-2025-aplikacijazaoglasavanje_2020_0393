@@ -199,3 +199,30 @@ describe("search wildcard escaping", () => {
     expect(query.params).toContain("%a\\\\b%");
   });
 });
+
+describe("ordering is total", () => {
+  const dialect = new PgDialect();
+
+  // Without a tiebreaker, two listings sharing a createdAt (or a price, under
+  // sort=price_asc) can swap places between two requests -- so a row falls into the gap
+  // between page 1 and page 2, or is served on both.
+  //
+  // `orderBy` terms are Drizzle `SQL` objects that hold a back-reference to their table,
+  // so `JSON.stringify` on the term itself throws ("Converting circular structure to
+  // JSON"). `dialect.sqlToQuery` renders each term to its `{ sql, params }` shape first --
+  // the same move the search-escaping tests above make for `where` -- which is plain data
+  // and safe to stringify.
+  it.each(["newest", "oldest", "price_asc", "price_desc"])(
+    "breaks ties by id under sort=%s",
+    (sort) => {
+      const built = buildListingQuery(new URLSearchParams({ sort }), null);
+      expect(built.ok).toBe(true);
+      if (!built.ok) return;
+
+      // Two order terms, the second of which is the primary key.
+      expect(built.query.orderBy).toHaveLength(2);
+      const rendered = built.query.orderBy.map((term) => dialect.sqlToQuery(term).sql);
+      expect(rendered[1]).toMatch(/"id"/);
+    },
+  );
+});

@@ -14,12 +14,12 @@ import {
 } from "@/components/ui";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
-import type { Order } from "@/types/api";
+import type { OrdersResponse } from "@/types/api";
 
 function OrdersPageContent() {
   const router = useRouter();
-  const { data, loading, error } = useFetch<Order[]>("/api/orders");
-  const orders = data ?? [];
+  const { data, loading, error } = useFetch<OrdersResponse>("/api/orders");
+  const orders = data?.data ?? [];
 
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;

@@ -124,7 +124,7 @@ export type ListingQuery = {
   mode: SearchMode;
   search: string;
   where: SQL | undefined;
-  orderBy: SQL;
+  orderBy: SQL[];
 };
 
 /**
@@ -214,14 +214,18 @@ export function buildListingQuery(
       : conditions;
 
   const sortParam = searchParams.get("sort") ?? "newest";
+  // Every branch ends in the primary key. Ordering by a non-unique column alone is not a
+  // total order, so two rows sharing a createdAt -- or a price, under price_asc -- can
+  // swap between requests, and a row then falls into the gap between two pages or is
+  // served on both. `orders/seller` and `users/{id}/reviews` already do this.
   const orderBy =
     sortParam === "oldest"
-      ? asc(listings.createdAt)
+      ? [asc(listings.createdAt), asc(listings.id)]
       : sortParam === "price_asc"
-        ? asc(listings.price)
+        ? [asc(listings.price), asc(listings.id)]
         : sortParam === "price_desc"
-          ? desc(listings.price)
-          : desc(listings.createdAt);
+          ? [desc(listings.price), desc(listings.id)]
+          : [desc(listings.createdAt), desc(listings.id)];
 
   return {
     ok: true,
@@ -274,7 +278,7 @@ async function runKeyword(query: ListingQuery): Promise<ListingPage> {
       .select(listingColumns)
       .from(listings)
       .where(query.where)
-      .orderBy(query.orderBy)
+      .orderBy(...query.orderBy)
       .limit(query.limit)
       .offset(offset),
     db.select({ total: count() }).from(listings).where(query.where),
@@ -340,7 +344,7 @@ async function runHybrid(query: ListingQuery): Promise<ListingPage> {
       .select({ id: listings.id })
       .from(listings)
       .where(and(query.where, ilike(listings.title, `%${query.search}%`)))
-      .orderBy(query.orderBy)
+      .orderBy(...query.orderBy)
       .limit(FUSION_CANDIDATES)
       .then((rows) => rows.map((row) => row.id)),
     vectorArm(query),

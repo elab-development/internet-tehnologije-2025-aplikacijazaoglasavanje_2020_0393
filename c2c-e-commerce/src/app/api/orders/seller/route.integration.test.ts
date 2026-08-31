@@ -25,12 +25,14 @@ type Row = {
   coverImageId: number | null;
 };
 
+type Page = { data: Row[]; total: number; page: number; limit: number; totalPages: number };
+
 async function sales(headers: Record<string, string> = {}) {
   const { GET } = await import("./route");
   const response = await GET(
     new NextRequest("http://localhost/api/orders/seller", { headers }),
   );
-  return { status: response.status, body: (await response.json()) as Row[] };
+  return { status: response.status, body: (await response.json()) as Page };
 }
 
 describe("GET /api/orders/seller", () => {
@@ -48,8 +50,8 @@ describe("GET /api/orders/seller", () => {
     const { status, body } = await sales(authHeaderFor(seller));
 
     expect(status).toBe(200);
-    expect(body).toHaveLength(1);
-    expect(body[0]).toMatchObject({
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0]).toMatchObject({
       id: order.id,
       listingTitle: "Road bike",
       buyerName: "Bea",
@@ -67,7 +69,7 @@ describe("GET /api/orders/seller", () => {
 
     const { body } = await sales(authHeaderFor(mine));
 
-    expect(body.map((o) => o.id)).toEqual([own.id]);
+    expect(body.data.map((o) => o.id)).toEqual([own.id]);
   });
 
   it("excludes the seller's own purchases", async () => {
@@ -78,15 +80,16 @@ describe("GET /api/orders/seller", () => {
 
     const { body } = await sales(authHeaderFor(seller));
 
-    expect(body).toHaveLength(0);
+    expect(body.data).toHaveLength(0);
   });
 
-  it("returns an empty array for a seller with no sales", async () => {
+  it("returns an empty page for a seller with no sales", async () => {
     const seller = await makeUser({ role: "seller" });
     const { status, body } = await sales(authHeaderFor(seller));
 
     expect(status).toBe(200);
-    expect(body).toEqual([]);
+    expect(body.data).toEqual([]);
+    expect(body.total).toBe(0);
   });
 
   it("returns every sale to an admin", async () => {
@@ -96,7 +99,8 @@ describe("GET /api/orders/seller", () => {
 
     const { body } = await sales(authHeaderFor(admin));
 
-    expect(body).toHaveLength(2);
+    expect(body.data).toHaveLength(2);
+    expect(body.total).toBe(2);
   });
 
   it("sorts newest first, deterministically", async () => {
@@ -120,7 +124,7 @@ describe("GET /api/orders/seller", () => {
 
     const { body } = await sales(authHeaderFor(seller));
 
-    expect(body.map((o) => o.id)).toEqual([second.id, first.id]);
+    expect(body.data.map((o) => o.id)).toEqual([second.id, first.id]);
   });
 
   it("answers 401 unauthenticated and 403 to a buyer", async () => {

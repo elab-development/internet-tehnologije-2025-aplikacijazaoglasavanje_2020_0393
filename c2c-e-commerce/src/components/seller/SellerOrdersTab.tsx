@@ -8,7 +8,7 @@ import { EmptyState, ErrorAlert, OrderCardSkeleton } from "@/components/ui";
 import type { UseFetchResult } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
 import type { OrderStatus } from "@/lib/order-lifecycle";
-import type { SellerOrder } from "@/types/api";
+import type { SellerOrder, SellerOrdersResponse } from "@/types/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,7 +17,7 @@ export type SellerOrdersTabProps = {
    * Owned by the page rather than this tab: the tab strip shows the pending
    * count even while the listings tab is the one on screen.
    */
-  orders: UseFetchResult<SellerOrder[]>;
+  orders: UseFetchResult<SellerOrdersResponse>;
   formatConverted: (amount: number) => string;
 };
 
@@ -29,7 +29,7 @@ export default function SellerOrdersTab({
   formatConverted,
 }: SellerOrdersTabProps) {
   const { data, setData, loading, error } = ordersFetch;
-  const orders = data ?? [];
+  const orders = data?.data ?? [];
 
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
@@ -39,9 +39,14 @@ export default function SellerOrdersTab({
       const updated = await api.put<SellerOrder>(`/api/orders/${orderId}`, { status: to });
 
       setData((current) =>
-        (current ?? []).map((order) =>
-          order.id === orderId ? { ...order, status: updated.status } : order,
-        ),
+        current
+          ? {
+              ...current,
+              data: current.data.map((order) =>
+                order.id === orderId ? { ...order, status: updated.status } : order,
+              ),
+            }
+          : current,
       );
 
       toast.success(`Order #${orderId} is now ${updated.status}`);

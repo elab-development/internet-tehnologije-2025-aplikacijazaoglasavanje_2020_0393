@@ -114,6 +114,9 @@ export type OrderDetail = Order & {
 /** `POST /api/orders` — only the id is consumed by the UI. */
 export type CreatedOrder = Pick<Order, "id">;
 
+/** `GET /api/orders` */
+export type OrdersResponse = Paginated<Order>;
+
 /** `GET /api/orders/seller` — the buyer and the listing are joined in. */
 export type SellerOrder = Order & {
   buyerName: string;
@@ -121,6 +124,9 @@ export type SellerOrder = Order & {
   listingTitle: string;
   coverImageId: number | null;
 };
+
+/** `GET /api/orders/seller` */
+export type SellerOrdersResponse = Paginated<SellerOrder>;
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 

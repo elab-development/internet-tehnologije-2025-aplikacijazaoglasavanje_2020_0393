@@ -269,7 +269,7 @@ describe("GET /api/orders", () => {
     const { status, body } = await list(authHeaderFor(mine));
 
     expect(status).toBe(200);
-    expect((body as { id: number }[]).map((o) => o.id)).toEqual([a.id]);
+    expect((body.data as { id: number }[]).map((o) => o.id)).toEqual([a.id]);
   });
 
   it("returns a seller's own purchases, not their sales", async () => {
@@ -281,7 +281,7 @@ describe("GET /api/orders", () => {
 
     const { body } = await list(authHeaderFor(seller));
 
-    expect((body as { id: number }[]).map((o) => o.id)).toEqual([bought.id]);
+    expect((body.data as { id: number }[]).map((o) => o.id)).toEqual([bought.id]);
   });
 
   it("returns every order to an admin", async () => {
@@ -291,7 +291,11 @@ describe("GET /api/orders", () => {
 
     const { body } = await list(authHeaderFor(admin));
 
-    expect(body).toHaveLength(2);
+    expect(body.data).toHaveLength(2);
+    expect(body.total).toBe(2);
+    expect(body.page).toBe(1);
+    expect(body.limit).toBe(20);
+    expect(body.totalPages).toBe(1);
   });
 
   it("answers 401 to an anonymous caller", async () => {

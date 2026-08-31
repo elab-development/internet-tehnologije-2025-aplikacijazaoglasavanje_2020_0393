@@ -7,7 +7,7 @@ import SellerListingsTab from "@/components/seller/SellerListingsTab";
 import SellerOrdersTab from "@/components/seller/SellerOrdersTab";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
-import type { SellerOrder } from "@/types/api";
+import type { SellerOrdersResponse } from "@/types/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,8 +49,8 @@ function SellerDashboardContent() {
 
   // Fetched here rather than inside the orders tab so the pending count stays
   // on the tab strip while the listings tab is on screen.
-  const ordersFetch = useFetch<SellerOrder[]>("/api/orders/seller");
-  const pendingCount = (ordersFetch.data ?? []).filter(
+  const ordersFetch = useFetch<SellerOrdersResponse>("/api/orders/seller");
+  const pendingCount = (ordersFetch.data?.data ?? []).filter(
     (order) => order.status === "pending",
   ).length;
 
