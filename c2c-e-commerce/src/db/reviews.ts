@@ -58,6 +58,54 @@ export async function applyRatingDelta(
   return result.rows.length;
 }
 
+/**
+ * Repairs *other* sellers' aggregates before a user is deleted out from under their reviews.
+ *
+ * Deleting a user cascades three ways: the reviews they wrote (`reviewer_id`), their
+ * orders on both sides, and — through those orders — the reviews anchored to them, since
+ * `reviews.order_id` is also `ON DELETE CASCADE` (migration 0017). Every one of those rows
+ * can belong to a review of some *other* seller, and the cascade removes it with no write
+ * to that seller's `review_count`/`rating_sum` — the same silent-drift shape as
+ * `DELETE /api/orders/{id}` (finding 1), just reached through a different set of foreign
+ * keys.
+ *
+ * `r.seller_id <> userId` is the one exclusion that matters: the user being deleted is
+ * going away regardless, so their own aggregates need no repair, only third parties' do.
+ * Excluding it also keeps this function from correcting a seller for their own vanishing
+ * reviews and then finding no row left to have corrected.
+ *
+ * Run this inside the same transaction as the user delete, before the user row goes —
+ * the aggregate query still needs to see the reviews and orders that are about to
+ * disappear with it.
+ *
+ * @returns how many sellers' aggregates were adjusted.
+ */
+export async function repairAggregatesBeforeUserDelete(
+  x: ReviewExecutor,
+  userId: number,
+): Promise<number> {
+  const result = await x.execute(sql`
+    UPDATE "users" AS u
+       SET "review_count" = u."review_count" - agg."cnt",
+           "rating_sum"   = u."rating_sum"   - agg."total"
+      FROM (
+        SELECT r."seller_id", count(*) AS "cnt", sum(r."rating") AS "total"
+          FROM "reviews" r
+          LEFT JOIN "orders" o ON o."id" = r."order_id"
+         WHERE (r."reviewer_id" = ${userId}
+             OR r."seller_id"   = ${userId}
+             OR o."buyer_id"    = ${userId}
+             OR o."seller_id"   = ${userId})
+           AND r."seller_id" <> ${userId}
+         GROUP BY r."seller_id"
+      ) AS agg
+     WHERE u."id" = agg."seller_id"
+     RETURNING u."id"
+  `);
+
+  return result.rows.length;
+}
+
 /** The unique index 0017 creates: at most one review per order. */
 export const ONE_REVIEW_PER_ORDER_INDEX = "reviews_one_per_order_idx";
 

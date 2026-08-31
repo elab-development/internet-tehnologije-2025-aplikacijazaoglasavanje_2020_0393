@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { repairAggregatesBeforeUserDelete } from "@/db/reviews";
 import { users } from "@/db/schema";
 import { isSelfOrAdmin } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
@@ -290,7 +291,16 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!user) return jsonError("User not found", 404);
 
-    await db.delete(users).where(eq(users.id, id));
+    await db.transaction(async (tx) => {
+      // Deleting this user cascades to the reviews they wrote, their orders on both
+      // sides, and — through those orders — the reviews anchored to them. Every one of
+      // those rows can be a review of some *other* seller, and the cascade would remove
+      // it without moving that seller's `review_count`/`rating_sum` (D7). Repair those
+      // third parties before the user row goes, in the same transaction, so the cascade
+      // and the compensation commit or roll back together.
+      await repairAggregatesBeforeUserDelete(tx, id);
+      await tx.delete(users).where(eq(users.id, id));
+    });
 
     return jsonOk({ message: "User deleted successfully" });
   } catch (err) {

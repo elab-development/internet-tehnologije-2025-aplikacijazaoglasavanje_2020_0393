@@ -104,17 +104,21 @@ Legend: **—** public · **✓** permitted · **✗** refused
 
 ## Known gaps
 
-- **`DELETE /api/users/{id}`** cascades to listings, orders and reviews — and since Part 4,
-  to reviews on both sides: the ones they wrote and the ones written about them. Deleting a
-  seller erases their reputation along with them. Intended, destructive, no soft delete,
-  deferred.
+- **`DELETE /api/users/{id}`** cascades to listings and to orders on both sides — a
+  deleted user takes their own listings and every order where they were buyer or seller
+  with them, including their buyers' or sellers' purchase records on the other side of
+  those orders. Since Part 4 it also cascades to reviews on both sides: the ones this
+  user wrote, and — through the vanishing orders — the ones anchored to them. That second
+  half removes reviews of some *other* seller's transaction, not just this user's own; the
+  route repairs those third parties' `review_count`/`rating_sum` in the same transaction
+  (`repairAggregatesBeforeUserDelete` in `src/db/reviews.ts`), so their aggregates stay
+  correct. What remains deferred is the loss of the review text itself, and the loss of
+  this user's own reputation and purchase history, which the cascade still erases with no
+  soft delete. Intended, destructive.
 - **`GET /api/users/{id}/reviews` publishes a seller's display name and avatar to anyone.**
   That is what a marketplace profile is for (spec §6.4), and it is the reason the endpoint
   projects five columns by name rather than selecting the row. A `select *` there would
   publish the email address beside them; the route's own test asserts it does not.
-- **`DELETE /api/users/{id}`** now also cascades to orders on both sides — a deleted
-  seller takes their buyers' purchase records with them. Same disposition as the listing
-  cascade above: intended, destructive, no soft delete, deferred.
 - **Rate limiting is per-instance**, not distributed. Documented in SEC-11 and in the
   thesis deployment chapter rather than glossed over.
 - **`POST /api/orders` is not rate limited, and nothing caps a buyer's concurrent
