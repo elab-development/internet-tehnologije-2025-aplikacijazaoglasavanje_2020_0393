@@ -88,8 +88,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     });
   } catch (err) {
     if (err instanceof StorageError) {
+      // A missing object is a 404. An I/O fault is this server's problem, and reporting
+      // it as "not found" hid a broken mount behind an ordinary-looking response.
+      if (err.kind === "not_found") return jsonError("Image not found", 404);
       console.error("[GET /api/images/[id]] storage", err);
-      return jsonError("Image not found", 404);
+      return jsonError("Internal server error", 500);
     }
     console.error("[GET /api/images/[id]]", err);
     return jsonError("Internal server error");

@@ -4,7 +4,7 @@
 
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
-import { db } from "./index";
+import { db, type Database } from "./index";
 import {
   LISTING_IMAGES_SORT_INDEX,
   listingImages,
@@ -13,6 +13,19 @@ import {
   type ListingImage,
   type NewListingImage,
 } from "./schema";
+
+/**
+ * Either the pool-backed client or a transaction handle.
+ *
+ * Same shape as `OrderExecutor` (`src/db/orders.ts`), for the same reason: Task 9's row
+ * lock and the count check, the sort-order read and the insert it guards all have to run
+ * on the *same* connection for the lock to serialise anything, so every function the
+ * route calls between acquiring the lock and committing must accept the transaction
+ * handle in place of the module-level `db`.
+ */
+export type ListingImagesExecutor =
+  | Omit<Database, "$client">
+  | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /**
  * The unique index behind (listing_id, sort_order). Task 9 uses it to detect the
@@ -28,16 +41,22 @@ export { LISTING_IMAGES_SORT_INDEX };
 /** Spec §4.4. Enough for a second-hand listing; small enough to bound the upload cost. */
 export const MAX_IMAGES_PER_LISTING = 8;
 
-export async function listImagesFor(listingId: number): Promise<ListingImage[]> {
-  return db
+export async function listImagesFor(
+  listingId: number,
+  x: ListingImagesExecutor = db,
+): Promise<ListingImage[]> {
+  return x
     .select()
     .from(listingImages)
     .where(eq(listingImages.listingId, listingId))
     .orderBy(asc(listingImages.sortOrder), asc(listingImages.id));
 }
 
-export async function countImagesFor(listingId: number): Promise<number> {
-  const [row] = await db
+export async function countImagesFor(
+  listingId: number,
+  x: ListingImagesExecutor = db,
+): Promise<number> {
+  const [row] = await x
     .select({ count: sql<number>`count(*)::int` })
     .from(listingImages)
     .where(eq(listingImages.listingId, listingId));
@@ -46,8 +65,11 @@ export async function countImagesFor(listingId: number): Promise<number> {
 }
 
 /** One past the highest existing order, so an upload appends rather than collides. */
-export async function nextSortOrder(listingId: number): Promise<number> {
-  const [row] = await db
+export async function nextSortOrder(
+  listingId: number,
+  x: ListingImagesExecutor = db,
+): Promise<number> {
+  const [row] = await x
     .select({ highest: sql<number | null>`max(${listingImages.sortOrder})` })
     .from(listingImages)
     .where(eq(listingImages.listingId, listingId));
@@ -55,8 +77,11 @@ export async function nextSortOrder(listingId: number): Promise<number> {
   return row?.highest === null || row?.highest === undefined ? 0 : row.highest + 1;
 }
 
-export async function insertImage(values: NewListingImage): Promise<ListingImage> {
-  const [image] = await db.insert(listingImages).values(values).returning();
+export async function insertImage(
+  values: NewListingImage,
+  x: ListingImagesExecutor = db,
+): Promise<ListingImage> {
+  const [image] = await x.insert(listingImages).values(values).returning();
   return image;
 }
 
@@ -116,10 +141,19 @@ export async function deleteImage(imageId: number): Promise<ListingImage | null>
  * not be renumbered into this sequence, and the scope is what stops a caller reordering
  * a listing they do not own by passing its image ids.
  */
-export async function reorderImages(listingId: number, orderedIds: number[]): Promise<void> {
+export async function reorderImages(
+  listingId: number,
+  orderedIds: number[],
+  x: ListingImagesExecutor = db,
+): Promise<void> {
   if (orderedIds.length === 0) return;
 
-  await db.transaction(async (tx) => {
+  // `x.transaction`, not `db.transaction`: called standalone this opens a real
+  // transaction, but called with the route's already-open lock transaction (Task 9) it
+  // opens a SAVEPOINT on that same connection instead of a second one -- a second
+  // connection would block on the row lock the caller is already holding and never
+  // return.
+  await x.transaction(async (tx) => {
     // `listing_images_listing_sort_idx` (LISTING_IMAGES_SORT_INDEX) checks uniqueness per
     // statement, not deferred to commit, so writing final positions directly can ask a row to
     // take a sort_order another not-yet-updated row in this listing still holds -- any swap

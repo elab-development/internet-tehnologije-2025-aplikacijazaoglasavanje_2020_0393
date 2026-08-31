@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 
-import { ImageProcessingError, processUploadedImage } from "@/lib/image-pipeline";
+import { processUploadedImage } from "@/lib/image-pipeline";
 
 // Real bytes, generated in-process: a fixture file would be one more thing to keep in
 // sync with what the pipeline actually accepts.
@@ -46,8 +46,12 @@ describe("processUploadedImage", () => {
       Buffer.alloc(64, 0),
     ]);
 
-    await expect(processUploadedImage(truncated)).rejects.toBeInstanceOf(
-      ImageProcessingError,
+    // Both error kinds throw ImageProcessingError, so asserting only the class would
+    // still pass if sniffImageType ever loosened and this bytes-that-sniff-but-fail case
+    // started being rejected as "not_an_image" instead -- the kind is what this test
+    // exists to pin down.
+    await expect(processUploadedImage(truncated)).rejects.toThrow(
+      expect.objectContaining({ kind: "undecodable" }),
     );
   });
 });

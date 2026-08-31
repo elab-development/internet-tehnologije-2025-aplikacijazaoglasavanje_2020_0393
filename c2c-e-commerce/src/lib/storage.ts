@@ -12,6 +12,14 @@ export type PutOptions = {
   contentType: string;
   /** Directory-ish namespace, e.g. `listings/42`. Server-generated. */
   prefix: string;
+  /**
+   * Write under this exact key instead of generating one.
+   *
+   * Only ever a key from `storageKey()`. Every driver still validates through
+   * `isValidStorageKey` before touching its backing store, so the whitelist guarantee is
+   * unchanged: a caller cannot smuggle a path in here.
+   */
+  key?: string;
 };
 
 export type StoredObject = { key: string; contentType: string; byteSize: number };
@@ -69,7 +77,7 @@ export class LocalStorageProvider implements StorageProvider {
   }
 
   async put(bytes: Buffer, opts: PutOptions): Promise<StoredObject> {
-    const key = storageKey(opts.prefix, extensionFor(opts.contentType));
+    const key = opts.key ?? storageKey(opts.prefix, extensionFor(opts.contentType));
     const full = this.resolve(key);
 
     try {
@@ -114,7 +122,7 @@ export class MemoryStorageProvider implements StorageProvider {
   private readonly objects = new Map<string, StoredBytes>();
 
   async put(bytes: Buffer, opts: PutOptions): Promise<StoredObject> {
-    const key = storageKey(opts.prefix, extensionFor(opts.contentType));
+    const key = opts.key ?? storageKey(opts.prefix, extensionFor(opts.contentType));
     if (!isValidStorageKey(key)) {
       throw new StorageError("Generated an invalid key", "invalid_key");
     }
