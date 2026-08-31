@@ -140,9 +140,13 @@ const swaggerDefinition = {
           rating: { type: "integer", minimum: 1, maximum: 5, example: 4 },
           comment: { type: "string", nullable: true, example: "Great seller!" },
           reviewerId: { type: "integer", example: 3 },
-          listingId: { type: "integer", example: 5 },
+          sellerId: { type: "integer", example: 5, description: "The user being reviewed" },
+          orderId: {
+            type: "integer",
+            example: 9,
+            description: "The transaction being reviewed; unique across reviews",
+          },
           createdAt: { type: "string", format: "date-time" },
-          updatedAt: { type: "string", format: "date-time" },
         },
       },
       Pagination: {
@@ -162,7 +166,7 @@ const swaggerDefinition = {
     { name: "Categories", description: "Product categories" },
     { name: "Listings", description: "Marketplace listings" },
     { name: "Orders", description: "Purchase orders" },
-    { name: "Reviews", description: "Listing reviews & ratings" },
+    { name: "Reviews", description: "Seller reviews & ratings" },
   ],
 };
 

@@ -269,15 +269,17 @@
             "type": "integer",
             "example": 3
           },
-          "listingId": {
+          "sellerId": {
             "type": "integer",
-            "example": 5
+            "example": 5,
+            "description": "The user being reviewed"
+          },
+          "orderId": {
+            "type": "integer",
+            "example": 9,
+            "description": "The transaction being reviewed; unique across reviews"
           },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
             "type": "string",
             "format": "date-time"
           }
@@ -329,7 +331,7 @@
     },
     {
       "name": "Reviews",
-      "description": "Listing reviews & ratings"
+      "description": "Seller reviews & ratings"
     }
   ],
   "paths": {
@@ -1447,206 +1449,6 @@
         }
       }
     },
-    "/api/listings/{id}/reviews": {
-      "get": {
-        "tags": [
-          "Reviews"
-        ],
-        "summary": "List reviews for a listing",
-        "description": "Returns all reviews for a specific listing, including the reviewer name.",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "Listing ID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of reviews",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/Review"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "reviewerName": {
-                            "type": "string",
-                            "nullable": true,
-                            "example": "Jane Smith"
-                          }
-                        }
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid listing id",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Listing not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "Reviews"
-        ],
-        "summary": "Create a review for a listing",
-        "description": "Adds a review to a listing. Any authenticated user may review — sellers buy too —\nprovided they have a `completed` order for this listing.\nA user can only submit one review per listing.\n",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "integer"
-            },
-            "description": "Listing ID"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "rating"
-                ],
-                "properties": {
-                  "rating": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 5,
-                    "example": 4
-                  },
-                  "comment": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "Great product!"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Review created",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Review"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Missing or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "The caller has no completed order for this listing.\n",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Listing not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Already reviewed this listing",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/listings/{id}": {
       "get": {
         "tags": [
@@ -1681,6 +1483,16 @@
                         "sellerName": {
                           "type": "string",
                           "example": "John Doe"
+                        },
+                        "sellerAvatarUrl": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "sellerReviewCount": {
+                          "type": "integer"
+                        },
+                        "sellerRatingSum": {
+                          "type": "integer"
                         },
                         "categoryName": {
                           "type": "string",
@@ -1846,7 +1658,7 @@
             }
           },
           "409": {
-            "description": "The listing is reserved by a pending order",
+            "description": "A live order (pending, confirmed or shipped) is still holding this listing",
             "content": {
               "application/json": {
                 "schema": {
@@ -2482,6 +2294,129 @@
         }
       }
     },
+    "/api/orders/{id}/review": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Review the seller on a completed order",
+        "description": "Reviews are posted against the order because the order is the thing being\nreviewed — it is the proof that the transaction happened, and it is what makes\none review per transaction enforceable.\n\nEligibility is the whole of the rule: the caller is this order's buyer and the\norder is `completed`. A caller who is not party to the order gets **404** rather\nthan 403, because order ids are sequential.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Order ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rating"
+                ],
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "example": 5
+                  },
+                  "comment": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "Packed well, shipped the same day."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Review created; the seller's aggregates moved with it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid order id or body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A party to the order who is not its buyer, or the order is not completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This order has already been reviewed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders/{id}": {
       "get": {
         "tags": [
@@ -2526,6 +2461,11 @@
                           "type": "integer",
                           "nullable": true,
                           "example": 42
+                        },
+                        "reviewId": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "The review of this order, if the buyer has left one"
                         }
                       }
                     }
@@ -2901,7 +2841,7 @@
             }
           },
           "409": {
-            "description": "Another buyer reserved it first",
+            "description": "Another buyer reserved it first, or an order already in progress is still\nholding this listing (an admin relisted it without settling that order).\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3102,12 +3042,121 @@
       }
     },
     "/api/reviews/{id}": {
+      "patch": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Edit a review",
+        "description": "Changes the rating, the comment, or both. Only the author or an admin may edit —\ndeliberately **not** the seller being reviewed, which is the one edit that would\nmake the ratings worthless.\n\nA changed rating moves the seller's `ratingSum` in the same transaction and leaves\n`reviewCount` alone: it is still one review.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Review ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "example": 4
+                  },
+                  "comment": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "Revised after a second look."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid review id, or no updatable fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the author or an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Review not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "Reviews"
         ],
         "summary": "Delete a review",
-        "description": "Permanently removes a review. Only the reviewer or an admin can delete.",
+        "description": "Permanently removes a review. Only the reviewer or an admin can delete. The\nseller's `reviewCount` and `ratingSum` are adjusted in the same transaction.\n",
         "security": [
           {
             "bearerAuth": []
@@ -3173,6 +3222,143 @@
           },
           "404": {
             "description": "Review not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}/reviews": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "A seller's reviews, newest first",
+        "description": "Public and paginated. The `seller` envelope carries the denormalised reputation\n(D7) and a derived `averageRating` — `null` for a seller nobody has reviewed,\nbecause a 0 would read as five one-star reviews.\n\nDeliberately narrow: the display name, the avatar and the two counters, and\nnothing else off the user record. `GET /api/users/{id}` remains restricted to the\nuser themselves and admins.\n\n`total` is read from `reviewCount` rather than counted, which is what the\ndenormalisation is for.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The seller's user ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The seller's summary and a page of their reviews",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "seller": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "avatarUrl": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reviewCount": {
+                          "type": "integer"
+                        },
+                        "ratingSum": {
+                          "type": "integer"
+                        },
+                        "averageRating": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Review"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "reviewerName": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid user id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
             "content": {
               "application/json": {
                 "schema": {

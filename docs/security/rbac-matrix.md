@@ -74,8 +74,6 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
 | `/api/listings/{id}/images/{imageId}` | DELETE | required | ✗ | owner | ✓ | `canMutateListing`; row deleted, then the object, best-effort |
 | `/api/images/{id}` | GET | optional | ✓ | ✓ | ✓ | Public for a published listing (`active`/`reserved`/`sold`); owner or admin otherwise → **404**, not 403 (see below) |
-| `/api/listings/{id}/reviews` | GET | — | ✓ | ✓ | ✓ | — |
-| `/api/listings/{id}/reviews` | POST | required | ✓ | ✓ | ✓ | Must be the buyer on a `completed` order for this listing |
 | `/api/listings/{id}/similar` | GET | — | ✓ | ✓ | ✓ | Embeddings never leave the server |
 | `/api/listings/generate-description` | POST | required | ✗ | ✓ | ✓ | Rate limited per **user id** (SEC-11) |
 | `/api/orders` | GET | required | own | own | all | The caller's purchases, whatever their role — `buyerId = caller` |
@@ -84,9 +82,11 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/orders/{id}` | PUT | required | party | party | ✓ | `canTransition(from, to, actor)`; a non-party gets **404**, an illegal transition **400** |
 | `/api/orders/{id}` | DELETE | required | ✗ | ✗ | ✓ | Releases the listing in the same transaction |
 | `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to `orders.sellerId` |
+| `/api/orders/{id}/review` | POST | required | buyer | buyer | ✗ | Buyer of *this* order, status `completed`. A non-party gets **404**; the seller and admins get **403** — reading an order is not a licence to write its buyer's opinion. One review per order, enforced by `reviews_one_per_order_idx` → **409** |
 | `/api/recommendations` | GET | required | ✓ | ✓ | ✓ | Built from the caller's own history |
-| `/api/reviews/{id}` | DELETE | required | author | author | ✓ | `canDeleteReview`; **not** the reviewed listing's seller |
+| `/api/reviews/{id}` | PATCH · DELETE | required | author | author | ✓ | `canMutateReview`; **not** the seller being reviewed. Both verbs adjust the seller's aggregates in the same transaction |
 | `/api/users` | GET | required | ✗ | ✗ | ✓ | — |
+| `/api/users/{id}/reviews` | GET | — | ✓ | ✓ | ✓ | Public. Name, avatar and the two rating integers only — `GET /api/users/{id}` stays `isSelfOrAdmin` |
 | `/api/users/{id}` | GET | required | self | self | ✓ | `isSelfOrAdmin` |
 | `/api/users/{id}` | PUT | required | self | self | ✓ | `isSelfOrAdmin`; `role` is admin-only even on your own record |
 | `/api/users/{id}` | DELETE | required | ✗ | ✗ | ✓ | — |
@@ -104,8 +104,14 @@ Legend: **—** public · **✓** permitted · **✗** refused
 
 ## Known gaps
 
-- **`DELETE /api/users/{id}`** cascades to listings, orders and reviews. That is the
-  intended behaviour but it is destructive and has no soft-delete; deferred.
+- **`DELETE /api/users/{id}`** cascades to listings, orders and reviews — and since Part 4,
+  to reviews on both sides: the ones they wrote and the ones written about them. Deleting a
+  seller erases their reputation along with them. Intended, destructive, no soft delete,
+  deferred.
+- **`GET /api/users/{id}/reviews` publishes a seller's display name and avatar to anyone.**
+  That is what a marketplace profile is for (spec §6.4), and it is the reason the endpoint
+  projects five columns by name rather than selecting the row. A `select *` there would
+  publish the email address beside them; the route's own test asserts it does not.
 - **`DELETE /api/users/{id}`** now also cascades to orders on both sides — a deleted
   seller takes their buyers' purchase records with them. Same disposition as the listing
   cascade above: intended, destructive, no soft delete, deferred.

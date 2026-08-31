@@ -13,7 +13,8 @@ Companion document: [`rbac-matrix.md`](./rbac-matrix.md).
 | Session credentials (access token, refresh token) | Possession *is* authentication |
 | Password hashes | bcrypt at 12 rounds; a leak is offline-crackable at leisure |
 | External identities (`oauth_accounts`) | The join between a provider account and a local one |
-| Order and review data | Buyers' purchase history is personal |
+| Order data | Buyers' purchase history is personal |
+| Review data | Public by design; the link to the order that proves it is not |
 | Listing inventory, including `sold`/`removed` | A seller's unpublished state is commercially sensitive |
 | Groq API quota | Real money, spent per request |
 
@@ -178,10 +179,16 @@ Status codes, messages, or response timing reveal what exists or who has an acco
   what a real check costs. Returning early would make those accounts answer visibly
   faster and reveal which addresses authenticate elsewhere.
 - Refresh and OAuth failures give one message for every cause.
+- `GET /api/users/{id}/reviews` is public by design and projects five columns off the
+  users row by name — id, name, avatar, and the two rating integers. The email address,
+  phone number and password hash are never in the projection, which is what makes a later
+  `select *` a test failure rather than a leak.
 
 **Proof.** `rbac.integration.test.ts` AC3 and "checks ownership before order state, so a
 stranger cannot read the status"; `oauth-only.integration.test.ts` "takes comparable time
-to a real password check, so timing reveals nothing".
+to a real password check, so timing reveals nothing";
+`src/app/api/users/[id]/reviews/route.integration.test.ts` "never leaks anything else off
+the users row".
 
 ### T10 — Malicious file upload
 
