@@ -37,6 +37,8 @@ class CycleError extends Error {}
 class DepthExceededError extends Error {}
 /** The prospective parent already carries a listing directly (D12). */
 class CategoryHasListingsError extends Error {}
+/** The node itself was deleted between the pre-lock read and the lock. */
+class CategoryGoneMidMove extends Error {}
 
 // ─── PUT /api/categories/[id] ─────────────────────────────────────────────────
 // Admin only.
@@ -174,16 +176,28 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         // them, and a cycle is not something the schema can refuse on their behalf.
         //
         // Ordered by id so two concurrent moves of the same pair take the locks in the
-        // same sequence and one waits rather than both deadlocking.
-        const lockIds = [id, parentId]
-          .filter((value): value is number => value !== null)
-          .sort((a, b) => a - b);
+        // same sequence and one waits rather than both deadlocking. De-duplicated so a
+        // self-move (parentId === id, rejected below) does not lock the same row twice.
+        const rawLockIds = [id, parentId].filter((value): value is number => value !== null);
+        const lockIds = [...new Set(rawLockIds)].sort((a, b) => a - b);
 
         await tx
           .select({ id: categories.id })
           .from(categories)
           .where(inArray(categories.id, lockIds))
           .for("update");
+
+        // Re-read the node itself now that its row is locked. The pre-lock read above
+        // (`category`) is fine for the existence/404 gate, but two concurrent moves of
+        // the *same* node both pass that gate before either lock is granted -- by the
+        // time this one is, a concurrent move may already have committed a new path and
+        // depth for it. Using the stale pre-lock values below would compute `oldPrefix`
+        // and `depthDelta` from a prefix no row carries any more: `rewriteSubtreePaths`
+        // would then LIKE-match nothing, silently rewrite zero descendant rows, and leave
+        // them holding paths that disagree with the tree -- the exact failure a
+        // materialised-path design cannot detect on its own.
+        const locked = await findCategoryById(id, tx);
+        if (!locked) throw new CategoryGoneMidMove();
 
         let newParentPath: string | null = null;
 
@@ -195,13 +209,13 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
           const parent = await findCategoryById(parentId, tx);
           if (!parent) throw new ParentNotFoundError();
 
-          if (wouldCreateCycle(category.path, parent.path)) {
+          if (wouldCreateCycle(locked.path, parent.path)) {
             throw new CycleError();
           }
 
           // The subtree travels with the node, so the cap applies to its deepest leaf,
           // not just to the node being moved.
-          const height = await subtreeHeight(category.path, tx);
+          const height = await subtreeHeight(locked.path, tx);
           if (parent.depth + 1 + height > MAX_CATEGORY_DEPTH - 1) {
             throw new DepthExceededError();
           }
@@ -224,9 +238,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
         updates.depth = newDepth;
 
         subtreeMove = {
-          oldPrefix: category.path,
+          oldPrefix: locked.path,
           newPrefix: newPath,
-          depthDelta: newDepth - category.depth,
+          depthDelta: newDepth - locked.depth,
         };
       }
 
@@ -268,6 +282,7 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     if (err instanceof CategoryHasListingsError) {
       return jsonError("Move this category's listings before giving it subcategories", 409);
     }
+    if (err instanceof CategoryGoneMidMove) return jsonError("Category not found", 404);
     console.error("[PUT /api/categories/[id]]", err);
     return jsonError("Internal server error");
   }

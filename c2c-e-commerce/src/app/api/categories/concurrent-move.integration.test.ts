@@ -128,3 +128,68 @@ describe("concurrent category moves", () => {
     expect(rowA?.parentId).toBe(b.id);
   });
 });
+
+describe("concurrent moves of the same node", () => {
+  it("rewrites descendants against the node's fresh path, not a stale pre-lock read", async () => {
+    // X's own row would come out right either way -- its new parentId/path/depth derive
+    // entirely from the *parent's* fresh row, which was already read through `tx`. The
+    // bug this pins is downstream, in the subtree rewrite: `oldPrefix` and `depthDelta`
+    // used to come from `category.path`/`category.depth`, read once before the lock. Two
+    // concurrent moves of the *same* node both pass that pre-lock read before either lock
+    // is granted, so the second one's `oldPrefix` names a prefix no row carries any more
+    // once the first commits -- `rewriteSubtreePaths` LIKE-matches nothing, rewrites zero
+    // descendant rows, and X's child is left pointing at a path that disagrees with the
+    // tree. That is why the assertions below look at the *descendant*, not at X.
+    const admin = await makeUser({ role: "admin" });
+    const adminToken = signToken({ sub: admin.id, email: admin.email, role: admin.role });
+    const p1 = await makeCategory({ slug: "target-1" });
+    const p2 = await makeCategory({ slug: "target-2" });
+    const x = await makeCategory({ slug: "moved-node" });
+    const c = await makeCategory({ slug: "moved-child", parentId: x.id });
+
+    const pool = await testPool();
+    const client = await pool.connect();
+
+    try {
+      // Connection A plays a first move of X, already complete: parentId/path/depth for
+      // X itself, and the subtree rewrite for C, exactly what a real first PUT commits.
+      // It locks X's row under FOR UPDATE (the row the second move also has to lock) and
+      // stays open, uncommitted, so the second move below is provably still queued behind
+      // it rather than racing it.
+      const lockIds = [x.id, p1.id].sort((v, w) => v - w);
+      await client.query("BEGIN");
+      await client.query('SELECT id FROM categories WHERE id = ANY($1) FOR UPDATE', [lockIds]);
+      await client.query(
+        'UPDATE categories SET parent_id = $1, path = $2, depth = 1 WHERE id = $3',
+        [p1.id, `${p1.id}.${x.id}`, x.id],
+      );
+      await client.query('UPDATE categories SET path = $1, depth = 2 WHERE id = $2', [
+        `${p1.id}.${x.id}.${c.id}`,
+        c.id,
+      ]);
+
+      // Deliberately not awaited yet: the second move's own lock on X's row has to reach
+      // the server and queue behind connection A's, which is the interleaving under test.
+      const movePromise = move(x.id, p2.id, adminToken);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      await client.query("COMMIT");
+      const response = await movePromise;
+
+      expect(response.status).toBe(200);
+
+      const rowX = await findCategoryById(x.id);
+      const rowC = await findCategoryById(c.id);
+
+      expect(rowX?.parentId).toBe(p2.id);
+      // The assertion that matters: C's path must be consistent with where X actually
+      // ended up, not with the root path X had before either move started.
+      expect(rowC?.path).toBe(`${rowX?.path}.${c.id}`);
+      expect(rowC?.parentId).toBe(x.id);
+      expect(rowC?.depth).toBe((rowX?.depth ?? 0) + 1);
+    } finally {
+      client.release();
+      await pool.end();
+    }
+  });
+});
