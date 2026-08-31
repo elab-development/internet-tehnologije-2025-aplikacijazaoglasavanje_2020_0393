@@ -1089,6 +1089,16 @@ describe("registration email casing", () => {
     expect(rows[0].email).toBe("seller@example.test");
   });
 
+  it("lets a user log in with the casing they originally typed", async () => {
+    // The lockout this normalisation would otherwise cause: the column is lowercase, so a
+    // lookup with the caller's original casing misses their own row and answers
+    // "Invalid email or password" to a correct password.
+    await register("Nikola@Example.TEST");
+
+    const response = await login("Nikola@Example.TEST", "correct-horse-battery");
+    expect(response.status).toBe(200);
+  });
+
   it("refuses a second account differing only by case", async () => {
     expect((await register("seller@example.test")).status).toBe(201);
 
@@ -1188,6 +1198,24 @@ In `validation.ts:82`, normalise on the way in:
     .trim()
     .toLowerCase()
     .email("email must be a valid email address"),
+```
+
+**And `LoginBodySchema.email` (`validation.ts:94`) must be normalised the same way.**
+It is currently `z.string().min(1, "email is required")`, and `login/route.ts:102` looks
+up `eq(users.email, email)` with whatever the caller typed. Lowercasing what is *stored*
+without lowercasing what is *looked up* locks people out of their own accounts: someone
+who registered as `Nikola@Example.com` is now stored as `nikola@example.com`, types their
+address the way they always have, and is told "Invalid email or password" with a correct
+password.
+
+```ts
+export const LoginBodySchema = z.object({
+  // Normalised for the same reason the register schema is, and it has to happen here
+  // too: the stored column is lowercase, so a lookup with the caller's original casing
+  // would miss their own row.
+  email: z.string().trim().toLowerCase().min(1, "email is required"),
+  password: z.string().min(1, "password is required"),
+});
 ```
 
 In `register/route.ts`, keep the friendly pre-check but make the index the decider. Replace the insert (`:128-130`) with:
