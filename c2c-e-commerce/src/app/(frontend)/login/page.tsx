@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
@@ -19,7 +19,7 @@ export const _metadata: Pick<Metadata, "title"> = { title: "Login" };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -147,5 +147,35 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Suspense boundary for useSearchParams (Next 16 requires one in every page that reads
+// them). The fallback is a skeleton of the same card shell so there is no layout jump
+// between this and the real form.
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
+          <div className="w-full max-w-md animate-pulse">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+              <div className="mb-8 flex flex-col items-center gap-2 text-center">
+                <span className="h-12 w-12 rounded-xl bg-zinc-100" />
+                <span className="h-6 w-40 rounded bg-zinc-100" />
+                <span className="h-4 w-56 rounded bg-zinc-100" />
+              </div>
+              <div className="flex flex-col gap-4">
+                <span className="h-10 w-full rounded-lg bg-zinc-100" />
+                <span className="h-10 w-full rounded-lg bg-zinc-100" />
+                <span className="mt-2 h-10 w-full rounded-lg bg-zinc-100" />
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

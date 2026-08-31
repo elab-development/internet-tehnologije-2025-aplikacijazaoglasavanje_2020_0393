@@ -2,7 +2,7 @@
 
 import { RiLinksLine } from "@remixicon/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { Suspense, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
 import Button from "@/components/ui/Button";
@@ -27,7 +27,7 @@ const PROVIDER_LABELS: Record<string, string> = {
  * This page holds no token. The challenge is in an httpOnly cookie the server set and
  * this code cannot read; all the page does is collect the password.
  */
-export default function LinkAccountPage() {
+function LinkAccountPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -113,5 +113,34 @@ export default function LinkAccountPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// Suspense boundary for useSearchParams (Next 16 requires one in every page that reads
+// them). The fallback is a skeleton of the same card shell so there is no layout jump
+// between this and the real form.
+export default function LinkAccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
+          <div className="w-full max-w-md animate-pulse">
+            <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+              <div className="mb-6 flex flex-col items-center gap-2 text-center">
+                <span className="h-12 w-12 rounded-xl bg-zinc-100" />
+                <span className="h-6 w-48 rounded bg-zinc-100" />
+                <span className="h-4 w-64 rounded bg-zinc-100" />
+              </div>
+              <div className="flex flex-col gap-4">
+                <span className="h-10 w-full rounded-lg bg-zinc-100" />
+                <span className="mt-2 h-10 w-full rounded-lg bg-zinc-100" />
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <LinkAccountPageContent />
+    </Suspense>
   );
 }
