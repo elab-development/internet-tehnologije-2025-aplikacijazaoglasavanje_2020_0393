@@ -5,7 +5,7 @@ import toast from "react-hot-toast";
 
 import { Button, ErrorAlert, InputField, Modal } from "@/components/ui";
 import { api } from "@/lib/api";
-import type { SellerReview } from "@/types/api";
+import type { CreatedReview } from "@/types/api";
 
 export type ReviewFormProps = {
   /** The order being reviewed — the endpoint is keyed on it. */
@@ -40,7 +40,7 @@ export default function ReviewForm({ orderId, onSubmitted }: ReviewFormProps) {
     setSubmitting(true);
 
     try {
-      await api.post<SellerReview>(`/api/orders/${orderId}/review`, { rating, comment });
+      await api.post<CreatedReview>(`/api/orders/${orderId}/review`, { rating, comment });
 
       onSubmitted();
       setIsOpen(false);

@@ -124,8 +124,11 @@ export type SellerOrder = Order & {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-/** One review, as `GET /api/users/[id]/reviews` returns it. */
+/** The list shape: one review, as `GET /api/users/[id]/reviews` returns it, joined name and all. */
 export type SellerReview = Serialized<ReviewRow> & { reviewerName: string | null };
+
+/** `POST /api/orders/[id]/review` — the inserted row, with no joined reviewer name. */
+export type CreatedReview = Serialized<ReviewRow>;
 
 /** The subject of a review list — a public identity plus a reputation, and no more. */
 export type SellerSummary = {
