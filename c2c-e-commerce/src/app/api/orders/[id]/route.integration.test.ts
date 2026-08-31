@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { listings, orders } from "@/db/schema";
+import { listings, orders, users } from "@/db/schema";
 import type { OrderStatus } from "@/lib/order-lifecycle";
 import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
@@ -65,6 +65,24 @@ async function orderStatus(id: number): Promise<OrderStatus> {
   const db = await getTestDb();
   const [row] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, id));
   return row.status;
+}
+
+async function del(orderId: number, headers: Record<string, string>) {
+  const { DELETE } = await import("./route");
+  const response = await DELETE(
+    new NextRequest(`http://localhost/api/orders/${orderId}`, { method: "DELETE", headers }),
+    { params: Promise.resolve({ id: String(orderId) }) },
+  );
+  return { status: response.status, body: await response.json() };
+}
+
+async function sellerAggregates(id: number): Promise<{ reviewCount: number; ratingSum: number }> {
+  const db = await getTestDb();
+  const [row] = await db
+    .select({ reviewCount: users.reviewCount, ratingSum: users.ratingSum })
+    .from(users)
+    .where(eq(users.id, id));
+  return row;
 }
 
 describe("PUT /api/orders/[id] — who may drive what", () => {
@@ -307,6 +325,39 @@ describe("PUT /api/orders/[id] — hiding existence", () => {
     const { status } = await transition(order.id, authHeaderFor(stranger), "confirmed");
 
     expect(status).toBe(404);
+  });
+});
+
+describe("DELETE /api/orders/[id] — the review it might be carrying", () => {
+  it("returns the seller's aggregates to zero when the deleted order was reviewed", async () => {
+    // `reviews.order_id` cascades on order delete (migration 0017). Left unhandled, the
+    // database removes the review row for free while `review_count`/`rating_sum` stay
+    // exactly where they were -- a drift `GET /api/users/{id}/reviews` cannot detect,
+    // let alone repair, because it trusts those two integers completely.
+    const admin = await makeUser({ role: "admin" });
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const order = await makeOrder({ buyerId: buyer.id, sellerId: seller.id, status: "completed" });
+    await makeReview({ orderId: order.id, reviewerId: buyer.id, rating: 4 });
+
+    expect(await sellerAggregates(seller.id)).toEqual({ reviewCount: 1, ratingSum: 4 });
+
+    const { status } = await del(order.id, authHeaderFor(admin));
+
+    expect(status).toBe(200);
+    expect(await sellerAggregates(seller.id)).toEqual({ reviewCount: 0, ratingSum: 0 });
+  });
+
+  it("leaves the aggregates alone when the deleted order was never reviewed", async () => {
+    const admin = await makeUser({ role: "admin" });
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const order = await makeOrder({ buyerId: buyer.id, sellerId: seller.id, status: "completed" });
+
+    const { status } = await del(order.id, authHeaderFor(admin));
+
+    expect(status).toBe(200);
+    expect(await sellerAggregates(seller.id)).toEqual({ reviewCount: 0, ratingSum: 0 });
   });
 });
 

@@ -8,11 +8,13 @@ import {
   releaseUnheldListings,
   transitionOrder,
 } from "@/db/orders";
+import { applyRatingDelta } from "@/db/reviews";
 import { listings, orders, reviews } from "@/db/schema";
 import { HIDE_EXISTENCE_MESSAGE, canViewOrder, orderActorFor } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { canTransition, listingStatusAfter } from "@/lib/order-lifecycle";
 import { parseResourceId } from "@/lib/params";
+import { deleteDelta } from "@/lib/reviews";
 import { jsonOk, jsonError } from "@/lib/response";
 import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
@@ -368,6 +370,22 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     if (!order) return jsonError("Order not found", 404);
 
     await db.transaction(async (tx) => {
+      // `reviews.order_id` is `ON DELETE CASCADE` (migration 0017), so the database would
+      // remove a review of this order on its own — but silently, and without touching the
+      // seller's `review_count`/`rating_sum`. Those two integers are denormalised (D7) and
+      // have no source of truth but this kind of write, so the review is removed
+      // explicitly, first, so its delta can be applied before the cascade would otherwise
+      // do the deletion for free and unaccounted-for. This mirrors
+      // `DELETE /api/reviews/[id]`, which is the route that owns this shape normally.
+      const [removed] = await tx
+        .delete(reviews)
+        .where(eq(reviews.orderId, id))
+        .returning({ rating: reviews.rating, sellerId: reviews.sellerId });
+
+      if (removed) {
+        await applyRatingDelta(tx, removed.sellerId, deleteDelta(removed.rating));
+      }
+
       await tx.delete(orders).where(eq(orders.id, id));
       // A deleted pending order was the only thing holding its listing; without this the
       // listing stays `reserved` until the next sweep, unbuyable and for no reason.
