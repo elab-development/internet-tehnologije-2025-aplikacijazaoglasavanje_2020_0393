@@ -18,6 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { RESERVATION_HOURS, type OrderStatus } from "@/lib/order-lifecycle";
 
 import { type Database } from "./index";
+import { isUniqueViolation } from "./pg-errors";
 import { orders, type Order } from "./schema";
 
 /**
@@ -219,23 +220,7 @@ export const ONE_LIVE_ORDER_INDEX = "orders_one_live_per_listing_idx";
  * listing routes' guards. Reaching it means something upstream let a listing be relisted
  * while an order still held it — a real conflict, and a 409, not the 500 an unmapped
  * constraint violation would otherwise become.
- *
- * Drizzle wraps the driver's error in a `DrizzleQueryError` rather than throwing it
- * directly, so `code` and `constraint` live on `.cause`, not on the error this function is
- * handed. Checking the error itself first keeps this correct if that ever stops being
- * true; falling back to one level of `.cause` is what makes it correct today.
  */
 export function isOneLiveOrderViolation(err: unknown): boolean {
-  return isOneLiveOrderPgError(err) || isOneLiveOrderPgError(getCause(err));
-}
-
-function isOneLiveOrderPgError(err: unknown): boolean {
-  if (typeof err !== "object" || err === null) return false;
-  const e = err as { code?: unknown; constraint?: unknown };
-  return e.code === "23505" && e.constraint === ONE_LIVE_ORDER_INDEX;
-}
-
-function getCause(err: unknown): unknown {
-  if (typeof err !== "object" || err === null) return undefined;
-  return (err as { cause?: unknown }).cause;
+  return isUniqueViolation(err, ONE_LIVE_ORDER_INDEX);
 }
