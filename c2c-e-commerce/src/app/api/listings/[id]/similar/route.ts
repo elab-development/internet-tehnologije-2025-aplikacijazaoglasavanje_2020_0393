@@ -4,6 +4,9 @@ import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { coverImageIdsFor } from "@/db/listing-images";
 import { listings } from "@/db/schema";
+import { canMutateListing } from "@/lib/authorization";
+import { isPubliclyVisible } from "@/lib/listing-visibility";
+import { authenticate, AuthError } from "@/lib/middleware";
 import { parseBoundedInt, parseResourceId } from "@/lib/params";
 import { jsonError, jsonOk } from "@/lib/response";
 
@@ -18,12 +21,15 @@ const MAX_LIMIT = 20;
  *     tags: [Listings]
  *     summary: Listings similar to this one
  *     description: >
- *       Nearest neighbours of a listing by embedding cosine distance. Public — this needs
- *       no user history at all, so it works on a visitor's first page view.
+ *       Nearest neighbours of a listing by embedding cosine distance. Public for a
+ *       published source listing — this needs no user history at all, so it works on a
+ *       visitor's first page view. A `draft` or `removed` source is visible only to its
+ *       owner or an admin, same rule as `GET /api/images/{id}`: neighbours would otherwise
+ *       disclose what an unpublished listing is about.
  *
- *       Only `active` listings with a computed embedding are returned, and the source
- *       listing is never among them. A listing whose own embedding has not been computed
- *       yet answers `200` with an empty array rather than an error.
+ *       Only `active` listings with a computed embedding are returned as neighbours, and
+ *       the source listing is never among them. A source listing whose own embedding has
+ *       not been computed yet answers `200` with an empty array rather than an error.
  *     parameters:
  *       - in: path
  *         name: id
@@ -92,6 +98,8 @@ export async function GET(
     const [source] = await db
       .select({
         id: listings.id,
+        sellerId: listings.sellerId,
+        status: listings.status,
         categoryId: listings.categoryId,
         embedding: listings.embedding,
       })
@@ -100,6 +108,28 @@ export async function GET(
       .limit(1);
 
     if (!source) return jsonError("Listing not found", 404);
+
+    // Optional auth, exactly as GET /api/images/[id]: an anonymous caller is not an error
+    // here, just someone who cannot be the owner or an admin.
+    let isOwnerOrAdmin = false;
+    try {
+      const payload = authenticate(request);
+      isOwnerOrAdmin = canMutateListing(payload, { sellerId: source.sellerId });
+    } catch (err) {
+      // Only a failed authentication means "anonymous visitor". A missing JWT_SECRET or
+      // any other fault is a server problem, and swallowing it here served every caller a
+      // logged-out view of a broken deployment.
+      if (!(err instanceof AuthError)) throw err;
+    }
+
+    // A draft's neighbours describe the draft. Answering 200 here, ahead of the
+    // no-embedding check below, would confirm the listing existed and disclose what it
+    // was about through the things nearest it in vector space -- for a listing its owner
+    // had not published. Same rule and same 404 as GET /api/images/{id}, so the two
+    // cannot drift apart.
+    if (!isPubliclyVisible(source.status) && !isOwnerOrAdmin) {
+      return jsonError("Listing not found", 404);
+    }
 
     // Before any vector query: asking pgvector to order by distance from NULL fails
     // differently in every driver, and AC4 wants a plain empty array. A listing without a

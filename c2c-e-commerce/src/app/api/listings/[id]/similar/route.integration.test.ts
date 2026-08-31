@@ -11,6 +11,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import { EMBEDDING_DIMENSIONS } from "@/lib/ai/embeddings";
 import { listings } from "@/db/schema";
+import { authHeaderFor } from "@/test/auth";
 import { getTestDb, resetDb } from "@/test/db";
 import { makeCategory, makeListing, makeUser } from "@/test/factories";
 import {
@@ -23,10 +24,11 @@ type Row = { id: number; title: string; status: string; similarity: number; cate
 async function similar(
   id: number | string,
   query = "",
+  headers?: Record<string, string>,
 ): Promise<{ status: number; body: Row[] | { error?: string } }> {
   const { GET } = await import("./route");
   const response = await GET(
-    new NextRequest(`http://localhost/api/listings/${id}/similar?${query}`),
+    new NextRequest(`http://localhost/api/listings/${id}/similar?${query}`, { headers }),
     { params: Promise.resolve({ id: String(id) }) },
   );
   return { status: response.status, body: await response.json() };
@@ -292,5 +294,58 @@ describe("C2C-AI-9 — a category with a single member", () => {
     const { status, body } = await similar(only.id, "sameCategoryOnly=true");
     expect(status).toBe(200);
     expect(body).toEqual([]);
+  });
+});
+
+describe("draft visibility", () => {
+  // A 200 with neighbours confirms the listing exists and describes what it is about
+  // through the things nearest it in vector space -- for a listing its owner has not
+  // published.
+  it("answers 404 for a stranger asking about a draft", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "draft" });
+
+    const { status } = await similar(listing.id);
+
+    expect(status).toBe(404);
+  });
+
+  it("answers 404 for a signed-in stranger too", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "draft" });
+    const stranger = await makeUser({ role: "buyer" });
+
+    const { status } = await similar(listing.id, "", authHeaderFor(stranger));
+
+    expect(status).toBe(404);
+  });
+
+  it("serves the owner their own draft's neighbours", async () => {
+    // The positive control: a handler that 404s on every draft would pass both
+    // assertions above while breaking the feature for the person it belongs to.
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "draft" });
+
+    const { status } = await similar(listing.id, "", authHeaderFor(seller));
+
+    expect(status).toBe(200);
+  });
+
+  it("serves an admin the same", async () => {
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id, status: "draft" });
+    const admin = await makeUser({ role: "admin" });
+
+    const { status } = await similar(listing.id, "", authHeaderFor(admin));
+
+    expect(status).toBe(200);
+  });
+
+  it("still serves a published listing to anyone", async () => {
+    const listing = await makeListing({ status: "active" });
+
+    const { status } = await similar(listing.id);
+
+    expect(status).toBe(200);
   });
 });
