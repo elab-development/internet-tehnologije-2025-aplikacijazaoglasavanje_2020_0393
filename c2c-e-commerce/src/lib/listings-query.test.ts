@@ -212,9 +212,20 @@ describe("ordering is total", () => {
   // JSON"). `dialect.sqlToQuery` renders each term to its `{ sql, params }` shape first --
   // the same move the search-escaping tests above make for `where` -- which is plain data
   // and safe to stringify.
-  it.each(["newest", "oldest", "price_asc", "price_desc"])(
-    "breaks ties by id under sort=%s",
-    (sort) => {
+  //
+  // Direction matters, not just presence: a tiebreaker in the wrong direction still
+  // produces a total order, so nothing else about pagination would fail -- it would just
+  // silently reverse which row in a tied group sorts first. `rendered[1]` is asserted
+  // against the *same* direction as `rendered[0]`, not merely "some direction", so a
+  // regression that flips only the tiebreaker (or only the primary term) is caught.
+  it.each([
+    ["newest", "desc"],
+    ["oldest", "asc"],
+    ["price_asc", "asc"],
+    ["price_desc", "desc"],
+  ] as const)(
+    "breaks ties by id under sort=%s, in the same direction as the primary term",
+    (sort, direction) => {
       const built = buildListingQuery(new URLSearchParams({ sort }), null);
       expect(built.ok).toBe(true);
       if (!built.ok) return;
@@ -222,7 +233,10 @@ describe("ordering is total", () => {
       // Two order terms, the second of which is the primary key.
       expect(built.query.orderBy).toHaveLength(2);
       const rendered = built.query.orderBy.map((term) => dialect.sqlToQuery(term).sql);
+
+      expect(rendered[0]).toMatch(new RegExp(`\\s${direction}$`));
       expect(rendered[1]).toMatch(/"id"/);
+      expect(rendered[1]).toMatch(new RegExp(`\\s${direction}$`));
     },
   );
 });

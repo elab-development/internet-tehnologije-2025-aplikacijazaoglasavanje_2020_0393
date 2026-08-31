@@ -49,7 +49,12 @@ function SellerDashboardContent() {
 
   // Fetched here rather than inside the orders tab so the pending count stays
   // on the tab strip while the listings tab is on screen.
-  const ordersFetch = useFetch<SellerOrdersResponse>("/api/orders/seller");
+  //
+  // `limit=100` is the API's own maximum: this dashboard has no pager (that is a separate
+  // frontend pass), so asking for as many rows as the server will give in one request is
+  // what keeps incoming orders from silently truncating at the default limit for a seller
+  // with a real sales history.
+  const ordersFetch = useFetch<SellerOrdersResponse>("/api/orders/seller?limit=100");
   const pendingCount = (ordersFetch.data?.data ?? []).filter(
     (order) => order.status === "pending",
   ).length;

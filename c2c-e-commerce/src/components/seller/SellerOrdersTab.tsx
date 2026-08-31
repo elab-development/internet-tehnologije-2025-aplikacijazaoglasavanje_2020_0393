@@ -30,6 +30,7 @@ export default function SellerOrdersTab({
 }: SellerOrdersTabProps) {
   const { data, setData, loading, error } = ordersFetch;
   const orders = data?.data ?? [];
+  const truncated = data !== null && data.total > orders.length;
 
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
 
@@ -79,6 +80,12 @@ export default function SellerOrdersTab({
         />
       ) : (
         <>
+          {truncated && (
+            <p className="text-sm text-zinc-500">
+              Showing the {orders.length} most recent of {data?.total}.
+            </p>
+          )}
+
           {pendingOrders.length > 0 && (
             <section className="space-y-3">
               <h2 className="text-lg font-semibold text-zinc-900">

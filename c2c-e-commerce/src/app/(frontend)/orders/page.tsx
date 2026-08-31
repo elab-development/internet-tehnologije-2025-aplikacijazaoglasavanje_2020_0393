@@ -18,8 +18,12 @@ import type { OrdersResponse } from "@/types/api";
 
 function OrdersPageContent() {
   const router = useRouter();
-  const { data, loading, error } = useFetch<OrdersResponse>("/api/orders");
+  // The API's own maximum: this page has no pager (that is a separate frontend pass), so
+  // asking for as many rows as the server will give in one request is what keeps "my
+  // orders" from silently truncating at the default limit for anyone with a real history.
+  const { data, loading, error } = useFetch<OrdersResponse>("/api/orders?limit=100");
   const orders = data?.data ?? [];
+  const truncated = data !== null && data.total > orders.length;
 
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;
@@ -52,6 +56,11 @@ function OrdersPageContent() {
         />
       ) : (
         <div className="grid gap-4">
+          {truncated && (
+            <p className="text-sm text-zinc-500">
+              Showing the {orders.length} most recent of {data?.total}.
+            </p>
+          )}
           {orders.map((order) => (
             <Card
               key={order.id}
