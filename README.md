@@ -85,6 +85,14 @@ Izmenite `.env` fajl i postavite vrednosti:
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth2 kredencijali za GitHub prijavu | (GitHub Developer settings) |
 | `OAUTH_REDIRECT_BASE_URL` | Javni origin aplikacije, iz koga se gradi callback URL | `http://localhost:3000` |
 | `OAUTH_PROVIDER` | `mock` pokreće ceo OAuth tok offline, bez kredencijala | (prazno) |
+| `TRUSTED_PROXY_HOPS` | Broj proxy-ja između klijenta i procesa; koristi se za čitanje `X-Forwarded-For`/`X-Real-IP`. Podrazumevano `0` — **bez poverenja ni u jedan proxy, IP-keyed rate limiti se tada u potpunosti preskaču** (vidi napomenu ispod), a ne kolabiraju u jedan zajednički bucket. Railway stavlja aplikaciju iza tačno jednog proxy-ja, pa tamo mora biti `1` | `0` (lokalno), `1` (Railway) |
+
+Ostavljanje `TRUSTED_PROXY_HOPS` nepostavljenim u produkciji nije neutralno — to je
+odluka da se limiti na `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`
+i OAuth rutama uopšte ne primenjuju, jer aplikacija bez poverenog proxy-ja ne sme
+da veruje `X-Forwarded-For` zaglavlju (napadač bi njime tvrdio bilo koju adresu).
+Deployment iza reverse proxy-ja koji "zaboravi" ovu varijablu izgleda zaštićeno —
+tabela limita ispod i dalje postoji — ali u praksi nije.
 
 Provajder kome nedostaje `CLIENT_ID` **ili** `CLIENT_SECRET` uopšte se ne
 registruje: njegovo dugme se ne prikazuje, a ruta vraća 404 umesto preusmeravanja
@@ -339,6 +347,8 @@ Aplikacija je postavljena na **Railway** platformu.
    - `DATABASE_URL` — kopirajte iz PostgreSQL servisa
    - `JWT_SECRET` — dugačak random string
    - `NODE_ENV` — `production`
+   - `TRUSTED_PROXY_HOPS` — `1` (Railway je jedan proxy hop; bez ovoga IP-keyed
+     rate limiti se tiho preskaču, vidi napomenu u sekciji Environment varijabli)
 6. (Opciono) Kopirajte **Deploy Webhook URL** u GitHub Secrets kao `RAILWAY_DEPLOY_WEBHOOK`
 
 <!-- ### Produkcioni URL
