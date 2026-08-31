@@ -74,19 +74,50 @@ export async function expireStalePendingOrders(
 }
 
 /**
- * Returns reserved or sold listings to browse once no live order holds them.
+ * The order statuses `listingStatusAfter` (`@/lib/order-lifecycle`) maps to `'active'` —
+ * `declined`, `cancelled`, `expired` — the only three transitions that release a listing
+ * rather than leave it exactly as the sale left it.
+ *
+ * A literal, not a value computed from `listingStatusAfter` at import time: this file's
+ * raw SQL is meant to be read verbatim against the spec, and importing the lifecycle
+ * module's *function* here to filter with would trade that legibility for a coupling this
+ * layer does not otherwise have. Kept in sync the other way instead —
+ * `order-lifecycle.test.ts` imports this exported constant and asserts it equals
+ * `ORDER_STATUSES.filter(s => listingStatusAfter(s) === "active")`, so the two cannot
+ * drift without a fast unit test failing.
+ */
+export const RELEASING_ORDER_STATUSES = [
+  "cancelled",
+  "declined",
+  "expired",
+] as const satisfies readonly OrderStatus[];
+
+/**
+ * Returns reserved or sold listings to browse once no order still holds them.
  *
  * Covers both statuses a listing takes on account of an order (`reserved` for a pending
- * one, `sold` for a confirmed one) and both statuses that count as "still holding it"
- * (`pending`, `confirmed`). Widening only one axis would be wrong on its own: releasing
- * `sold` listings without also checking for a live `confirmed` order would republish a
- * listing whose sale is still standing, which is a double-sell waiting to happen. This is
- * what lets `DELETE /api/orders/[id]` free a listing whose *confirmed* order was deleted,
- * not just a pending one — before this, deleting a confirmed order left its listing
- * `sold` forever, unbuyable and with no order left to explain why.
+ * one, `sold` for a confirmed one) and asks the same question either way: does any order
+ * against this listing still count as holding it? An order holds the listing unless its
+ * status is one that *releases* it (`RELEASING_ORDER_STATUSES`, above) — so `pending`,
+ * `confirmed`, `shipped` and `completed` all still hold it. `shipped` and `completed`
+ * matter here specifically: `listingStatusAfter` deliberately leaves the listing `sold`
+ * through both ("the listing has been sold since the confirmation"), so a query that
+ * tested `status IN ('pending', 'confirmed')` for "still held" — the two an in-progress
+ * sale can be found in, but not the two a *finished* one ends in — would release a
+ * listing whose sale had simply completed, back onto the market. That is the double-sell
+ * the 2026-08-30 redesign exists to make unrepresentable, reached by deleting the
+ * completed order and letting this function "clean up" a listing that was never orphaned.
  *
- * The `status IN (...)` clause is still load-bearing: without it this republishes every
- * listing whose seller withdrew it, since a `removed` listing also has no live order.
+ * Widening only the `status IN (...)` side of this and not the liveness test would carry
+ * the same failure the other way: releasing `sold` listings without also recognising a
+ * live `confirmed` order as holding one would republish a listing whose sale is still
+ * standing. This is what lets `DELETE /api/orders/[id]` free a listing whose *confirmed*
+ * order was deleted, not just a pending one — before this, deleting a confirmed order
+ * left its listing `sold` forever, unbuyable and with no order left to explain why.
+ *
+ * The `status IN ('reserved', 'sold')` clause is still load-bearing on its own: without
+ * it this republishes every listing whose seller withdrew it, since a `removed` listing
+ * also has no order holding it.
  *
  * @param listingId scope to one listing; omit to sweep globally.
  * @returns how many listings were released.
@@ -96,6 +127,10 @@ export async function releaseUnheldListings(
   listingId?: number,
 ): Promise<number> {
   const scope = listingId === undefined ? sql`` : sql` AND "id" = ${listingId}`;
+  const releasing = sql.join(
+    RELEASING_ORDER_STATUSES.map((status) => sql`${status}`),
+    sql`, `,
+  );
 
   const result = await x.execute(sql`
     UPDATE "listings" SET "status" = 'active'
@@ -103,7 +138,7 @@ export async function releaseUnheldListings(
        AND NOT EXISTS (
          SELECT 1 FROM "orders"
           WHERE "orders"."listing_id" = "listings"."id"
-            AND "orders"."status" IN ('pending', 'confirmed')
+            AND "orders"."status" NOT IN (${releasing})
        )
      RETURNING "id"
   `);

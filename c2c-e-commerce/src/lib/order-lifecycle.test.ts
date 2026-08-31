@@ -7,6 +7,8 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { RELEASING_ORDER_STATUSES } from "@/db/orders";
+
 import {
   ORDER_STATUSES,
   RESERVATION_HOURS,
@@ -150,5 +152,22 @@ describe("listingStatusAfter", () => {
 describe("RESERVATION_HOURS", () => {
   it("is 48, per D3", () => {
     expect(RESERVATION_HOURS).toBe(48);
+  });
+});
+
+describe("RELEASING_ORDER_STATUSES (src/db/orders.ts) against listingStatusAfter", () => {
+  it("is exactly the statuses this module maps to 'active'", () => {
+    // `releaseUnheldListings` keeps its own literal, deliberately, so its raw SQL reads
+    // verbatim rather than through an import of this module's function. This is the test
+    // that keeps that literal honest: if a status ever starts or stops mapping to
+    // `'active'` here without `RELEASING_ORDER_STATUSES` being updated to match, a
+    // completed sale could go back on the market, or a lapsed reservation could be stuck
+    // forever unreleasable — the exact double-sell and stranding this pair of functions
+    // exists to make unrepresentable.
+    const mapsToActive = ORDER_STATUSES.filter(
+      (status) => listingStatusAfter(status) === "active",
+    );
+
+    expect(new Set(RELEASING_ORDER_STATUSES)).toEqual(new Set(mapsToActive));
   });
 });

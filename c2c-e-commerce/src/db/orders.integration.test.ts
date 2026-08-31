@@ -358,4 +358,30 @@ describe("releaseUnheldListings and sold listings", () => {
 
     expect(await statusOf(listing.id)).toBe("sold");
   });
+
+  it("leaves a sold listing alone once its order has shipped", async () => {
+    // `listingStatusAfter("shipped")` is `null`: the listing has been `sold` since
+    // confirmation and shipping says nothing new. A liveness test of `IN ('pending',
+    // 'confirmed')` would miss this status and release the listing mid-sale.
+    const db = await getTestDb();
+    const listing = await makeListing({ status: "sold" });
+    await makeOrder({ listingId: listing.id, status: "shipped" });
+
+    await releaseUnheldListings(db, listing.id);
+
+    expect(await statusOf(listing.id)).toBe("sold");
+  });
+
+  it("leaves a sold listing alone once its order has completed", async () => {
+    // The case this task's own regression would have gotten wrong: a finished sale is
+    // not an unheld one. Releasing it here would be the double-sell the 2026-08-30
+    // redesign exists to make unrepresentable, reached by deleting a completed order.
+    const db = await getTestDb();
+    const listing = await makeListing({ status: "sold" });
+    await makeOrder({ listingId: listing.id, status: "completed" });
+
+    await releaseUnheldListings(db, listing.id);
+
+    expect(await statusOf(listing.id)).toBe("sold");
+  });
 });
