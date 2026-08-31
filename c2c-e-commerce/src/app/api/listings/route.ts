@@ -300,7 +300,9 @@ export async function POST(request: NextRequest) {
     } = {
       title,
       description,
-      price: String(price),
+      // `price` is already the canonical decimal string priceField produces; the column
+      // is numeric(10,2), which Drizzle types as string, so no conversion is needed.
+      price,
       sellerId: payload.sub,
       ...(categoryId !== undefined && categoryId !== null && { categoryId }),
       // Create-as-draft (spec §4.3). `status` is validated to only ever be "draft" here —

@@ -194,7 +194,7 @@ describe("CreateListingSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts string price and transforms to number", () => {
+  it("accepts a string price and keeps it as a canonical decimal string", () => {
     const result = CreateListingSchema.safeParse({
       title: "Item",
       description: "Desc",
@@ -202,7 +202,7 @@ describe("CreateListingSchema", () => {
     });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.price).toBe(49.99);
+      expect(result.data.price).toBe("49.99");
     }
   });
 
@@ -488,4 +488,79 @@ describe("Part 1 — category tree fields", () => {
   it("still rejects an empty update body", () => {
     expect(UpdateCategorySchema.safeParse({}).success).toBe(false);
   });
+});
+
+// ─── priceField ───────────────────────────────────────────────────────────────
+
+describe("priceField", () => {
+  // Exercised through the schema that uses it, because that is how every route sees it.
+  const parse = (price: unknown) =>
+    CreateListingSchema.safeParse({
+      title: "A bicycle",
+      description: "A well-kept bicycle",
+      price,
+      categoryId: 1,
+    });
+
+  it("accepts a plain decimal and keeps it exact", () => {
+    const result = parse("1234.56");
+    expect(result.success).toBe(true);
+    // A string, not a number: the value must never round-trip through a float on its way
+    // to a numeric(10,2) column.
+    expect(result.success && result.data.price).toBe("1234.56");
+  });
+
+  it("accepts an integer and canonicalises it", () => {
+    const result = parse(1200);
+    expect(result.success && result.data.price).toBe("1200.00");
+  });
+
+  it("accepts one decimal place and pads it", () => {
+    const result = parse("19.5");
+    expect(result.success && result.data.price).toBe("19.50");
+  });
+
+  it("accepts zero", () => {
+    expect(parse("0").success).toBe(true);
+  });
+
+  // The Critical. "1e400" is Infinity, which the old parseFloat guard let through to a
+  // numeric column that accepts it.
+  it.each(["1e400", "Infinity", "-Infinity", "NaN"])("rejects %o", (price) => {
+    expect(parse(price).success).toBe(false);
+  });
+
+  it("rejects a value above what numeric(10,2) can hold", () => {
+    // 10 digits total, 2 after the point, so 99999999.99 is the ceiling. The old code let
+    // this reach Postgres and turned an out-of-range price into a 500.
+    const result = parse("100000000.00");
+    expect(result.success).toBe(false);
+    expect(!result.success && result.error.issues[0].message).toMatch(/too large/i);
+  });
+
+  it("accepts exactly the ceiling", () => {
+    expect(parse("99999999.99").success).toBe(true);
+  });
+
+  // Silent rounding is a correctness bug with a human cost: the seller typed one price
+  // and the marketplace charged another, with no complaint anywhere.
+  it("rejects more than two decimal places rather than rounding", () => {
+    const result = parse("19.999");
+    expect(result.success).toBe(false);
+    expect(!result.success && result.error.issues[0].message).toMatch(
+      /at most 2 decimal places/i,
+    );
+  });
+
+  it("rejects negative prices", () => {
+    expect(parse("-0.01").success).toBe(false);
+    expect(parse(-5).success).toBe(false);
+  });
+
+  it.each(["", "   ", "abc", "12.34.56", "1,234.56", "0x10", "12e2"])(
+    "rejects the malformed value %o",
+    (price) => {
+      expect(parse(price).success).toBe(false);
+    },
+  );
 });

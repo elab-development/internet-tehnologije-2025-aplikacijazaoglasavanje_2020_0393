@@ -320,7 +320,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
-    if (price !== undefined) updates.price = String(price);
+    // `price` is already the canonical decimal string priceField produces; the column
+    // is numeric(10,2), which Drizzle types as string, so no conversion is needed.
+    if (price !== undefined) updates.price = price;
     if (categoryId !== undefined) updates.categoryId = categoryId;
     if (status !== undefined) updates.status = status;
 
