@@ -111,9 +111,17 @@ export async function POST(request: NextRequest) {
       // oracle for anyone probing with stolen material.
       const response = jsonError("Not authenticated", 401);
 
-      // The cookie is spent either way; leaving it in place only guarantees the next
-      // request repeats this failure.
-      response.cookies.set(REFRESH_COOKIE, "", clearedRefreshCookieOptions());
+      // Clearing is right for a spent token -- leaving it in place only guarantees the
+      // next request repeats this failure. It is wrong for `concurrent`, and the
+      // difference matters because the cookie jar is shared across tabs: losing the race
+      // means a sibling tab has *already* written the successor into that jar, so this
+      // response would delete a live credential and sign the user out for having two
+      // tabs open (SEC-3 AC10, SEC-11 AC6). The loser needs no cookie of its own; the
+      // one it should use is the one already there.
+      if (err.reason !== "concurrent") {
+        response.cookies.set(REFRESH_COOKIE, "", clearedRefreshCookieOptions());
+      }
+
       return response;
     }
 

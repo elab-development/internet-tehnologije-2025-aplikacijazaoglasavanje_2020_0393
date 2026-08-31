@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { api } from "@/lib/api";
@@ -74,11 +75,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Read by the auth-lost handler below, which must not close over `user`: re-registering
+  // it on every sign-in would leave a window with no handler at all.
+  const hadSession = useRef(false);
+  useEffect(() => {
+    hadSession.current = user !== null;
+  }, [user]);
+
   // The API client refreshes silently on a 401 (lib/api.ts). This fires only when that
   // refresh failed too -- the session is genuinely gone, so stop showing a signed-in UI
   // and send the user somewhere they can do something about it.
   useEffect(() => {
     api.onAuthLost(() => {
+      // Unless there was never a session to lose. The bootstrap GET /api/auth/me above
+      // 401s for every anonymous visitor, and a 401 the client cannot refresh away lands
+      // here -- so redirecting unconditionally bounces anyone who is merely logged out
+      // off /, /listings and /register, all of which are deliberately public (SEC-4 AC7).
+      if (!hadSession.current) return;
+
+      hadSession.current = false;
       setUser(null);
       router.push("/login");
     });
