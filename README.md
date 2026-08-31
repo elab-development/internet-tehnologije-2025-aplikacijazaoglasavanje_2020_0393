@@ -75,7 +75,7 @@ Izmenite `.env` fajl i postavite vrednosti:
 | Varijabla | Opis | Primer |
 |---|---|---|
 | `POSTGRES_USER` | PostgreSQL korisnik | `postgres` |
-| `POSTGRES_PASSWORD` | PostgreSQL lozinka | `postgres` |
+| `POSTGRES_PASSWORD` | PostgreSQL lozinka. Produkcioni `docker-compose.yml` je zahteva i odbija da krene bez nje; `docker-compose.dev.yml` i dalje ima podrazumevanu vrednost radi lakšeg lokalnog rada | (obavezno u produkciji), `postgres` u dev modu |
 | `POSTGRES_DB` | Ime baze podataka | `c2c_ecommerce` |
 | `DATABASE_URL` | Connection string za bazu | `postgresql://postgres:postgres@db:5432/c2c_ecommerce` |
 | `JWT_SECRET` | Tajni ključ za JWT tokene | (dugačak random string) |
