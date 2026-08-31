@@ -6,12 +6,24 @@ import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
 import { db } from "./index";
 import {
+  LISTING_IMAGES_SORT_INDEX,
   listingImages,
   listings,
   type Listing,
   type ListingImage,
   type NewListingImage,
 } from "./schema";
+
+/**
+ * The unique index behind (listing_id, sort_order). Task 9 uses it to detect the
+ * conflict its row lock is meant to make unreachable.
+ *
+ * Defined in `src/db/schema/listing-images.ts`, next to the table, and re-exported here
+ * rather than the other way around: this module already imports from `./schema`, so
+ * naming the constant here and importing it back into the schema file would close an
+ * import cycle right where `pgTable`'s index factory needs the value synchronously.
+ */
+export { LISTING_IMAGES_SORT_INDEX };
 
 /** Spec §4.4. Enough for a second-hand listing; small enough to bound the upload cost. */
 export const MAX_IMAGES_PER_LISTING = 8;
@@ -108,6 +120,19 @@ export async function reorderImages(listingId: number, orderedIds: number[]): Pr
   if (orderedIds.length === 0) return;
 
   await db.transaction(async (tx) => {
+    // `listing_images_listing_sort_idx` (LISTING_IMAGES_SORT_INDEX) checks uniqueness per
+    // statement, not deferred to commit, so writing final positions directly can ask a row to
+    // take a sort_order another not-yet-updated row in this listing still holds -- any swap
+    // does this on its very first update. Stage every row at a negative, id-derived value
+    // first: ids are unique, so these can never collide with each other, and they're negative,
+    // so they can never collide with the 0..n-1 targets phase two writes.
+    for (const id of orderedIds) {
+      await tx
+        .update(listingImages)
+        .set({ sortOrder: -id })
+        .where(and(eq(listingImages.id, id), eq(listingImages.listingId, listingId)));
+    }
+
     for (const [index, id] of orderedIds.entries()) {
       await tx
         .update(listingImages)
