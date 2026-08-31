@@ -64,6 +64,8 @@ describe("sanitizeUser", () => {
       phoneNumber: null,
       emailVerified: false,
       avatarUrl: null,
+      reviewCount: 0,
+      ratingSum: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

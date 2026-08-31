@@ -1,5 +1,6 @@
 import {
   boolean,
+  integer,
   pgEnum,
   pgTable,
   serial,
@@ -28,6 +29,14 @@ export const users = pgTable("users", {
    */
   emailVerified: boolean("email_verified").default(false).notNull(),
   avatarUrl: text("avatar_url"),
+  /**
+   * Denormalised reputation (D7). Two integers, so every update is exact and the mean is
+   * derived — a stored average drifts the moment one write is missed, and nothing ever
+   * tells you which write it was. Maintained in the same transaction as every review
+   * write; see `src/db/reviews.ts`.
+   */
+  reviewCount: integer("review_count").default(0).notNull(),
+  ratingSum: integer("rating_sum").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

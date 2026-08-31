@@ -91,7 +91,7 @@ describe("C2C-AI-10 — AC1: a buyer with history", () => {
     expect(body.data.length).toBe(3);
   });
 
-  it("AC1: a review alone is enough history to personalise", async () => {
+  it("AC1: a completed, reviewed order is enough history to personalise", async () => {
     const buyer = await makeUser({ role: "buyer" });
     await makeReview({
       reviewerId: buyer.id,
@@ -196,15 +196,21 @@ describe("C2C-AI-10 — AC3/AC4: exclusions", () => {
     }
   });
 
-  it("AC3: a reviewed listing may still be recommended — only orders are excluded", async () => {
-    // Reviewing is not owning. The story excludes what the user ordered, not what they
-    // rated, and conflating them would quietly shrink the pool.
+  it("AC3: a five-star purchase pulls the ranking harder than a one-star one", async () => {
+    // Both listings are excluded from the results — a review implies a completed order
+    // now — so what this measures is the *weight* the reviewed arm contributes.
+    // `INTERACTION_WEIGHTS` scores a 1-star review at 0 and a 5-star at 1, on top of the
+    // 0.6 every order earns, so the phone should win the ranking outright.
     const buyer = await makeUser({ role: "buyer" });
-    const reviewed = inCluster("phones")[0];
-    await makeReview({ reviewerId: buyer.id, listingId: reviewed.id, rating: 5 });
+
+    await makeReview({ reviewerId: buyer.id, listingId: inCluster("phones")[0].id, rating: 5 });
+    await makeReview({ reviewerId: buyer.id, listingId: inCluster("furniture")[0].id, rating: 1 });
 
     const { body } = await recommend(authHeaderFor(buyer), "limit=20");
-    expect(body.data.map((r) => r.id)).toContain(reviewed.id);
+    const clusterById = new Map(catalogue.map((entry) => [entry.id, entry.cluster]));
+
+    expect(body.strategy).toBe("personalised");
+    expect(clusterById.get(body.data[0].id)).toBe("phones");
   });
 
   it("recommends a listing whose order was declined, because it is back in browse", async () => {
@@ -385,11 +391,28 @@ describe("C2C-AI-10 — the interaction cap is about recency", () => {
       });
     }
 
-    // 50 reviews of a sofa, all from more than a year ago.
+    // 50 reviews of a sofa, all from more than a year ago. One order each: `order_id` is
+    // unique now, so fifty reviews mean fifty transactions.
+    const furnitureOrders = await db
+      .insert(orders)
+      .values(
+        Array.from({ length: 50 }, (_, i) => ({
+          buyerId: buyer.id,
+          sellerId: cyclingSellerId,
+          listingId: furniture.id,
+          price: "10.00",
+          status: "completed" as const,
+          expiresAt: new Date(now - (400 + i) * day + 48 * 60 * 60 * 1000),
+          createdAt: new Date(now - (400 + i) * day),
+        })),
+      )
+      .returning({ id: orders.id });
+
     await db.insert(reviews).values(
-      Array.from({ length: 50 }, (_, i) => ({
+      furnitureOrders.map((order, i) => ({
         reviewerId: buyer.id,
-        listingId: furniture.id,
+        sellerId: cyclingSellerId,
+        orderId: order.id,
         rating: 5,
         comment: "Solid.",
         createdAt: new Date(now - (400 + i) * day),

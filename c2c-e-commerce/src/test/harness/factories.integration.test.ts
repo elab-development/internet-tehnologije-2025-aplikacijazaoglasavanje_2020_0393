@@ -139,21 +139,45 @@ describe("C2C-QA-3 — makeOrder and makeReview", () => {
     expect(order.expiresAt.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it("AC5: makeReview creates a reviewer and a listing, with a valid rating", async () => {
+  it("AC5: makeReview creates a reviewer, an order and the review between them", async () => {
     const review = await makeReview();
+    const db = await getTestDb();
 
     expect(review.id).toEqual(expect.any(Number));
     // The reviews table has a CHECK (rating BETWEEN 1 AND 5); a default outside it would
     // make the factory unusable.
     expect(review.rating).toBeGreaterThanOrEqual(1);
     expect(review.rating).toBeLessThanOrEqual(5);
+
+    // The subject is the order's seller, which is what the new model means by a review.
+    const [order] = await db.select().from(orders).where(eq(orders.id, review.orderId));
+    expect(order.status).toBe("completed");
+    expect(order.buyerId).toBe(review.reviewerId);
+    expect(review.sellerId).toBe(order.sellerId);
   });
 
   it("AC5: makeReview honours an explicit rating and listing", async () => {
     const listing = await makeListing();
-    const review = await makeReview({ listingId: listing.id, rating: 5 });
+    const review = await makeReview({ listingId: listing.id, rating: 4 });
+    const db = await getTestDb();
 
-    expect(review).toMatchObject({ listingId: listing.id, rating: 5 });
+    const [order] = await db.select().from(orders).where(eq(orders.id, review.orderId));
+    expect(order.listingId).toBe(listing.id);
+    expect(review.rating).toBe(4);
+  });
+
+  it("AC5: makeReview keeps the seller's aggregates true", async () => {
+    // A factory that wrote the review alone would leave every test reading a seller with
+    // reviews and a count of zero.
+    const db = await getTestDb();
+    const seller = await makeUser({ role: "seller" });
+    const listing = await makeListing({ sellerId: seller.id });
+
+    await makeReview({ listingId: listing.id, rating: 4 });
+
+    const [row] = await db.select().from(users).where(eq(users.id, seller.id));
+    expect(row.reviewCount).toBe(1);
+    expect(row.ratingSum).toBe(4);
   });
 
   it("AC5: factories leave nothing behind that resetDb cannot clear", async () => {

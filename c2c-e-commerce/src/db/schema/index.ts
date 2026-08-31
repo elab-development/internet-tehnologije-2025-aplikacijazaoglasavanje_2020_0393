@@ -63,7 +63,6 @@ export const listingsRelations = relations(listings, ({ one, many }) => ({
     references: [categories.id],
   }),
   orders: many(orders),
-  reviews: many(reviews),
 }));
 
 export const ordersRelations = relations(orders, ({ one }) => ({
@@ -86,8 +85,12 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     fields: [reviews.reviewerId],
     references: [users.id],
   }),
-  listing: one(listings, {
-    fields: [reviews.listingId],
-    references: [listings.id],
+  seller: one(users, {
+    fields: [reviews.sellerId],
+    references: [users.id],
+  }),
+  order: one(orders, {
+    fields: [reviews.orderId],
+    references: [orders.id],
   }),
 }));

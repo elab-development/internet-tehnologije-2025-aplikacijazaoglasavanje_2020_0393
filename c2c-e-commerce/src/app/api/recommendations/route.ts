@@ -106,7 +106,12 @@ export async function GET(request: NextRequest) {
           at: reviews.createdAt,
         })
         .from(reviews)
-        .innerJoin(listings, eq(reviews.listingId, listings.id))
+        // Through the order, because that is where the listing lives now. A reviewed
+        // listing is therefore always an ordered listing too, and contributes to the taste
+        // vector twice — deliberately: `INTERACTION_WEIGHTS` exists to make a five-star
+        // purchase count for more than a silent one.
+        .innerJoin(orders, eq(orders.id, reviews.orderId))
+        .innerJoin(listings, eq(listings.id, orders.listingId))
         .where(eq(reviews.reviewerId, userId))
         .orderBy(desc(reviews.createdAt))
         .limit(MAX_INTERACTIONS),

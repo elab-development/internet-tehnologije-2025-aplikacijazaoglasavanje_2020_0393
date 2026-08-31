@@ -120,6 +120,13 @@
       "when": 1771947100000,
       "tag": "0016_drop_order_items",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1771947200000,
+      "tag": "0017_reviews_reanchor",
+      "breakpoints": true
     }
   ]
 }

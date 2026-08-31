@@ -6,7 +6,7 @@
  * category first. Passing an explicit parent id reuses it rather than creating another,
  * which is what keeps row-counting assertions honest.
  */
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { hashPassword } from "@/lib/auth";
 import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
@@ -89,7 +89,15 @@ export type MakeOrderOptions = Partial<Pick<Order, "status" | "price">> & {
 
 export type MakeReviewOptions = Partial<Pick<Review, "rating" | "comment">> & {
   reviewerId?: number;
+  /** The transaction being reviewed. Created if omitted. */
+  orderId?: number;
+  /**
+   * Convenience for "a review of this listing": creates a completed order for it and
+   * anchors the review to that. Ignored when `orderId` is given.
+   */
   listingId?: number;
+  /** For tests that care about the order of a timeline. */
+  createdAt?: Date;
 };
 
 export async function makeUser(options: MakeUserOptions = {}): Promise<User> {
@@ -251,23 +259,60 @@ export async function makeOrder(options: MakeOrderOptions = {}): Promise<Order> 
   return order;
 }
 
+/**
+ * A review, its order, and the seller's aggregates, all consistent.
+ *
+ * The aggregate write is not optional politeness: `users.review_count` is what
+ * `GET /api/users/{id}/reviews` paginates on, so a factory that wrote the review alone
+ * would leave every test reading a seller with reviews and a count of zero — and the
+ * tests that caught it would blame the route.
+ */
 export async function makeReview(options: MakeReviewOptions = {}): Promise<Review> {
   const db = await getTestDb();
 
   const reviewerId = options.reviewerId ?? (await makeUser({ role: "buyer" })).id;
-  const listingId = options.listingId ?? (await makeListing()).id;
+  const orderId =
+    options.orderId ??
+    (
+      await makeOrder({
+        buyerId: reviewerId,
+        status: "completed",
+        ...(options.listingId !== undefined ? { listingId: options.listingId } : {}),
+      })
+    ).id;
+
+  // Read rather than assumed: a caller may have supplied an order this factory did not
+  // create, and the subject of a review is whoever sold that order.
+  const [order] = await db
+    .select({ sellerId: orders.sellerId })
+    .from(orders)
+    .where(eq(orders.id, orderId))
+    .limit(1);
+  if (!order) throw new Error(`makeReview: order ${orderId} does not exist`);
+
+  // The reviews table carries CHECK (rating BETWEEN 1 AND 5); a default outside that
+  // range would make the factory unusable.
+  const rating = options.rating ?? 5;
 
   const [review] = await db
     .insert(reviews)
     .values({
       reviewerId,
-      listingId,
-      // The reviews table carries CHECK (rating BETWEEN 1 AND 5); a default outside that
-      // range would make the factory unusable.
-      rating: options.rating ?? 5,
+      sellerId: order.sellerId,
+      orderId,
+      rating,
       comment: options.comment ?? "Solid.",
+      ...(options.createdAt !== undefined ? { createdAt: options.createdAt } : {}),
     })
     .returning();
+
+  await db
+    .update(users)
+    .set({
+      reviewCount: sql`${users.reviewCount} + 1`,
+      ratingSum: sql`${users.ratingSum} + ${rating}`,
+    })
+    .where(eq(users.id, order.sellerId));
 
   return review;
 }
