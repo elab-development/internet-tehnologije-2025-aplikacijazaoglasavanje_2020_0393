@@ -84,32 +84,20 @@ const PRICE_MAX = "99999999.99";
 const priceField = z
   .union([z.string(), z.number()])
   .transform((val, ctx): string => {
-    // A number input is canonicalised through its own decimal form. `Number.isFinite`
-    // rejects Infinity and NaN before they can reach the pattern as "Infinity"/"NaN".
     if (typeof val === "number") {
+      // `Number.isFinite` rejects Infinity and NaN before they can reach the pattern as
+      // "Infinity"/"NaN".
       if (!Number.isFinite(val)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "price must be a finite number",
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "price must be a finite number" });
         return z.NEVER;
       }
       if (val < 0) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "price must not be negative",
-        });
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "price must not be negative" });
         return z.NEVER;
       }
-      // toFixed(2) on a number that already has at most 2 places is exact; one with more
-      // is caught by the pattern check below rather than silently rounded here.
-      if (!Number.isInteger(val * 100)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "price may have at most 2 decimal places",
-        });
-        return z.NEVER;
-      }
+      // Ahead of the canonicalisation below on purpose: it gives an out-of-range value the
+      // message it deserves, and it also guarantees the value is small enough that
+      // `String()` cannot emit exponential notation (JS switches at 1e21).
       if (val > Number(PRICE_MAX)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -117,50 +105,66 @@ const priceField = z
         });
         return z.NEVER;
       }
-      return val.toFixed(2);
+
+      // Canonicalise through the number's own shortest round-tripping decimal form, then
+      // apply exactly the same rules as a string input.
+      //
+      // Deriving the decimal count arithmetically instead -- `Number.isInteger(val * 100)`
+      // -- is a trap: `19.99 * 100` is `1998.9999999999998` in IEEE 754, so 1,146 of the
+      // 10,000 two-decimal values between 0.01 and 100.00 (16.99 and 19.99 among them)
+      // would be rejected as having too many decimals while the identical string sailed
+      // through. One shared path is what makes the two inputs unable to disagree at all.
+      return validateDecimalString(String(val), ctx);
     }
 
-    const raw = val.trim();
-
-    if (raw.startsWith("-")) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "price must not be negative",
-      });
-      return z.NEVER;
-    }
-
-    // One anchored pattern covers "", whitespace, "abc", "12.34.56", "1,234.56", "0x10",
-    // "12e2", "Infinity" and "NaN" — every one of which parseFloat either accepted or
-    // turned into something the column could not hold.
-    if (!PRICE_PATTERN.test(raw)) {
-      // Separate the rounding case out, because "you typed too many decimals" is
-      // actionable and "that is not a price" is not.
-      if (/^\d+\.\d{3,}$/.test(raw)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "price may have at most 2 decimal places",
-        });
-        return z.NEVER;
-      }
-      if (/^\d{9,}(\.\d{1,2})?$/.test(raw)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `price is too large — the maximum is ${PRICE_MAX}`,
-        });
-        return z.NEVER;
-      }
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "price must be a decimal number, for example 1234.56",
-      });
-      return z.NEVER;
-    }
-
-    // Canonical form, so "19.5" and "19.50" reach the column identically.
-    const [whole, fraction = ""] = raw.split(".");
-    return `${whole}.${fraction.padEnd(2, "0")}`;
+    return validateDecimalString(val.trim(), ctx);
   });
+
+/**
+ * The one place a price is judged, whichever type it arrived as.
+ *
+ * Returns the canonical `"1234.56"` form, or registers an issue and returns `z.NEVER`.
+ */
+function validateDecimalString(raw: string, ctx: z.RefinementCtx): string {
+  if (raw.startsWith("-")) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "price must not be negative",
+    });
+    return z.NEVER;
+  }
+
+  // One anchored pattern covers "", whitespace, "abc", "12.34.56", "1,234.56", "0x10",
+  // "12e2", "Infinity" and "NaN" — every one of which parseFloat either accepted or
+  // turned into something the column could not hold.
+  if (!PRICE_PATTERN.test(raw)) {
+    // Separate the rounding case out, because "you typed too many decimals" is
+    // actionable and "that is not a price" is not.
+    if (/^\d+\.\d{3,}$/.test(raw)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "price may have at most 2 decimal places",
+      });
+      return z.NEVER;
+    }
+    if (/^\d{9,}(\.\d{1,2})?$/.test(raw)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `price is too large — the maximum is ${PRICE_MAX}`,
+      });
+      return z.NEVER;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "price must be a decimal number, for example 1234.56",
+    });
+    return z.NEVER;
+  }
+
+  // Canonical form, so "19.5" and "19.50" reach the column identically.
+  const [whole, fraction = ""] = raw.split(".");
+  return `${whole}.${fraction.padEnd(2, "0")}`;
+}
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 

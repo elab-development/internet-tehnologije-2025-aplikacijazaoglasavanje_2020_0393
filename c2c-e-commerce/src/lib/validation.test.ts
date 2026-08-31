@@ -563,4 +563,24 @@ describe("priceField", () => {
       expect(parse(price).success).toBe(false);
     },
   );
+
+  it.each([19.99, 16.99, 0.07, 1234.56, 99999999.99])(
+    "accepts the JSON number %o",
+    (price) => {
+      expect(parse(price).success).toBe(true);
+    },
+  );
+
+  it("gives a number and its own string form the same verdict", () => {
+    // The property that makes the two branches impossible to drift apart. This is the
+    // assertion that fails if anyone re-derives decimal places arithmetically.
+    for (const value of [19.99, 16.99, 0.07, 19.5, 1200, 0.01, 99999999.99]) {
+      expect(parse(value).success).toBe(parse(String(value)).success);
+    }
+  });
+
+  it("rejects a number carrying more precision than money has", () => {
+    expect(parse(0.1 + 0.2).success).toBe(false); // 0.30000000000000004
+    expect(parse(19.999).success).toBe(false);
+  });
 });
