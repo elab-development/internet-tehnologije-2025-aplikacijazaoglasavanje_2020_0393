@@ -298,7 +298,7 @@ export function clientIdentity(request: NextRequest): ClientIdentity {
 cd c2c-e-commerce && npx vitest run --project unit src/lib/client-ip.test.ts
 ```
 
-Expected: PASS, 18 tests.
+Expected: PASS, 17 tests.
 
 - [ ] **Step 5: Deliberate break**
 
