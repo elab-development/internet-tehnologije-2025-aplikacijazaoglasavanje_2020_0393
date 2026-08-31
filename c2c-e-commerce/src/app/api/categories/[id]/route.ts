@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
 import {
@@ -22,6 +22,21 @@ import { parseRequest, UpdateCategorySchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+// ─── Re-parenting guard errors ─────────────────────────────────────────────────
+// Each is thrown from inside the transaction that now holds the row lock, rather than
+// returned: a `return` in a Drizzle transaction callback commits it, and a rejected move
+// must never commit whatever the callback had already written.
+
+/** `parentId` names the node being moved itself. */
+class SelfParentError extends Error {}
+/** `parentId` does not name an existing category. */
+class ParentNotFoundError extends Error {}
+/** The prospective parent lies inside the node's own subtree. */
+class CycleError extends Error {}
+/** The subtree being moved would land a leaf past `MAX_CATEGORY_DEPTH`. */
+class DepthExceededError extends Error {}
+/** The prospective parent already carries a listing directly (D12). */
+class CategoryHasListingsError extends Error {}
 
 // ─── PUT /api/categories/[id] ─────────────────────────────────────────────────
 // Admin only.
@@ -140,62 +155,81 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     // ── Re-parenting ────────────────────────────────────────────────────────
     // `undefined` means "leave the parent alone"; an explicit `null` means "make this a
     // root". Branching on falsiness would conflate the two and silently promote nodes.
-    let subtreeMove: { oldPrefix: string; newPrefix: string; depthDelta: number } | null =
-      null;
+    //
+    // Every guard below used to run on the module-level `db`, before this transaction
+    // opened, so two simultaneous moves could each validate against paths the other was
+    // about to invalidate -- and a cycle in a materialised-path tree is not cosmetic:
+    // descendant queries stop terminating, and there is no constraint that would catch
+    // it. They run inside the transaction now, under a row lock taken first, and each
+    // early exit is a thrown typed error rather than a `return`: a `return` inside a
+    // Drizzle transaction callback commits it, and a rejected move must never commit
+    // whatever the callback had already written.
+    const updated = await db.transaction(async (tx) => {
+      let subtreeMove: { oldPrefix: string; newPrefix: string; depthDelta: number } | null =
+        null;
 
-    if (parentId !== undefined) {
-      let newParentPath: string | null = null;
+      if (parentId !== undefined) {
+        // Lock the node and its prospective parent before any guard reads a path. The
+        // checks below are only meaningful against a tree that cannot change underneath
+        // them, and a cycle is not something the schema can refuse on their behalf.
+        //
+        // Ordered by id so two concurrent moves of the same pair take the locks in the
+        // same sequence and one waits rather than both deadlocking.
+        const lockIds = [id, parentId]
+          .filter((value): value is number => value !== null)
+          .sort((a, b) => a - b);
 
-      if (parentId !== null) {
-        if (parentId === id) {
-          return jsonError("A category cannot be moved under its own descendant", 400);
+        await tx
+          .select({ id: categories.id })
+          .from(categories)
+          .where(inArray(categories.id, lockIds))
+          .for("update");
+
+        let newParentPath: string | null = null;
+
+        if (parentId !== null) {
+          if (parentId === id) {
+            throw new SelfParentError();
+          }
+
+          const parent = await findCategoryById(parentId, tx);
+          if (!parent) throw new ParentNotFoundError();
+
+          if (wouldCreateCycle(category.path, parent.path)) {
+            throw new CycleError();
+          }
+
+          // The subtree travels with the node, so the cap applies to its deepest leaf,
+          // not just to the node being moved.
+          const height = await subtreeHeight(category.path, tx);
+          if (parent.depth + 1 + height > MAX_CATEGORY_DEPTH - 1) {
+            throw new DepthExceededError();
+          }
+
+          // Re-parenting under a category that already carries listings gives it a child
+          // just as surely as creating one there would, and strands those listings on a
+          // now-non-leaf node (D12).
+          if (await hasListings(parentId, tx)) {
+            throw new CategoryHasListingsError();
+          }
+
+          newParentPath = parent.path;
         }
 
-        const parent = await findCategoryById(parentId);
-        if (!parent) return jsonError("Parent category not found", 400);
+        const newPath = childPath(newParentPath, id);
+        const newDepth = newParentPath === null ? 0 : depthOfPath(newParentPath) + 1;
 
-        if (wouldCreateCycle(category.path, parent.path)) {
-          return jsonError("A category cannot be moved under its own descendant", 400);
-        }
+        updates.parentId = parentId;
+        updates.path = newPath;
+        updates.depth = newDepth;
 
-        // The subtree travels with the node, so the cap applies to its deepest leaf,
-        // not just to the node being moved.
-        const height = await subtreeHeight(category.path);
-        if (parent.depth + 1 + height > MAX_CATEGORY_DEPTH - 1) {
-          return jsonError(
-            `Categories may be nested at most ${MAX_CATEGORY_DEPTH} levels deep`,
-            400,
-          );
-        }
-
-        // Re-parenting under a category that already carries listings gives it a child
-        // just as surely as creating one there would, and strands those listings on a
-        // now-non-leaf node (D12).
-        if (await hasListings(parentId)) {
-          return jsonError(
-            "Move this category's listings before giving it subcategories",
-            409,
-          );
-        }
-
-        newParentPath = parent.path;
+        subtreeMove = {
+          oldPrefix: category.path,
+          newPrefix: newPath,
+          depthDelta: newDepth - category.depth,
+        };
       }
 
-      const newPath = childPath(newParentPath, id);
-      const newDepth = newParentPath === null ? 0 : depthOfPath(newParentPath) + 1;
-
-      updates.parentId = parentId;
-      updates.path = newPath;
-      updates.depth = newDepth;
-
-      subtreeMove = {
-        oldPrefix: category.path,
-        newPrefix: newPath,
-        depthDelta: newDepth - category.depth,
-      };
-    }
-
-    const updated = await db.transaction(async (tx) => {
       const [row] = await tx
         .update(categories)
         .set(updates)
@@ -221,6 +255,19 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     return jsonOk(updated);
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
+    if (err instanceof SelfParentError || err instanceof CycleError) {
+      return jsonError("A category cannot be moved under its own descendant", 400);
+    }
+    if (err instanceof ParentNotFoundError) return jsonError("Parent category not found", 400);
+    if (err instanceof DepthExceededError) {
+      return jsonError(
+        `Categories may be nested at most ${MAX_CATEGORY_DEPTH} levels deep`,
+        400,
+      );
+    }
+    if (err instanceof CategoryHasListingsError) {
+      return jsonError("Move this category's listings before giving it subcategories", 409);
+    }
     console.error("[PUT /api/categories/[id]]", err);
     return jsonError("Internal server error");
   }

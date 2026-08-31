@@ -17,8 +17,11 @@ import { categories, listings, type Category } from "./schema";
  */
 type Executor = Database | Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-export async function findCategoryById(id: number): Promise<Category | null> {
-  const [found] = await db
+export async function findCategoryById(
+  id: number,
+  executor: Executor = db,
+): Promise<Category | null> {
+  const [found] = await executor
     .select()
     .from(categories)
     .where(eq(categories.id, id))
@@ -45,8 +48,11 @@ export async function hasChildren(id: number): Promise<boolean> {
  * child would leave those listings on a now-non-leaf node, which D12 forbids just as much
  * as filing a new one there would.
  */
-export async function hasListings(categoryId: number): Promise<boolean> {
-  const [listing] = await db
+export async function hasListings(
+  categoryId: number,
+  executor: Executor = db,
+): Promise<boolean> {
+  const [listing] = await executor
     .select({ id: listings.id })
     .from(listings)
     .where(eq(listings.categoryId, categoryId))
@@ -74,8 +80,8 @@ export async function isLeafCategory(id: number): Promise<boolean> {
  * put its leaves at depth 3, which the CHECK constraint would reject *after* the parent
  * had already been rewritten.
  */
-export async function subtreeHeight(path: string): Promise<number> {
-  const [result] = await db
+export async function subtreeHeight(path: string, executor: Executor = db): Promise<number> {
+  const [result] = await executor
     .select({ maxDepth: sql<number>`max(${categories.depth})` })
     .from(categories)
     .where(like(categories.path, `${path}.%`));
