@@ -10,8 +10,8 @@
  * Run as `npm run db:expire-reservations`. A cron entry every ten minutes is ample for a
  * 48-hour deadline.
  */
-import { fileURLToPath } from "node:url";
 
+import { isDirectInvocation } from "./direct-invocation";
 import { db } from "./index";
 import { expireStalePendingOrders, releaseUnheldListings } from "./orders";
 
@@ -40,16 +40,8 @@ export async function expireReservations(): Promise<SweepResult> {
 }
 
 // Run only when invoked directly, so importing this module from a test does not sweep
-// anything.
-//
-// `prune-tokens.ts` guards this with `import.meta.url.endsWith(argv[1].replace(/\\/g, "/"))`,
-// but that comparison never matches on this project's own dev paths: both this worktree's
-// and the primary checkout's directory names contain spaces ("IV godina", "Internet
-// tehnologije"), which `import.meta.url` percent-encodes and `process.argv[1]` does not, so
-// `endsWith` is always false. That is silence and exit 0 on every direct invocation — the
-// exact "dead code" failure mode this guard exists to avoid. `fileURLToPath` decodes the URL
-// back to a plain path before comparing, which matches regardless of spaces.
-if (process.argv[1] && process.argv[1] === fileURLToPath(import.meta.url)) {
+// anything. `isDirectInvocation` explains why that is not a string comparison.
+if (isDirectInvocation(process.argv[1], import.meta.url)) {
   expireReservations()
     .then(({ expiredOrders, releasedListings }) => {
       console.log(

@@ -11,6 +11,7 @@
  */
 import { lt, sql } from "drizzle-orm";
 
+import { isDirectInvocation } from "./direct-invocation";
 import { db } from "./index";
 import { refreshTokens } from "./schema";
 
@@ -36,8 +37,8 @@ export async function pruneRefreshTokens(): Promise<number> {
 }
 
 // Run only when invoked directly, so importing this module from a test does not delete
-// anything.
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"))) {
+// anything. `isDirectInvocation` explains why that is not a string comparison.
+if (isDirectInvocation(process.argv[1], import.meta.url)) {
   pruneRefreshTokens()
     .then((count) => {
       console.log(
