@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 import CurrencySelect from "@/components/CurrencySelect";
 import OrderActions from "@/components/orders/OrderActions";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ReviewForm from "@/components/reviews/ReviewForm";
 import {
   Button,
   ErrorAlert,
@@ -54,6 +55,7 @@ function OrderDetailPageContent() {
     setData,
     loading,
     error,
+    refetch,
   } = useFetch<OrderDetail>(hasValidId ? `/api/orders/${idNum}` : null);
 
   const conversion = useCurrencyConversion();
@@ -146,6 +148,13 @@ function OrderDetailPageContent() {
           busy={pendingStatus !== null}
           onTransition={handleTransition}
         />
+      )}
+
+      {/* Three conditions, all of them the server's rules restated: completed, this
+          viewer's own purchase, and not already reviewed. Getting any of them wrong here
+          produces a 403 or a 409 rather than a bad write — the endpoint decides. */}
+      {actor === "buyer" && order.status === "completed" && order.reviewId === null && (
+        <ReviewForm orderId={order.id} onSubmitted={refetch} />
       )}
 
       <Button variant="secondary" onClick={() => router.push("/orders")}>

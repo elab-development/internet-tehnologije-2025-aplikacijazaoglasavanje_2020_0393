@@ -62,9 +62,12 @@ export type ListingImageSummary = {
   height: number | null;
 };
 
-/** `GET /api/listings/[id]` — adds the joined seller and category names. */
+/** `GET /api/listings/[id]` — adds the joined seller, their reputation, and the category. */
 export type ListingDetail = Listing & {
   sellerName: string | null;
+  sellerAvatarUrl: string | null;
+  sellerReviewCount: number;
+  sellerRatingSum: number;
   categoryName: string | null;
   images: ListingImageSummary[];
 };
@@ -100,10 +103,12 @@ export type Order = Omit<Serialized<OrderRow>, "expiresAt" | "updatedAt"> & {
   updatedAt: string;
 };
 
-/** `GET /api/orders/[id]` — the order plus the listing it is for. */
+/** `GET /api/orders/[id]` — the order, the listing it is for, and its review if any. */
 export type OrderDetail = Order & {
   listingTitle: string;
   coverImageId: number | null;
+  /** The review this order already has, or null if the buyer has not left one. */
+  reviewId: number | null;
 };
 
 /** `POST /api/orders` — only the id is consumed by the UI. */
@@ -119,5 +124,21 @@ export type SellerOrder = Order & {
 
 // ─── Reviews ──────────────────────────────────────────────────────────────────
 
-/** A review row as returned by the reviews API, with the joined reviewer name. */
-export type Review = Serialized<ReviewRow> & { reviewerName: string | null };
+/** One review, as `GET /api/users/[id]/reviews` returns it. */
+export type SellerReview = Serialized<ReviewRow> & { reviewerName: string | null };
+
+/** The subject of a review list — a public identity plus a reputation, and no more. */
+export type SellerSummary = {
+  id: number;
+  name: string;
+  avatarUrl: string | null;
+  reviewCount: number;
+  ratingSum: number;
+  /** Derived server-side; `null` for a seller nobody has reviewed. */
+  averageRating: number | null;
+};
+
+/** `GET /api/users/[id]/reviews` */
+export type SellerReviewsResponse = Paginated<SellerReview> & {
+  seller: SellerSummary;
+};

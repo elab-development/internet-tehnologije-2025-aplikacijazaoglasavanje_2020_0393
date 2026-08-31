@@ -7,6 +7,7 @@ import CategoryBreadcrumb from "@/components/categories/CategoryBreadcrumb";
 import CurrencySelect from "@/components/CurrencySelect";
 import ListingGallery from "@/components/listings/ListingGallery";
 import SimilarListings from "@/components/listings/SimilarListings";
+import SellerCard from "@/components/reviews/SellerCard";
 import {
   Button,
   ErrorAlert,
@@ -143,10 +144,6 @@ export default function ListingDetailPage() {
               <span className="font-medium text-zinc-900">Converted:</span>{" "}
               {formatConverted(Number(listing.price))}
             </p>
-            <p>
-              <span className="font-medium text-zinc-900">Seller:</span>{" "}
-              {listing.sellerName ?? `Seller #${listing.sellerId}`}
-            </p>
           </div>
 
           <CurrencySelect conversion={conversion} className="sm:max-w-xs" />
@@ -168,6 +165,14 @@ export default function ListingDetailPage() {
           </div>
         </div>
       </section>
+
+      <SellerCard
+        sellerId={listing.sellerId}
+        name={listing.sellerName}
+        avatarUrl={listing.sellerAvatarUrl}
+        reviewCount={listing.sellerReviewCount}
+        ratingSum={listing.sellerRatingSum}
+      />
 
       {/* Renders nothing when there is nothing to recommend, so no empty heading is left
           behind on a listing with no neighbours (AI-9 AC9). */}
