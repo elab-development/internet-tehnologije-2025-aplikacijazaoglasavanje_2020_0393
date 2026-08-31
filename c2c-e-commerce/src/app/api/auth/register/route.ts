@@ -4,7 +4,13 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
-import { getClientIp, rateLimit, REGISTER_RATE_LIMIT } from "@/lib/rate-limit";
+import {
+  rateLimitByIp,
+  rateLimitByKey,
+  rateLimitHeaders,
+  REGISTER_RATE_LIMIT,
+} from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
 import { parseRequest, RegisterBodySchema } from "@/lib/validation";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
@@ -89,14 +95,13 @@ export async function POST(request: NextRequest) {
     // ── Rate limit ────────────────────────────────────────────────────────────
     // Registration runs bcrypt at 12 rounds, so unbounded signups are also a
     // cheap way to burn CPU. Limit before we touch the DB.
-    const limit = rateLimit(
-      `register:${getClientIp(request)}`,
-      REGISTER_RATE_LIMIT
-    );
-    if (!limit.allowed) {
-      return jsonError("Too many registration attempts. Please try again later.", 429, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+    const byIp = rateLimitByIp("register", request, REGISTER_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
+      return jsonError(
+        "Too many registration attempts. Please try again later.",
+        429,
+        rateLimitHeaders(byIp.result, REGISTER_RATE_LIMIT),
+      );
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -104,6 +109,21 @@ export async function POST(request: NextRequest) {
     // never be self-assigned here.
     const parsed = await parseRequest(request, RegisterBodySchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
+
+    // The key that survives IP rotation, and the only one that applies at all when no
+    // proxy is trusted. Normalised the same way the column is, so `A@x.com` and
+    // `a@x.com` cannot each get their own budget against one account.
+    const byAccount = rateLimitByKey(
+      `register:email:${parsed.data.email.trim().toLowerCase()}`,
+      REGISTER_RATE_LIMIT,
+    );
+    if (!byAccount.allowed) {
+      return jsonError(
+        "Too many registration attempts. Please try again later.",
+        429,
+        rateLimitHeaders(byAccount, REGISTER_RATE_LIMIT),
+      );
+    }
 
     const { email, password, name, phoneNumber, role } = parsed.data;
 
@@ -132,9 +152,10 @@ export async function POST(request: NextRequest) {
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
     // Same as login: cookie for the browser, body token for API clients.
+    const identity = clientIdentity(request);
     const refresh = await issueRefreshToken(user.id, {
       userAgent: request.headers.get("user-agent"),
-      ip: getClientIp(request),
+      ip: identity.kind === "ip" ? identity.value : null,
     });
 
     const response = jsonOk({ user: sanitizeUser(user), token }, 201);

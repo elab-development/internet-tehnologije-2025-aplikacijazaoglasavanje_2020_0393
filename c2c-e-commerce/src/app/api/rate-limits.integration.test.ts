@@ -9,7 +9,8 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AI_RATE_LIMIT, resetRateLimits } from "@/lib/rate-limit";
+import { AI_RATE_LIMIT, LOGIN_RATE_LIMIT, resetRateLimits } from "@/lib/rate-limit";
+import { POST } from "@/app/api/auth/login/route";
 import { REFRESH_COOKIE } from "@/lib/refresh-cookies";
 import { issueRefreshToken } from "@/lib/refresh-token";
 import { authHeaderFor } from "@/test/auth";
@@ -126,6 +127,9 @@ describe("C2C-SEC-11 AC1 — the AI budget", () => {
 
 describe("C2C-SEC-11 AC5 — the OAuth routes", () => {
   it("limits initiation per IP", async () => {
+    // One hop: the header below is a single address, the shape a trusted proxy produces.
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
     const { GET } = await import("./auth/oauth/[provider]/route");
     const call = () =>
       GET(
@@ -143,6 +147,8 @@ describe("C2C-SEC-11 AC5 — the OAuth routes", () => {
   });
 
   it("carries the headers on the blocked OAuth response too", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
     const { GET } = await import("./auth/oauth/[provider]/route");
     const call = () =>
       GET(
@@ -176,6 +182,8 @@ describe("C2C-SEC-11 AC6 — POST /api/auth/refresh", () => {
   }
 
   it("limits an unbounded stream from one address", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
     const statuses: number[] = [];
     for (let i = 0; i < 60; i += 1) {
       // Bogus tokens: the limiter must bite before the database is consulted 60 times.
@@ -200,5 +208,105 @@ describe("C2C-SEC-11 AC6 — POST /api/auth/refresh", () => {
       const next = setCookie.find((c) => c.startsWith(`${REFRESH_COOKIE}=`));
       token = next!.slice(REFRESH_COOKIE.length + 1).split(";")[0];
     }
+  });
+});
+
+// This suite used to get a fresh bucket by rotating `X-Forwarded-For`. That worked
+// because the limiter read the left-most entry — the one the caller writes — which was
+// the Critical this task closes. Isolation now comes from resetting the limiter
+// directly, and the old technique has become a test of its own.
+beforeEach(() => {
+  resetRateLimits();
+});
+
+describe("X-Forwarded-For is no longer a fresh-bucket button", () => {
+  const ENDPOINT = "/api/auth/login";
+  const CREDENTIALS = { email: "nobody@example.test", password: "wrong-password-1" };
+
+  it("does not grant a new budget when the caller rotates the header", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
+    // Exhaust the per-IP budget from one apparent client. The trusted proxy appends the
+    // real address, so the header below is what a proxy would produce.
+    const asClient = (forged: string) => ({
+      "x-forwarded-for": `${forged}, 203.0.113.9`,
+      "content-type": "application/json",
+    });
+
+    let last = 0;
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit + 1; i += 1) {
+      const response = await POST(
+        new NextRequest(`http://test${ENDPOINT}`, {
+          method: "POST",
+          headers: asClient(`1.2.3.${i}`),
+          body: JSON.stringify(CREDENTIALS),
+        }),
+      );
+      last = response.status;
+    }
+
+    // Every request rotated the forged prefix; every request still landed in the same
+    // bucket, because the address that counts is the one the proxy wrote.
+    expect(last).toBe(429);
+  });
+
+  it("skips the IP limit entirely when no proxy is trusted", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    let last = 0;
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit + 1; i += 1) {
+      const response = await POST(
+        new NextRequest(`http://test${ENDPOINT}`, {
+          method: "POST",
+          headers: { "x-forwarded-for": "1.2.3.4", "content-type": "application/json" },
+          // A different email each time, so the per-account key (Step 3) is not what
+          // blocks here — this asserts the *IP* key is absent, nothing more.
+          body: JSON.stringify({ ...CREDENTIALS, email: `nobody${i}@example.test` }),
+        }),
+      );
+      last = response.status;
+    }
+
+    expect(last).toBe(401);
+  });
+});
+
+describe("per-account login limit", () => {
+  it("blocks a password-guessing run even when the address is unknowable", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    const victim = "victim@example.test";
+    let last = 0;
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit + 1; i += 1) {
+      const response = await POST(
+        new NextRequest(`http://test/api/auth/login`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: victim, password: `guess-${i}` }),
+        }),
+      );
+      last = response.status;
+    }
+
+    expect(last).toBe(429);
+  });
+
+  it("shares one bucket across case variants of the same address", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    let last = 0;
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit + 1; i += 1) {
+      const email = i % 2 === 0 ? "Victim@Example.test" : "victim@example.test";
+      const response = await POST(
+        new NextRequest(`http://test/api/auth/login`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email, password: `guess-${i}` }),
+        }),
+      );
+      last = response.status;
+    }
+
+    expect(last).toBe(429);
   });
 });

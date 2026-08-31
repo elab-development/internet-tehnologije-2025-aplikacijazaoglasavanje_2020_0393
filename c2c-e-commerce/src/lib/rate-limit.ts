@@ -1,5 +1,7 @@
 import type { NextRequest } from "next/server";
 
+import { clientIdentity } from "@/lib/client-ip";
+
 // ─── In-memory sliding-window rate limiter ────────────────────────────────────
 // Guards the unauthenticated auth endpoints against brute-force and signup spam.
 //
@@ -134,24 +136,30 @@ export function resetRateLimits(): void {
   callsSinceSweep = 0;
 }
 
-// ─── Client IP ────────────────────────────────────────────────────────────────
+// ─── Client identity ────────────────────────────────────────────────────────────
 
 /**
- * Best-effort client IP. `NextRequest.ip` was removed in Next 15, so we read the
- * proxy headers that Railway/Vercel set.
+ * Apply an IP-keyed policy, or report that the caller's address is not knowable.
  *
- * These headers are client-controllable when the app is not behind a trusted
- * proxy, so this is a speed bump for casual abuse, not an identity guarantee.
+ * `applied: false` means `TRUSTED_PROXY_HOPS` is 0 — no proxy is trusted, so there is no
+ * address to key on. The limit is **skipped**, not applied to a shared fallback bucket:
+ * one bucket for every caller would let a single abuser lock out the whole deployment,
+ * which is a worse outcome than the limit this replaces. Account-keyed limits carry the
+ * protection in that topology.
  */
-export function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    // Left-most entry is the original client; the rest are proxies.
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
+export function rateLimitByIp(
+  prefix: string,
+  request: NextRequest,
+  options: RateLimitOptions,
+): { applied: false } | { applied: true; result: RateLimitResult } {
+  const identity = clientIdentity(request);
+  if (identity.kind === "untrusted") return { applied: false };
+
+  return { applied: true, result: rateLimit(`${prefix}:ip:${identity.value}`, options) };
 }
+
+/** `rateLimit` under a name that reads symmetrically beside `rateLimitByIp`. */
+export const rateLimitByKey = rateLimit;
 
 // ─── Shared policies ──────────────────────────────────────────────────────────
 

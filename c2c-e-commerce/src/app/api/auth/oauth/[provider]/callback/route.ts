@@ -20,10 +20,10 @@ import {
 import type { NormalizedProfile, ProviderName } from "@/lib/oauth/types";
 import {
   OAUTH_CALLBACK_RATE_LIMIT,
-  getClientIp,
-  rateLimit,
+  rateLimitByIp,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
 import { issueRefreshToken } from "@/lib/refresh-token";
 import { jsonError } from "@/lib/response";
@@ -80,15 +80,12 @@ export async function GET(
   { params }: { params: Promise<{ provider: string }> },
 ) {
   try {
-    const limit = rateLimit(
-      `oauth-callback:${getClientIp(request)}`,
-      OAUTH_CALLBACK_RATE_LIMIT,
-    );
-    if (!limit.allowed) {
+    const byIp = rateLimitByIp("oauth-callback", request, OAUTH_CALLBACK_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
       return jsonError(
         "Too many sign-in attempts. Please try again later.",
         429,
-        rateLimitHeaders(limit, OAUTH_CALLBACK_RATE_LIMIT),
+        rateLimitHeaders(byIp.result, OAUTH_CALLBACK_RATE_LIMIT),
       );
     }
 
@@ -268,9 +265,10 @@ async function signIn(
 ): Promise<NextResponse> {
   const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
+  const identity = clientIdentity(request);
   const refresh = await issueRefreshToken(user.id, {
     userAgent: request.headers.get("user-agent"),
-    ip: getClientIp(request),
+    ip: identity.kind === "ip" ? identity.value : null,
   });
 
   // Re-checked here even though initiation already validated it: the cookie is signed,

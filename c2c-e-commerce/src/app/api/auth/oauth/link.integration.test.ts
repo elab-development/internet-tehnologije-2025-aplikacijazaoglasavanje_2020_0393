@@ -185,6 +185,11 @@ describe("C2C-SEC-8 AC3 — the wrong password", () => {
   });
 
   it("is rate limited, so the link screen is not a brute-force surface", async () => {
+    // One hop: the header below is a single address, the shape a trusted proxy
+    // produces. Without a trusted proxy the address is unknowable and the IP limit is
+    // skipped by design (rateLimitByIp), so this test must simulate having one.
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
     await makeUser({ email: MOCK_EMAIL, password: PASSWORD });
     const linkCookie = cookieValue(await callback(), LINK_COOKIE);
 

@@ -2,19 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   rateLimit,
   resetRateLimits,
-  getClientIp,
   LOGIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
 } from "./rate-limit";
-
-// Minimal NextRequest mock — only the headers we read.
-function createMockRequest(headers: Record<string, string> = {}) {
-  return {
-    headers: {
-      get: (name: string) => headers[name.toLowerCase()] ?? null,
-    },
-  } as unknown as import("next/server").NextRequest;
-}
 
 beforeEach(() => {
   resetRateLimits();
@@ -109,42 +99,9 @@ describe("rateLimit window expiry", () => {
   });
 });
 
-// ─── getClientIp ──────────────────────────────────────────────────────────────
-
-describe("getClientIp", () => {
-  it("reads the left-most x-forwarded-for entry", () => {
-    const req = createMockRequest({
-      "x-forwarded-for": "203.0.113.5, 70.41.3.18, 150.172.238.178",
-    });
-    expect(getClientIp(req)).toBe("203.0.113.5");
-  });
-
-  it("trims whitespace", () => {
-    const req = createMockRequest({ "x-forwarded-for": "  203.0.113.5  " });
-    expect(getClientIp(req)).toBe("203.0.113.5");
-  });
-
-  it("falls back to x-real-ip", () => {
-    const req = createMockRequest({ "x-real-ip": "198.51.100.7" });
-    expect(getClientIp(req)).toBe("198.51.100.7");
-  });
-
-  it("prefers x-forwarded-for over x-real-ip", () => {
-    const req = createMockRequest({
-      "x-forwarded-for": "203.0.113.5",
-      "x-real-ip": "198.51.100.7",
-    });
-    expect(getClientIp(req)).toBe("203.0.113.5");
-  });
-
-  it("returns 'unknown' when no proxy headers are present", () => {
-    expect(getClientIp(createMockRequest())).toBe("unknown");
-  });
-
-  it("returns 'unknown' for an empty x-forwarded-for", () => {
-    expect(getClientIp(createMockRequest({ "x-forwarded-for": "" }))).toBe("unknown");
-  });
-});
+// Client-address resolution (trusted-proxy hops, X-Forwarded-For / X-Real-IP parsing) now
+// lives in client-ip.test.ts, alongside `clientIdentity` and `rateLimitByIp`'s consumer of
+// it.
 
 // ─── Policies ─────────────────────────────────────────────────────────────────
 

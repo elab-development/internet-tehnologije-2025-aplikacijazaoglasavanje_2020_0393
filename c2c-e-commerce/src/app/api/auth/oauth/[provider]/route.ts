@@ -9,8 +9,7 @@ import {
 } from "@/lib/oauth/state";
 import {
   OAUTH_INITIATE_RATE_LIMIT,
-  getClientIp,
-  rateLimit,
+  rateLimitByIp,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
 import { jsonError } from "@/lib/response";
@@ -49,15 +48,12 @@ export async function GET(
   { params }: { params: Promise<{ provider: string }> },
 ) {
   try {
-    const limit = rateLimit(
-      `oauth-initiate:${getClientIp(request)}`,
-      OAUTH_INITIATE_RATE_LIMIT,
-    );
-    if (!limit.allowed) {
+    const byIp = rateLimitByIp("oauth-initiate", request, OAUTH_INITIATE_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
       return jsonError(
         "Too many sign-in attempts. Please try again later.",
         429,
-        rateLimitHeaders(limit, OAUTH_INITIATE_RATE_LIMIT),
+        rateLimitHeaders(byIp.result, OAUTH_INITIATE_RATE_LIMIT),
       );
     }
 

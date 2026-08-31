@@ -7,10 +7,10 @@ import { sanitizeUser, signToken } from "@/lib/auth";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
 import {
   REFRESH_RATE_LIMIT,
-  getClientIp,
-  rateLimit,
+  rateLimitByIp,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
 import {
   REFRESH_COOKIE,
   clearedRefreshCookieOptions,
@@ -62,12 +62,12 @@ export async function POST(request: NextRequest) {
   // Loose on purpose (C2C-SEC-11 AC6). Single-flight on the client means one refresh
   // per lapse, but several tabs opening together still burst, and throttling that would
   // break the session recovery this protects.
-  const limit = rateLimit(`refresh:${getClientIp(request)}`, REFRESH_RATE_LIMIT);
-  if (!limit.allowed) {
+  const byIp = rateLimitByIp("refresh", request, REFRESH_RATE_LIMIT);
+  if (byIp.applied && !byIp.result.allowed) {
     return jsonError(
       "Too many refresh attempts. Please try again later.",
       429,
-      rateLimitHeaders(limit, REFRESH_RATE_LIMIT),
+      rateLimitHeaders(byIp.result, REFRESH_RATE_LIMIT),
     );
   }
 
@@ -80,9 +80,10 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const identity = clientIdentity(request);
     const rotated = await rotateRefreshToken(presented, {
       userAgent: request.headers.get("user-agent"),
-      ip: getClientIp(request),
+      ip: identity.kind === "ip" ? identity.value : null,
     });
 
     const [user] = await db

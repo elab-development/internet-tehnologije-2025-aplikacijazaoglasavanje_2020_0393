@@ -18,8 +18,7 @@ import { AuthError, authenticate } from "@/lib/middleware";
 import { parseResourceId } from "@/lib/params";
 import {
   IMAGE_UPLOAD_RATE_LIMIT,
-  getClientIp,
-  rateLimit,
+  rateLimitByKey,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -67,7 +66,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const limit = rateLimit(`images:${getClientIp(request)}`, IMAGE_UPLOAD_RATE_LIMIT);
+    const limit = rateLimitByKey(`images:user:${payload.sub}`, IMAGE_UPLOAD_RATE_LIMIT);
     if (!limit.allowed) {
       return jsonError(
         "Too many image uploads. Please try again later.",

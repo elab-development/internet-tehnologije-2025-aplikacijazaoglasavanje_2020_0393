@@ -12,10 +12,10 @@ import {
 } from "@/lib/oauth/link-token";
 import {
   LINK_RATE_LIMIT,
-  getClientIp,
-  rateLimit,
+  rateLimitByIp,
   rateLimitHeaders,
 } from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
 import { issueRefreshToken } from "@/lib/refresh-token";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -50,12 +50,12 @@ export async function POST(request: NextRequest) {
   try {
     // This endpoint checks a password, so it is a credential-guessing surface and gets
     // the same treatment as login.
-    const limit = rateLimit(`oauth-link:${getClientIp(request)}`, LINK_RATE_LIMIT);
-    if (!limit.allowed) {
+    const byIp = rateLimitByIp("oauth-link", request, LINK_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
       return jsonError(
         "Too many attempts. Please try again later.",
         429,
-        rateLimitHeaders(limit, LINK_RATE_LIMIT),
+        rateLimitHeaders(byIp.result, LINK_RATE_LIMIT),
       );
     }
 
@@ -114,9 +114,10 @@ export async function POST(request: NextRequest) {
     // Proving the password is a full sign-in, so issue the session here rather than
     // bouncing the user to the login form they have just satisfied.
     const accessToken = signToken({ sub: user.id, email: user.email, role: user.role });
+    const identity = clientIdentity(request);
     const refresh = await issueRefreshToken(user.id, {
       userAgent: request.headers.get("user-agent"),
-      ip: getClientIp(request),
+      ip: identity.kind === "ip" ? identity.value : null,
     });
 
     const response = jsonOk({ user: sanitizeUser(user), token: accessToken });

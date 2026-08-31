@@ -4,7 +4,13 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/response";
-import { getClientIp, rateLimit, LOGIN_RATE_LIMIT } from "@/lib/rate-limit";
+import {
+  rateLimitByIp,
+  rateLimitByKey,
+  rateLimitHeaders,
+  LOGIN_RATE_LIMIT,
+} from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
 import { parseRequest, LoginBodySchema } from "@/lib/validation";
 import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
 import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
@@ -79,11 +85,13 @@ export async function POST(request: NextRequest) {
   try {
     // ── Rate limit ────────────────────────────────────────────────────────────
     // Before any DB or bcrypt work, so a flood costs us as little as possible.
-    const limit = rateLimit(`login:${getClientIp(request)}`, LOGIN_RATE_LIMIT);
-    if (!limit.allowed) {
-      return jsonError("Too many login attempts. Please try again later.", 429, {
-        "Retry-After": String(limit.retryAfterSeconds),
-      });
+    const byIp = rateLimitByIp("login", request, LOGIN_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
+      return jsonError(
+        "Too many login attempts. Please try again later.",
+        429,
+        rateLimitHeaders(byIp.result, LOGIN_RATE_LIMIT),
+      );
     }
 
     // ── Validation ────────────────────────────────────────────────────────────
@@ -92,6 +100,21 @@ export async function POST(request: NextRequest) {
     // wouldn't.
     const parsed = await parseRequest(request, LoginBodySchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
+
+    // The key that survives IP rotation, and the only one that applies at all when no
+    // proxy is trusted. Normalised the same way the column is, so `A@x.com` and
+    // `a@x.com` cannot each get their own budget against one account.
+    const byAccount = rateLimitByKey(
+      `login:email:${parsed.data.email.trim().toLowerCase()}`,
+      LOGIN_RATE_LIMIT,
+    );
+    if (!byAccount.allowed) {
+      return jsonError(
+        "Too many login attempts. Please try again later.",
+        429,
+        rateLimitHeaders(byAccount, LOGIN_RATE_LIMIT),
+      );
+    }
 
     const { email, password } = parsed.data;
 
@@ -118,9 +141,10 @@ export async function POST(request: NextRequest) {
     // the web client ignores it and never stores it.
     // A login starts a new token family: this device's sessions are tracked
     // independently, so revoking one does not sign the user out everywhere.
+    const identity = clientIdentity(request);
     const refresh = await issueRefreshToken(user.id, {
       userAgent: request.headers.get("user-agent"),
-      ip: getClientIp(request),
+      ip: identity.kind === "ip" ? identity.value : null,
     });
 
     const response = jsonOk({ user: sanitizeUser(user), token });
