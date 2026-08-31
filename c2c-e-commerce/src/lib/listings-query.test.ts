@@ -169,14 +169,33 @@ describe("search wildcard escaping", () => {
     expect(built.ok).toBe(true);
     expect(built.ok && built.query.search).toBe("50%");
 
-    const query = built.ok ? dialect.sqlToQuery(built.query.where!) : null;
-    expect(query?.params).toContain("%50\\%%");
+    if (!built.ok || !built.query.where) {
+      throw new Error("expected a keyword search to produce a where clause");
+    }
+    const query = dialect.sqlToQuery(built.query.where);
+    expect(query.params).toContain("%50\\%%");
   });
 
   it("treats _ as a literal", () => {
     const built = buildListingQuery(new URLSearchParams({ search: "a_b" }), null);
 
-    const query = built.ok ? dialect.sqlToQuery(built.query.where!) : null;
-    expect(query?.params).toContain("%a\\_b%");
+    if (!built.ok || !built.query.where) {
+      throw new Error("expected a keyword search to produce a where clause");
+    }
+    const query = dialect.sqlToQuery(built.query.where);
+    expect(query.params).toContain("%a\\_b%");
+  });
+
+  // The character class that escapes % and _ must also escape the escape character
+  // itself -- otherwise a literal backslash in the search term would combine with
+  // whatever follows it into an unintended escape sequence at the database.
+  it("treats a literal backslash as itself", () => {
+    const built = buildListingQuery(new URLSearchParams({ search: "a\\b" }), null);
+
+    if (!built.ok || !built.query.where) {
+      throw new Error("expected a keyword search to produce a where clause");
+    }
+    const query = dialect.sqlToQuery(built.query.where);
+    expect(query.params).toContain("%a\\\\b%");
   });
 });
