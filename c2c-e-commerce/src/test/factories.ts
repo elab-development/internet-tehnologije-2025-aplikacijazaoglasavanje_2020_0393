@@ -6,10 +6,12 @@
  * category first. Passing an explicit parent id reuses it rather than creating another,
  * which is what keeps row-counting assertions honest.
  */
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
+import { applyRatingDelta } from "@/db/reviews";
 import { hashPassword } from "@/lib/auth";
 import { RESERVATION_HOURS } from "@/lib/order-lifecycle";
+import { insertDelta } from "@/lib/reviews";
 import {
   categories,
   listingImages,
@@ -306,13 +308,7 @@ export async function makeReview(options: MakeReviewOptions = {}): Promise<Revie
     })
     .returning();
 
-  await db
-    .update(users)
-    .set({
-      reviewCount: sql`${users.reviewCount} + 1`,
-      ratingSum: sql`${users.ratingSum} + ${rating}`,
-    })
-    .where(eq(users.id, order.sellerId));
+  await applyRatingDelta(db, order.sellerId, insertDelta(rating));
 
   return review;
 }
