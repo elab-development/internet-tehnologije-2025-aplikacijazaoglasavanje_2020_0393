@@ -291,8 +291,16 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 
     // Matches `POST /api/orders`'s answer when someone else got there first. The caller
     // is already established as a party to this order, so a real message leaks nothing.
+    //
+    // Also the answer when `requireUnexpired` refused the confirm: `transitionOrder`'s
+    // compare-and-set returns the same null either way, and a lapsed order is still
+    // `pending`, not "moved" -- a seller retrying a stale confirm has to be told the
+    // reservation lapsed, or the message is simply untrue and they never find out why.
     if (!updated) {
-      return jsonError("This order has already moved to another status", 409);
+      return jsonError(
+        "This order has already moved to another status, or its reservation has lapsed",
+        409,
+      );
     }
 
     return jsonOk(updated);

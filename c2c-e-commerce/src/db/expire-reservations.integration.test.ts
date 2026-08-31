@@ -117,3 +117,43 @@ describe("expireReservations", () => {
     expect(result.releasedListings).toBe(1);
   });
 });
+
+describe("expireReservations and sold listings", () => {
+  // `expireReservations` calls `releaseUnheldListings(tx)` unscoped -- it sweeps every
+  // listing in the table, not one. Task 15's scoped pins (`orders.integration.test.ts`)
+  // never exercised that call site: a regression here has a far larger blast radius,
+  // reaches legacy rows the 0015 migration left behind, and nobody triggers it -- it just
+  // happens on a timer.
+  it("releases a sold listing table-wide when its only order is terminal", async () => {
+    const listing = await makeListing({ status: "sold" });
+    await makeOrder({ listingId: listing.id, status: "cancelled" });
+
+    const result = await expireReservations();
+
+    expect(result.releasedListings).toBe(1);
+    expect(await statusOf(listing.id)).toBe("active");
+  });
+
+  it("leaves a sold listing alone table-wide when its order has shipped", async () => {
+    const listing = await makeListing({ status: "sold" });
+    await makeOrder({ listingId: listing.id, status: "shipped" });
+
+    const result = await expireReservations();
+
+    expect(result.releasedListings).toBe(0);
+    expect(await statusOf(listing.id)).toBe("sold");
+  });
+
+  it("leaves a sold listing alone table-wide when its order has completed", async () => {
+    // The regression this pins: the old `IN ('pending', 'confirmed')` liveness test would
+    // have released this listing, re-opening a finished sale for the entire marketplace
+    // the next time the sweep ran -- not just the one listing a route happened to touch.
+    const listing = await makeListing({ status: "sold" });
+    await makeOrder({ listingId: listing.id, status: "completed" });
+
+    const result = await expireReservations();
+
+    expect(result.releasedListings).toBe(0);
+    expect(await statusOf(listing.id)).toBe("sold");
+  });
+});
