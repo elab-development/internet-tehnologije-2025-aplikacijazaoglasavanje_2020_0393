@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { oauthAccounts, users } from "@/db/schema";
 import { AUTH_COOKIE } from "@/lib/cookies";
-import { LINK_COOKIE, sealLinkToken } from "@/lib/oauth/link-token";
+import { LINK_COOKIE, openLinkToken, sealLinkToken } from "@/lib/oauth/link-token";
 import { REFRESH_COOKIE } from "@/lib/refresh-cookies";
 import { resetRateLimits } from "@/lib/rate-limit";
 import { OAUTH_TX_COOKIE, sealTransaction } from "@/lib/oauth/state";
@@ -139,6 +139,35 @@ describe("C2C-SEC-8 AC1 — a verified collision goes to the link screen", () =>
     const db = await getTestDb();
     expect(await db.select().from(oauthAccounts)).toHaveLength(0);
     expect(await db.select().from(users)).toHaveLength(1);
+  });
+});
+
+describe("Task 5 — the collision match is case-insensitive", () => {
+  it("finds the existing account regardless of the provider's casing, and creates no second row", async () => {
+    // The column is lowercased (migration 0019); a provider returning a different casing
+    // for the same address must still resolve to this row. Before the callback's
+    // `resolveUser` normalised `profile.email`, an exact-match `eq(users.email, …)` here
+    // would miss it and fall through to creating a brand-new account under the
+    // differently-cased address -- the second-account bug this task closes, reached
+    // through the collision path instead of plain registration.
+    const existing = await makeUser({ email: MOCK_EMAIL, password: PASSWORD });
+
+    // The mock provider derives the profile email from the code verbatim, so a
+    // differently-cased code stands in for a provider that hands back "ADA@mock-oauth.test"
+    // while the account on file is "ada@mock-oauth.test".
+    const response = await callback("ADA");
+
+    expect(location(response)).toContain("/link-account");
+
+    const linkCookie = cookieValue(response, LINK_COOKIE);
+    const token = openLinkToken(linkCookie);
+    // The collision offered is against *this* existing user, not a lookup miss that
+    // silently seeded a new one.
+    expect(token?.userId).toBe(existing.id);
+
+    const db = await getTestDb();
+    expect(await db.select().from(users)).toHaveLength(1);
+    expect(await db.select().from(oauthAccounts)).toHaveLength(0);
   });
 });
 
