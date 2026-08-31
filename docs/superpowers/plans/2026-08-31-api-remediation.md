@@ -539,7 +539,11 @@ describe("X-Forwarded-For is no longer a fresh-bucket button", () => {
         new NextRequest(`http://test${ENDPOINT}`, {
           method: "POST",
           headers: asClient(`1.2.3.${i}`),
-          body: JSON.stringify(CREDENTIALS),
+          // A different email every iteration. This matters: the account key added in
+          // this same task would otherwise fill on the constant address and answer 429
+          // on its own, so the test would pass whether the IP fix worked or not. Varying
+          // the email leaves the IP key as the only thing that can block.
+          body: JSON.stringify({ ...CREDENTIALS, email: `rotator${i}@example.test` }),
         }),
       );
       last = response.status;
@@ -754,6 +758,19 @@ cd c2c-e-commerce && grep -rn "getClientIp" src/ || echo "no remaining reference
 ```
 
 Expected: `no remaining references`.
+
+- [ ] **Step 5b: Deliberate break**
+
+Temporarily change `clientIdentityFrom`'s index in `src/lib/client-ip.ts` from
+`entries.length - hops` to `0` — the old, vulnerable left-most behaviour. Re-run:
+
+```bash
+cd c2c-e-commerce && npx vitest run --project integration src/app/api/rate-limits.integration.test.ts
+```
+
+Expected: FAIL on **"does not grant a new budget when the caller rotates the header"**, by
+name. If it still passes, the test is not discriminating a working fix from a broken one
+and must be fixed before continuing — that is the whole reason the emails vary. Restore.
 
 - [ ] **Step 6: Run the full suite**
 
