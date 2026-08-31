@@ -15,6 +15,7 @@ import { categories, listings } from "@/db/schema";
 import type { TokenPayload } from "@/lib/auth";
 import { getEmbeddingProvider } from "@/lib/ai/embeddings";
 import { resolveListingVisibility } from "@/lib/listing-visibility";
+import { parseBoundedInt } from "@/lib/params";
 
 /** Additive by decision D8: `keyword` is the default, so existing clients are unaffected. */
 export const SEARCH_MODES = ["keyword", "semantic", "hybrid"] as const;
@@ -127,6 +128,16 @@ export type ListingQuery = {
 };
 
 /**
+ * Escape the characters `LIKE` treats as wildcards.
+ *
+ * Without this a search for "50%" matches every row, and one for "a_b" matches "axb" —
+ * the user's literal text silently becoming a pattern.
+ */
+function escapeLikePattern(term: string): string {
+  return term.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+/**
  * Parses and validates the query string.
  *
  * The visibility block is moved here verbatim from the route: it is a security fix that
@@ -140,11 +151,11 @@ export function buildListingQuery(
   const mode = parseSearchMode(searchParams.get("mode"));
   if (!mode.ok) return { ok: false, error: mode.error };
 
-  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
-  const limit = Math.min(
-    100,
-    Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10) || 20),
-  );
+  const page = parseBoundedInt(searchParams.get("page"), {
+    fallback: 1,
+    max: Number.MAX_SAFE_INTEGER,
+  });
+  const limit = parseBoundedInt(searchParams.get("limit"), { fallback: 20, max: 100 });
 
   const { includeAllStatuses, sellerFilter } = resolveListingVisibility(
     searchParams.get("sellerId"),
@@ -199,7 +210,7 @@ export function buildListingQuery(
   // distance instead, and hybrid runs the two arms independently.
   const keywordConditions =
     search && mode.mode === "keyword"
-      ? [...conditions, ilike(listings.title, `%${search}%`)]
+      ? [...conditions, ilike(listings.title, `%${escapeLikePattern(search)}%`)]
       : conditions;
 
   const sortParam = searchParams.get("sort") ?? "newest";

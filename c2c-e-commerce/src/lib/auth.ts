@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
+import { z } from "zod";
 import type { User } from "@/db/schema";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -82,11 +83,28 @@ export function signToken(payload: TokenPayload): string {
   });
 }
 
+/**
+ * The shape a token must actually carry.
+ *
+ * `jwt.verify` proves the signature and nothing about the payload, so casting its result
+ * to `TokenPayload` asserted a shape no code checked. Every authorization predicate
+ * downstream trusted that cast; it held only because `signToken` is the sole issuer,
+ * which is an assumption rather than a guarantee.
+ */
+const TokenPayloadSchema = z.object({
+  sub: z.number().int().positive(),
+  email: z.string().min(1),
+  role: z.enum(["buyer", "seller", "admin"]),
+});
+
 export function verifyToken(token: string): TokenPayload {
   const decoded = jwt.verify(token, getJwtSecret(), {
     algorithms: [JWT_ALGORITHM],
   });
-  return decoded as unknown as TokenPayload;
+
+  // Throws on a malformed payload, which `authenticate` already turns into a 401 the
+  // same way it handles a bad signature.
+  return TokenPayloadSchema.parse(decoded);
 }
 
 // ─── Sanitize user for API responses ─────────────────────────────────────────

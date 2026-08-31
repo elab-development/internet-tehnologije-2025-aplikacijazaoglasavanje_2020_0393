@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { reviews, users } from "@/db/schema";
-import { parseResourceId } from "@/lib/params";
+import { parseBoundedInt, parseResourceId } from "@/lib/params";
 import { jsonOk, jsonError } from "@/lib/response";
 import { ratingAverage } from "@/lib/reviews";
 
@@ -122,8 +122,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     if (!seller) return jsonError("User not found", 404);
 
-    const page = parsePositive(request.nextUrl.searchParams.get("page"), 1, Number.MAX_SAFE_INTEGER);
-    const limit = parsePositive(request.nextUrl.searchParams.get("limit"), DEFAULT_LIMIT, MAX_LIMIT);
+    const page = parseBoundedInt(request.nextUrl.searchParams.get("page"), {
+      fallback: 1,
+      max: Number.MAX_SAFE_INTEGER,
+    });
+    const limit = parseBoundedInt(request.nextUrl.searchParams.get("limit"), {
+      fallback: DEFAULT_LIMIT,
+      max: MAX_LIMIT,
+    });
 
     const rows = await db
       .select({
@@ -160,16 +166,4 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     console.error("[GET /api/users/[id]/reviews]", err);
     return jsonError("Internal server error");
   }
-}
-
-/**
- * A positive integer from a query parameter, or the fallback.
- *
- * Explicit rather than `parseInt(raw) || fallback`, which only works because 0 is falsy —
- * and which would let `page=-4` through as a negative offset.
- */
-function parsePositive(raw: string | null, fallback: number, max: number): number {
-  const parsed = Number.parseInt(raw ?? "", 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
-  return Math.min(max, parsed);
 }

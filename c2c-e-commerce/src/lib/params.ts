@@ -19,3 +19,26 @@ export function parseResourceId(raw: string | undefined | null): number | null {
   const id = Number(raw.trim());
   return id > 0 && Number.isSafeInteger(id) ? id : null;
 }
+
+/**
+ * Parse a bounded integer from a query parameter.
+ *
+ * Strict for the same reason `parseResourceId` is: the `parseInt(raw, 10) || fallback`
+ * idiom this replaces is prefix-tolerant, so "7abc" became 7, and `|| fallback` also
+ * swallows a legitimate 0. Four call sites had grown their own copy of that idiom, two
+ * of them byte-identical including a comment warning against it.
+ */
+export function parseBoundedInt(
+  raw: string | null | undefined,
+  { fallback, min = 1, max }: { fallback: number; min?: number; max: number },
+): number {
+  if (raw === null || raw === undefined) return fallback;
+
+  const trimmed = raw.trim();
+  if (!/^-?\d+$/.test(trimmed)) return fallback;
+
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value)) return fallback;
+
+  return Math.min(max, Math.max(min, value));
+}

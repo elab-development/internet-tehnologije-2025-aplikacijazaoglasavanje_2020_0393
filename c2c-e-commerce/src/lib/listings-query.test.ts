@@ -5,11 +5,13 @@
  * points straight at the arithmetic rather than at a database round trip.
  */
 import { describe, expect, it } from "vitest";
+import { PgDialect } from "drizzle-orm/pg-core";
 
 import {
   MIN_SIMILARITY,
   RRF_K,
   SEARCH_MODES,
+  buildListingQuery,
   parseSearchMode,
   reciprocalRankFusion,
 } from "./listings-query";
@@ -148,5 +150,33 @@ describe("C2C-AI-7 — the similarity floor", () => {
     // table — and AC4's "a query unrelated to any listing returns nothing" is unachievable.
     expect(MIN_SIMILARITY).toBeGreaterThan(0);
     expect(MIN_SIMILARITY).toBeLessThan(1);
+  });
+});
+
+describe("search wildcard escaping", () => {
+  // A LIKE pattern treats % and _ as wildcards, so a search for "50%" matched every
+  // listing in the marketplace.
+  //
+  // `JSON.stringify` on the raw `where` SQL object throws -- its query chunks carry
+  // the `listings` table object, which closes a circular reference through its own
+  // columns -- so this builds the actual query text through Drizzle's own dialect
+  // (the same code path that runs against Postgres) and asserts on the bound
+  // parameter, which is the one place the escaping can be observed directly.
+  const dialect = new PgDialect();
+
+  it("treats % as a literal", () => {
+    const built = buildListingQuery(new URLSearchParams({ search: "50%" }), null);
+    expect(built.ok).toBe(true);
+    expect(built.ok && built.query.search).toBe("50%");
+
+    const query = built.ok ? dialect.sqlToQuery(built.query.where!) : null;
+    expect(query?.params).toContain("%50\\%%");
+  });
+
+  it("treats _ as a literal", () => {
+    const built = buildListingQuery(new URLSearchParams({ search: "a_b" }), null);
+
+    const query = built.ok ? dialect.sqlToQuery(built.query.where!) : null;
+    expect(query?.params).toContain("%a\\_b%");
   });
 });

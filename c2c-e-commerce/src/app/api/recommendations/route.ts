@@ -13,6 +13,7 @@ import {
 import { listingColumns } from "@/lib/listings-query";
 import { authenticate, AuthError } from "@/lib/middleware";
 import type { OrderStatus } from "@/lib/order-lifecycle";
+import { parseBoundedInt } from "@/lib/params";
 import { jsonError, jsonOk } from "@/lib/response";
 
 /** An interaction with the date the cap sorts on. `at` is why both arms select it. */
@@ -82,7 +83,10 @@ export async function GET(request: NextRequest) {
   try {
     const payload = authenticate(request);
     const userId = payload.sub;
-    const limit = parseLimit(request.nextUrl.searchParams.get("limit"));
+    const limit = parseBoundedInt(request.nextUrl.searchParams.get("limit"), {
+      fallback: DEFAULT_LIMIT,
+      max: MAX_LIMIT,
+    });
 
     // One query per arm rather than one per interaction: AC9's 500 ms budget is generous,
     // but 50 interactions would otherwise be 50 round trips.
@@ -222,11 +226,4 @@ async function popular(base: SQL[], limit: number) {
     .limit(limit);
 
   return rows;
-}
-
-/** Explicit rather than `parseInt(raw) || DEFAULT`, which only works because 0 is falsy. */
-function parseLimit(raw: string | null): number {
-  const parsed = Number.parseInt(raw ?? "", 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LIMIT;
-  return Math.min(MAX_LIMIT, parsed);
 }

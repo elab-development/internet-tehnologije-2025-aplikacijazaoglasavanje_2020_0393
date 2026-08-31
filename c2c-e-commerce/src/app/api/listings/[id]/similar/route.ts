@@ -4,7 +4,7 @@ import { and, eq, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { coverImageIdsFor } from "@/db/listing-images";
 import { listings } from "@/db/schema";
-import { parseResourceId } from "@/lib/params";
+import { parseBoundedInt, parseResourceId } from "@/lib/params";
 import { jsonError, jsonOk } from "@/lib/response";
 
 const DEFAULT_LIMIT = 6;
@@ -107,7 +107,10 @@ export async function GET(
     if (!source.embedding) return jsonOk([]);
 
     const { searchParams } = request.nextUrl;
-    const limit = parseLimit(searchParams.get("limit"));
+    const limit = parseBoundedInt(searchParams.get("limit"), {
+      fallback: DEFAULT_LIMIT,
+      max: MAX_LIMIT,
+    });
     const sameCategoryOnly = searchParams.get("sameCategoryOnly") === "true";
 
     // Asking for the same category when the source has none cannot be satisfied. Returning
@@ -164,14 +167,4 @@ export async function GET(
     console.error("[GET /api/listings/[id]/similar]", err);
     return jsonError("Internal server error", 500);
   }
-}
-
-/**
- * `parseInt(raw) || DEFAULT` would work by accident — it relies on 0 being falsy. Stated
- * explicitly so `limit=0` returning six is a decision rather than a coincidence.
- */
-function parseLimit(raw: string | null): number {
-  const parsed = Number.parseInt(raw ?? "", 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_LIMIT;
-  return Math.min(MAX_LIMIT, parsed);
 }
