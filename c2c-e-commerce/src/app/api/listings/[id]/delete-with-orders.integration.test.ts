@@ -10,14 +10,17 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 
 import { DELETE, GET } from "@/app/api/listings/[id]/route";
 import { db } from "@/db";
-import { listingImages, listings } from "@/db/schema";
+import { claimListing, reservationDeadline } from "@/db/orders";
 import { insertImage } from "@/db/listing-images";
+import * as schema from "@/db/schema";
+import { listingImages, listings, orders } from "@/db/schema";
 import { signToken } from "@/lib/auth";
 import { getStorageProvider } from "@/lib/storage";
-import { resetDb } from "@/test/db";
+import { resetDb, testPool } from "@/test/db";
 import { makeListing, makeOrder, makeUser } from "@/test/factories";
 
 beforeEach(async () => {
@@ -150,6 +153,76 @@ describe("DELETE /api/listings/[id] with order history", () => {
 
     for (const key of storageKeys) {
       expect(await getStorageProvider().get(key)).toBeNull();
+    }
+  });
+});
+
+describe("DELETE /api/listings/[id] races a concurrent reservation", () => {
+  it("withdraws rather than 500s when a claim is still open under its lock", async () => {
+    // Two transactions held open at once, the same technique
+    // src/db/orders.integration.test.ts already uses to prove `transitionOrder`'s row
+    // lock serialises two overlapping updates: a dedicated pool, because the shared one
+    // is what `resetDb` and the factories use, and holding a connection open across a
+    // lock wait would starve them.
+    //
+    // Connection A plays the claim that used to make this listing undeletable: it takes
+    // `claimListing`'s row lock (the same function POST /api/orders calls) and inserts
+    // the order that references the listing, then stays open -- uncommitted -- while the
+    // real DELETE handler runs concurrently on the shared pool.
+    //
+    // Before this task's lock fix, DELETE's unlocked `SELECT` read past A's still-open
+    // claim (READ COMMITTED sees only what's committed, and nothing was yet), decided
+    // there was no referencing order, and its `db.delete(listings)` then had to wait for
+    // A's row lock exactly as here -- only to wake up and hit RESTRICT against the order
+    // A had by then committed, surfacing as the opaque 500. With the fix, it's DELETE's
+    // own `SELECT ... FOR UPDATE` that blocks, and the referencing-order check re-runs
+    // after A commits and finds the order -- so it withdraws instead. The assertions
+    // below hold no matter how the two happen to interleave in real time, which is what
+    // makes this deterministic rather than a lucky `Promise.all`: A's transaction is
+    // provably still open when DELETE is invoked, and Postgres serialises whatever
+    // happens next.
+    const seller = await makeUser({ role: "seller" });
+    const buyer = await makeUser({ role: "buyer" });
+    const sellerToken = signToken({ sub: seller.id, email: seller.email, role: seller.role });
+    const listing = await makeListing({ sellerId: seller.id, status: "active" });
+
+    const pool = await testPool();
+    const a = await pool.connect();
+
+    try {
+      const dbA = drizzle(a, { schema });
+
+      await a.query("BEGIN");
+      const claimed = await claimListing(dbA, listing.id);
+      if (!claimed) throw new Error("test setup: claiming a fresh active listing must succeed");
+
+      await dbA.insert(orders).values({
+        buyerId: buyer.id,
+        sellerId: claimed.sellerId,
+        listingId: claimed.id,
+        price: claimed.price,
+        expiresAt: reservationDeadline(),
+      });
+
+      // Deliberately not awaited yet: DELETE's row lock has to reach the server and
+      // block on A's still-open lock, which is the interleaving under test.
+      const delPromise = DELETE(authed(sellerToken, listing.id), {
+        params: Promise.resolve({ id: String(listing.id) }),
+      });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      await a.query("COMMIT");
+      const delRes = await delPromise;
+
+      expect(delRes.status).toBe(200);
+      const delBody = await delRes.json();
+      expect(delBody.status).toBe("removed");
+
+      const [row] = await db.select().from(listings).where(eq(listings.id, listing.id));
+      expect(row?.status).toBe("removed");
+    } finally {
+      a.release();
+      await pool.end();
     }
   });
 });

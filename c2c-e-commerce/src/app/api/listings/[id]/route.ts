@@ -377,6 +377,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
 // ─── DELETE /api/listings/[id] ────────────────────────────────────────────────
 // Authenticated. Role: owner seller or admin.
 
+/** The listing was deleted between the ownership check and the row lock. */
+class ListingGoneMidDelete extends Error {}
+
 /**
  * @swagger
  * /api/listings/{id}:
@@ -477,20 +480,55 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     // `removed` is outside PUBLIC_LISTING_STATUSES, so this takes the listing out of
     // browse, search and the public detail route -- which is what the seller asked for --
     // while the buyer's order keeps pointing at something real.
-    const [referencingOrder] = await db
-      .select({ id: orders.id })
-      .from(orders)
-      .where(eq(orders.listingId, id))
-      .limit(1);
+    //
+    // The check and the write have to share a lock, not just a transaction. Read
+    // unlocked, this had the same shape as the upload/reorder race Task 9 closed:
+    // `claimListing` (src/db/orders.ts) claims exactly the `active`, order-free listings
+    // that reach the branch below with `UPDATE listings SET status = 'reserved' WHERE
+    // status = 'active'`, so a purchase committing in the gap between this SELECT and the
+    // delete/withdraw write would insert the referencing order *after* this handler had
+    // already decided there wasn't one, and `db.delete(listings)` would hit RESTRICT --
+    // the exact opaque 500 this task exists to close. Same idiom as
+    // listings/[id]/images/route.ts: `SELECT ... FOR UPDATE` on the listing row first, so
+    // `claimListing`'s `UPDATE` either commits before this transaction starts or blocks
+    // until this one commits.
+    const outcome = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ id: listings.id })
+        .from(listings)
+        .where(eq(listings.id, id))
+        .for("update")
+        .limit(1);
 
-    if (referencingOrder) {
-      await db
-        .update(listings)
-        .set({ status: "removed" })
-        .where(eq(listings.id, id));
+      // Deleted between the authorisation read and this lock. A `return` here would still
+      // commit the (otherwise empty) transaction; throwing matches every other early exit
+      // from this callback, none of which may depend on happening to precede a write.
+      if (!locked) throw new ListingGoneMidDelete();
 
-      // The images stay. The row still exists and an order still links to it, so removing
-      // its objects would leave that order pointing at a listing with no photos.
+      const [referencingOrder] = await tx
+        .select({ id: orders.id })
+        .from(orders)
+        .where(eq(orders.listingId, id))
+        .limit(1);
+
+      if (referencingOrder) {
+        await tx.update(listings).set({ status: "removed" }).where(eq(listings.id, id));
+        // The images stay. The row still exists and an order still links to it, so
+        // removing its objects would leave that order pointing at a listing with no
+        // photos.
+        return { kind: "removed" as const };
+      }
+
+      // Read the image rows *before* the delete: migration 0012's ON DELETE CASCADE
+      // takes listing_images (and with it, the only record of the storage keys) down
+      // with the listing row. After the cascade nothing can enumerate the orphaned
+      // objects.
+      const images = await listImagesFor(id, tx);
+      await tx.delete(listings).where(eq(listings.id, id));
+      return { kind: "deleted" as const, images };
+    });
+
+    if (outcome.kind === "removed") {
       return jsonOk({
         message:
           "Listing withdrawn. It is no longer visible to buyers, but it cannot be deleted outright because it has order history.",
@@ -498,16 +536,12 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
       });
     }
 
-    // Read the image rows *before* the delete: migration 0012's ON DELETE CASCADE takes
-    // listing_images (and with it, the only record of the storage keys) down with the
-    // listing row. After the cascade nothing can enumerate the orphaned objects.
-    const images = await listImagesFor(id);
-
-    await db.delete(listings).where(eq(listings.id, id));
-
-    // Row first, object second, same as DELETE /api/listings/[id]/images/[imageId]:
-    // best-effort cleanup that must not fail a request the row-delete already succeeded.
-    for (const image of images) {
+    // Storage I/O runs only after the transaction has committed: it is slow, it is not
+    // transactional, and a failure here must not roll back a delete that already
+    // succeeded. Row first, object second, same as
+    // DELETE /api/listings/[id]/images/[imageId]: best-effort cleanup that must not fail
+    // a request the row-delete already succeeded.
+    for (const image of outcome.images) {
       try {
         await getStorageProvider().delete(image.storageKey);
       } catch (err) {
@@ -520,6 +554,9 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);
+    }
+    if (err instanceof ListingGoneMidDelete) {
+      return jsonError("Listing not found", 404);
     }
     console.error("[DELETE /api/listings/[id]]", err);
     return jsonError("Internal server error", 500);
