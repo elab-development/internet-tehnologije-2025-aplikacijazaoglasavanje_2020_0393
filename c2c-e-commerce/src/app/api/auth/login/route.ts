@@ -152,7 +152,9 @@ export async function POST(request: NextRequest) {
     response.cookies.set(REFRESH_COOKIE, refresh.token, refreshCookieOptions());
     return response;
   } catch (err) {
-    console.error("[POST /api/auth/login]", err);
+    // The message only: the driver's error object carries the bound parameters, and the
+    // submitted email is one of them.
+    console.error("[POST /api/auth/login]", err instanceof Error ? err.message : err);
     return jsonError("Internal server error", 500);
   }
 }

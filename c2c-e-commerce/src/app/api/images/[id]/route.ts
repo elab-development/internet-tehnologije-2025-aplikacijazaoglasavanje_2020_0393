@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { findImageWithListing } from "@/db/listing-images";
 import { canMutateListing } from "@/lib/authorization";
 import { isPubliclyVisible } from "@/lib/listing-visibility";
-import { authenticate } from "@/lib/middleware";
+import { authenticate, AuthError } from "@/lib/middleware";
 import { parseResourceId } from "@/lib/params";
 import { jsonError } from "@/lib/response";
 import { StorageError, getStorageProvider } from "@/lib/storage";
@@ -52,8 +52,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     try {
       const payload = authenticate(request);
       isOwnerOrAdmin = canMutateListing(payload, { sellerId });
-    } catch {
-      // Not authenticated — treat as public visitor.
+    } catch (err) {
+      // Only a failed authentication means "anonymous visitor". A missing JWT_SECRET or
+      // any other fault is a server problem, and swallowing it here served every caller a
+      // logged-out view of a broken deployment.
+      if (!(err instanceof AuthError)) throw err;
     }
 
     // `active`, `reserved` and `sold` are all legitimately published — a purchase must

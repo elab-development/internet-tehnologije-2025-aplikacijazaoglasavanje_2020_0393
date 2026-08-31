@@ -134,8 +134,11 @@ export async function GET(_request: NextRequest, { params }: RouteContext) {
       if (payload.role === "admin" || payload.sub === listing.sellerId) {
         isOwnerOrAdmin = true;
       }
-    } catch {
-      // Not authenticated – treat as public visitor
+    } catch (err) {
+      // Only a failed authentication means "anonymous visitor". A missing JWT_SECRET or
+      // any other fault is a server problem, and swallowing it here served every caller a
+      // logged-out view of a broken deployment.
+      if (!(err instanceof AuthError)) throw err;
     }
 
     // Published listings are readable by anyone; drafts and removed listings only by
