@@ -7,6 +7,22 @@ import type { ListingImageSummary } from "@/types/api";
 /** Mirrors MAX_IMAGES_PER_LISTING in src/db/listing-images.ts. */
 const MAX_IMAGES = 8;
 
+/** Matches the server's limit. The UI promises this in the help text below the input. */
+export const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** Matches the `accept` attribute, which a file picker can override. */
+export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+function rejectionFor(file: File): string | null {
+  if (!(ACCEPTED_IMAGE_TYPES as readonly string[]).includes(file.type)) {
+    return `${file.name} is not a JPEG, PNG or WebP.`;
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return `${file.name} is larger than 5 MB.`;
+  }
+  return null;
+}
+
 export type ImageUploaderProps = {
   /** Files chosen but not yet uploaded. The form owns this list. */
   files: File[];
@@ -31,7 +47,7 @@ export default function ImageUploader({
   onRemoveExisting,
   disabled = false,
 }: ImageUploaderProps) {
-  const [tooMany, setTooMany] = useState(false);
+  const [problems, setProblems] = useState<string[]>([]);
 
   const previews = useMemo(
     () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
@@ -50,13 +66,25 @@ export default function ImageUploader({
     event.target.value = "";
     if (picked.length === 0) return;
 
-    if (total + picked.length > MAX_IMAGES) {
-      setTooMany(true);
+    // Validate before accepting anything. Previously the only check was the server's,
+    // which arrives after the seller has finished the form and waited through the
+    // upload — and then leaves a draft behind.
+    const accepted: File[] = [];
+    const rejected: string[] = [];
+
+    for (const file of picked) {
+      const problem = rejectionFor(file);
+      if (problem) rejected.push(problem);
+      else accepted.push(file);
+    }
+
+    if (total + accepted.length > MAX_IMAGES) {
+      setProblems([`You can attach at most ${MAX_IMAGES} photos to a listing.`]);
       return;
     }
 
-    setTooMany(false);
-    onFilesChange([...files, ...picked]);
+    setProblems(rejected);
+    if (accepted.length > 0) onFilesChange([...files, ...accepted]);
   }
 
   return (
@@ -79,8 +107,12 @@ export default function ImageUploader({
         JPEG, PNG or WebP. Up to {MAX_IMAGES} photos, 5 MB each. The first is the cover.
       </p>
 
-      {tooMany && (
-        <p className="text-xs text-red-600">You can attach at most 8 photos to a listing.</p>
+      {problems.length > 0 && (
+        <ul className="text-xs text-red-600">
+          {problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
       )}
 
       {total > 0 && (
@@ -106,7 +138,7 @@ export default function ImageUploader({
           ))}
 
           {previews.map(({ file, url }) => (
-            <li key={`pending-${file.name}-${file.size}`} className="relative">
+            <li key={url} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={url}

@@ -3,7 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Button, ErrorAlert, InputField } from "@/components/ui";
+import { Button, ErrorAlert, InputField, Modal } from "@/components/ui";
+import { useAnnounce } from "@/components/ui/Announcer";
 import CategorySelect from "@/components/categories/CategorySelect";
 import DescriptionAssistant from "./DescriptionAssistant";
 import ImageUploader from "./ImageUploader";
@@ -76,6 +77,22 @@ export default function ListingForm(props: ListingFormProps) {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  /**
+   * The draft created by a previous, failed submit.
+   *
+   * `created.id` used to be a const inside the try block, so a failure during upload
+   * lost it — and the retry created a second draft, re-uploading the photos that had
+   * already succeeded into it. The orphan sat in the dashboard with no available
+   * action, because drafts could be neither activated nor deleted by their seller.
+   */
+  const [draftId, setDraftId] = useState<number | null>(null);
+
+  // The existing photo pending a confirmed delete. Set by ImageUploader's × button;
+  // the DELETE itself waits for the confirmation dialog below.
+  const [photoPendingRemoval, setPhotoPendingRemoval] = useState<number | null>(null);
+
+  const announce = useAnnounce();
+
   const { data: categoryData } = useFetch<Category[]>("/api/categories");
   const categories = categoryData ?? [];
 
@@ -98,11 +115,14 @@ export default function ListingForm(props: ListingFormProps) {
     setStatus(listing.status);
   }, [listing]);
 
-  async function handleRemoveExisting(imageId: number) {
-    if (props.mode !== "edit") return;
+  async function confirmRemoveExisting() {
+    const imageId = photoPendingRemoval;
+    setPhotoPendingRemoval(null);
+    if (imageId === null || props.mode !== "edit") return;
     try {
       await api.delete(`/api/listings/${props.listingId}/images/${imageId}`);
       setExistingImages((current) => current.filter((image) => image.id !== imageId));
+      announce("Photo removed");
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : "Could not remove that photo");
     }
@@ -150,6 +170,11 @@ export default function ListingForm(props: ListingFormProps) {
 
     setSubmitting(true);
 
+    // Tracks the draft across this call. `draftId` state only updates on the *next*
+    // render, so a catch block reading the state directly would still see `null` on the
+    // very submit that just created the draft — this local mirrors the state instead.
+    let currentDraftId = draftId;
+
     try {
       if (props.mode === "edit") {
         await api.patch(`/api/listings/${props.listingId}`, {
@@ -162,18 +187,29 @@ export default function ListingForm(props: ListingFormProps) {
       } else {
         // Create as a draft, upload against its id, then publish. A failure part-way
         // leaves a draft the seller can finish or delete from their dashboard — no
-        // staging area, and no orphaned uploads.
-        const created = await api.post<CreatedListing>("/api/listings", {
-          ...payload,
-          status: "draft",
-        });
+        // staging area, and no orphaned uploads. `draftId` carries the id across a
+        // retry, so a second submit reuses the same draft instead of creating another
+        // one and re-uploading photos that already succeeded.
+        const listingId =
+          draftId ??
+          (
+            await api.post<CreatedListing>("/api/listings", {
+              ...payload,
+              status: "draft",
+            })
+          ).id;
 
-        await uploadFiles(created.id);
+        currentDraftId = listingId;
+        setDraftId(listingId);
 
-        await api.patch(`/api/listings/${created.id}`, { status: "active" });
+        await uploadFiles(listingId);
 
+        await api.patch(`/api/listings/${listingId}`, { status: "active" });
+
+        currentDraftId = null;
+        setDraftId(null);
         toast.success("Listing created successfully!");
-        router.push(`/listings/${created.id}`);
+        router.push(`/listings/${listingId}`);
       }
     } catch (err: unknown) {
       const msg =
@@ -182,7 +218,11 @@ export default function ListingForm(props: ListingFormProps) {
           : isEdit
             ? "Failed to update listing"
             : "Failed to create listing";
-      setSubmitError(msg);
+      setSubmitError(
+        currentDraftId
+          ? `${msg} Your listing was saved as a draft — press Create listing again to finish it, or delete it from your dashboard.`
+          : msg,
+      );
       toast.error(msg);
     } finally {
       setSubmitting(false);
@@ -261,7 +301,7 @@ export default function ListingForm(props: ListingFormProps) {
           files={files}
           existing={existingImages}
           onFilesChange={setFiles}
-          onRemoveExisting={handleRemoveExisting}
+          onRemoveExisting={setPhotoPendingRemoval}
           disabled={submitting}
         />
 
@@ -312,6 +352,23 @@ export default function ListingForm(props: ListingFormProps) {
           </Button>
         </div>
       </form>
+
+      {photoPendingRemoval !== null && (
+        <Modal isOpen onClose={() => setPhotoPendingRemoval(null)} title="Remove this photo?">
+          <p className="text-sm text-zinc-600">
+            The photo is deleted straight away. Cancelling the form afterwards will not
+            bring it back.
+          </p>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setPhotoPendingRemoval(null)}>
+              Keep photo
+            </Button>
+            <Button variant="danger" onClick={confirmRemoveExisting}>
+              Remove photo
+            </Button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

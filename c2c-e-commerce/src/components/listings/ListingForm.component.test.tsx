@@ -5,16 +5,20 @@
  * the form's state, not about the button, so they are tested here against the real
  * `ListingForm`.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import ListingForm from "./ListingForm";
 
 const auth = vi.hoisted(() => ({ role: "seller" as string | null }));
 const post = vi.hoisted(() => vi.fn());
 const patch = vi.hoisted(() => vi.fn());
+const del = vi.hoisted(() => vi.fn());
 const push = vi.hoisted(() => vi.fn());
+// Holds the edit-mode listing to serve from useFetch, set per-test by renderEditForm.
+// null in every create-mode test, matching the old blanket-null behaviour.
+const fetchState = vi.hoisted(() => ({ listing: null as unknown }));
 
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({
@@ -32,15 +36,22 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/lib/api", () => ({
-  api: { post, get: vi.fn(), patch, delete: vi.fn() },
+  api: { post, get: vi.fn(), patch, delete: del },
 }));
 
 // URL-aware, not blanket: the form calls useFetch twice — once for categories and once,
 // in edit mode, for the listing itself. A mock returning [] for both makes the edit-mode
-// effect read `.description` off an array.
+// effect read `.description` off an array. The listing branch reads `fetchState.listing`
+// so M7's edit-mode test can supply a real listing (with images) without touching the
+// other, create-mode-only tests in this file.
 vi.mock("@/hooks/useFetch", () => ({
   useFetch: (endpoint: string | null) => ({
-    data: endpoint === "/api/categories" ? [] : null,
+    data:
+      endpoint === "/api/categories"
+        ? []
+        : endpoint?.startsWith("/api/listings/")
+          ? fetchState.listing
+          : null,
     setData: vi.fn(),
     loading: false,
     error: null,
@@ -61,11 +72,76 @@ const generated = {
 const descriptionBox = () => screen.getByLabelText(/^description/i);
 const generateButton = () => screen.getByRole("button", { name: /generate with ai/i });
 
+function renderCreateForm() {
+  return render(<ListingForm mode="create" />);
+}
+
+function renderEditForm({ images }: { images: Array<{ id: number }> }) {
+  fetchState.listing = {
+    id: 5,
+    title: "Existing listing",
+    description: "An existing description of the listing.",
+    price: "100",
+    categoryId: null,
+    status: "active",
+    images,
+  };
+  return render(<ListingForm mode="edit" listingId={5} />);
+}
+
+async function fillRequiredFields(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/^title/i), "Mountain bike");
+  await user.type(
+    descriptionBox(),
+    "A well-loved aluminium mountain bike, ready for the trails.",
+  );
+  await user.type(screen.getByLabelText(/^price/i), "220");
+  // A file is required for the H2 tests to reach the upload step at all — an empty
+  // `files` list makes `uploadFiles` a no-op loop that never calls `fetch`.
+  await user.upload(
+    screen.getByLabelText(/photos/i),
+    new File(["x"], "photo-3.jpg", { type: "image/jpeg" }),
+  );
+}
+
+/** Makes `post` resolve `response` for the create-listing endpoint specifically. */
+function mockCreateListing(response: { id: number }) {
+  post.mockImplementation(async (url: string) => {
+    if (url === "/api/listings") return response;
+    return {};
+  });
+}
+
+function createListingCalls() {
+  return post.mock.calls.filter(([url]) => url === "/api/listings");
+}
+
+function deleteCalls() {
+  return del.mock.calls;
+}
+
+/** Makes the image-upload `fetch` (not `api.post`) fail with `message`. */
+function mockUploadFailure(message: string) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: message }),
+    }),
+  );
+}
+
 beforeEach(() => {
   auth.role = "seller";
+  fetchState.listing = null;
   post.mockReset();
   patch.mockReset();
+  del.mockReset();
   push.mockReset();
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("C2C-AI-6 — AC1: the generated text lands in the form", () => {
@@ -201,5 +277,51 @@ describe("C2C-AI-6 — AC7: the form without the button", () => {
 
     await user.type(descriptionBox(), "Typed by hand");
     expect(descriptionBox()).toHaveValue("Typed by hand");
+  });
+});
+
+describe("H2 — a failed upload does not strand or duplicate a draft", () => {
+  it("reuses the same draft when the seller retries", async () => {
+    const user = userEvent.setup();
+    mockCreateListing({ id: 42 });
+    mockUploadFailure("Could not upload photo-3.jpg");
+
+    renderCreateForm();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+    await screen.findByText(/could not upload photo-3\.jpg/i);
+
+    // The retry must not create a second draft. created.id used to be a const inside
+    // the try block, so it was lost the moment the upload threw.
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    expect(createListingCalls()).toHaveLength(1);
+  });
+
+  it("tells the seller the draft is waiting for them", async () => {
+    const user = userEvent.setup();
+    mockCreateListing({ id: 42 });
+    mockUploadFailure("Could not upload photo-3.jpg");
+
+    renderCreateForm();
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    expect(await screen.findByText(/saved as a draft/i)).toBeInTheDocument();
+  });
+});
+
+describe("M7 — deleting a saved photo asks first", () => {
+  it("does not issue the DELETE until confirmed", async () => {
+    const user = userEvent.setup();
+    renderEditForm({ images: [{ id: 9 }] });
+
+    await user.click(await screen.findByRole("button", { name: /remove image 9/i }));
+
+    expect(deleteCalls()).toHaveLength(0);
+    expect(screen.getByRole("dialog", { name: /remove this photo/i })).toBeInTheDocument();
+
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /remove photo/i }));
+    await waitFor(() => expect(deleteCalls()).toHaveLength(1));
   });
 });

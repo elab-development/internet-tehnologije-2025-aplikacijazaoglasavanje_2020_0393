@@ -119,7 +119,7 @@ export default function SellerListingsTab({
               listing={listing}
               formatConverted={formatConverted}
               updating={updatingListingId === listing.id}
-              canDelete={user?.role === "admin"}
+              canDelete={user?.role === "admin" || listing.status === "draft"}
               onOpen={() => router.push(`/listings/${listing.id}/edit`)}
               onToggleStatus={() =>
                 handleStatusToggle(listing.id, listing.status)

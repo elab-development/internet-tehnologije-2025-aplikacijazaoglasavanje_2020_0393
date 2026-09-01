@@ -91,3 +91,61 @@ describe("ImageUploader", () => {
     expect(screen.getByText(/at most 8 photos/i)).toBeInTheDocument();
   });
 });
+
+describe("H3 — files are validated before they are accepted", () => {
+  function oversize() {
+    const file = new File(["x"], "huge.jpg", { type: "image/jpeg" });
+    Object.defineProperty(file, "size", { value: 6 * 1024 * 1024 });
+    return file;
+  }
+
+  it("rejects a file over 5 MB and names it", async () => {
+    const onFilesChange = vi.fn();
+    render(<ImageUploader files={[]} existing={[]} onFilesChange={onFilesChange} onRemoveExisting={vi.fn()} />);
+
+    await userEvent.upload(screen.getByLabelText(/photos/i), oversize());
+
+    // The UI promises "5 MB each" three lines below the input. It has to mean it.
+    expect(await screen.findByText(/huge\.jpg is larger than 5 MB/i)).toBeInTheDocument();
+    expect(onFilesChange).not.toHaveBeenCalled();
+  });
+
+  it("rejects a type the server will not store, whatever the picker allowed", async () => {
+    const onFilesChange = vi.fn();
+    render(<ImageUploader files={[]} existing={[]} onFilesChange={onFilesChange} onRemoveExisting={vi.fn()} />);
+
+    // user-event's default instance filters `.upload()` by the input's `accept`
+    // attribute before it ever fires a change event — the opposite of the real bug,
+    // where an OS "All files" picker ignores `accept` entirely. `applyAccept: false`
+    // is what lets this test reach the component's own validation.
+    const user = userEvent.setup({ applyAccept: false });
+    const pdf = new File(["x"], "invoice.pdf", { type: "application/pdf" });
+    await user.upload(screen.getByLabelText(/photos/i), pdf);
+
+    expect(await screen.findByText(/invoice\.pdf is not a JPEG, PNG or WebP/i)).toBeInTheDocument();
+    expect(onFilesChange).not.toHaveBeenCalled();
+  });
+
+  it("accepts the valid files from a mixed selection and reports only the rejects", async () => {
+    const onFilesChange = vi.fn();
+    render(<ImageUploader files={[]} existing={[]} onFilesChange={onFilesChange} onRemoveExisting={vi.fn()} />);
+
+    const good = new File(["x"], "ok.png", { type: "image/png" });
+    await userEvent.upload(screen.getByLabelText(/photos/i), [good, oversize()]);
+
+    expect(onFilesChange).toHaveBeenCalledWith([good]);
+    expect(await screen.findByText(/huge\.jpg is larger than 5 MB/i)).toBeInTheDocument();
+  });
+});
+
+describe("L23 — two files with the same name and size", () => {
+  it("renders both without a duplicate React key", async () => {
+    const onFilesChange = vi.fn();
+    const a = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+    const b = new File(["x"], "photo.jpg", { type: "image/jpeg" });
+
+    render(<ImageUploader files={[a, b]} existing={[]} onFilesChange={onFilesChange} onRemoveExisting={vi.fn()} />);
+
+    expect(screen.getAllByAltText("photo.jpg")).toHaveLength(2);
+  });
+});
