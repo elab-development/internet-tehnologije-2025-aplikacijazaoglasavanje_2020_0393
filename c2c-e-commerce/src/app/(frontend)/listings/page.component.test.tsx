@@ -2,14 +2,18 @@
  * C2C-AI-8 spec — the smart-search toggle on /listings.
  *
  * `useFetch` is mocked to record every endpoint it is asked for, which is how the mode
- * reaching the API is asserted. AC4's debounce has its own tests against the hook; here it
- * is switched off with a zero delay so the other criteria are not fighting timers.
+ * reaching the API is asserted. AC4's debounce has its own tests against the hook and runs
+ * for real here (see the note by its `vi.mock` — there is none, deliberately).
+ *
+ * H6/M3 below (task 8) also live in this file: search resetting pagination, the min/max
+ * price fields being debounced too, and the decorative "Apply filters" button's removal.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ListingsPage from "./page";
+import { AnnouncerProvider } from "@/components/ui/Announcer";
 
 const nav = vi.hoisted(() => ({
   params: new URLSearchParams(),
@@ -46,11 +50,11 @@ vi.mock("@/hooks/useFetch", () => ({
   },
 }));
 
-// The debounce is AC4's concern and has its own tests; a delay here would only make every
-// other assertion wait.
-vi.mock("@/hooks/useDebouncedValue", () => ({
-  useDebouncedValue: (value: unknown) => value,
-}));
+// The debounce mechanism itself is AC4's concern and has its own tests against the hook
+// directly. It is intentionally left unmocked here (the real 400 ms hook runs): H6 and M3
+// below assert on its effect — page reset and request coalescing — and no other test in
+// this file changes `search`, `minPrice` or `maxPrice` after mount, so the real delay never
+// costs the rest of the suite anything.
 
 const listing = (id: number, title: string, similarity?: number) => ({
   id,
@@ -76,7 +80,28 @@ const page = (rows: ReturnType<typeof listing>[]) => ({
 const listingCalls = () =>
   fetchState.calls.filter((url): url is string => !!url?.startsWith("/api/listings?"));
 
+/**
+ * The mocked `useFetch` above pushes its endpoint on every render, not only when the
+ * endpoint actually changes — unlike the real hook, whose fetch effect is keyed on the
+ * endpoint and only re-fires when it differs from the previous one (`useFetch.ts:99-122`).
+ * Collapsing consecutive repeats restores that semantics, so a debounced value that
+ * resolves to the same query across several re-renders reads as the one request it
+ * actually is, matching what a real request count would show.
+ */
+const requestCount = () =>
+  listingCalls().filter((url, index, all) => index === 0 || url !== all[index - 1]).length;
+
+const lastQuery = () => listingCalls().at(-1) ?? "";
+
 const toggle = () => screen.getByRole("checkbox", { name: /smart search/i });
+
+function renderPage() {
+  return render(
+    <AnnouncerProvider>
+      <ListingsPage />
+    </AnnouncerProvider>,
+  );
+}
 
 beforeEach(() => {
   nav.params = new URLSearchParams();
@@ -251,5 +276,61 @@ describe("C2C-AI-8 — AC7: layout", () => {
     const wrapper = toggle().closest("[data-testid='smart-search-control']");
     expect(wrapper).not.toBeNull();
     expect(wrapper!.className).toMatch(/flex/);
+  });
+});
+
+describe("H6 — searching resets pagination", () => {
+  it("returns to page 1 when the search term changes", async () => {
+    // Two pages available, so "Next" is enabled and page 2 is reachable. The default
+    // fixture reports a single page, which would leave the button disabled.
+    fetchState.listings = { ...page([listing(1, "Aluminium mountain bike")]), totalPages: 2 };
+
+    const user = userEvent.setup();
+    renderPage();
+
+    // Go to page 2, then search. The bug: the query kept page=2 against a result set
+    // with one page, so the grid was empty under a pager reading "Page 2 of 1".
+    await user.click(await screen.findByRole("button", { name: /next/i }));
+    await waitFor(() => expect(lastQuery()).toContain("page=2"));
+
+    await user.type(screen.getByLabelText(/^search/i), "jacket");
+
+    await waitFor(() => expect(lastQuery()).toContain("search=jacket"), { timeout: 2000 });
+    expect(lastQuery()).toContain("page=1");
+  });
+});
+
+describe("M3 — price filters are debounced", () => {
+  it("issues one request for a four-keystroke price, not four", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const before = requestCount();
+
+    await user.type(screen.getByLabelText(/min price/i), "1000");
+
+    // Each keystroke used to produce a request, a router.replace and a skeleton flash.
+    await waitFor(() => expect(lastQuery()).toContain("minPrice=1000"), { timeout: 2000 });
+    expect(requestCount() - before).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("M3 — the decorative submit button is gone", () => {
+  it("offers no Apply filters button, because filters apply live", async () => {
+    renderPage();
+    expect(screen.queryByRole("button", { name: /apply filters/i })).toBeNull();
+    expect(await screen.findByRole("button", { name: /clear/i })).toBeInTheDocument();
+  });
+});
+
+describe("C3 — results are announced", () => {
+  it("announces the result count after a search settles", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(screen.getByLabelText(/^search/i), "jacket");
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(/\d+ listings? found/),
+    );
   });
 });

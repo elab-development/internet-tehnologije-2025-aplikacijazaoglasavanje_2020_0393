@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { useFetch } from "@/hooks/useFetch";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useAnnounce } from "@/components/ui/Announcer";
 import MatchQuality from "@/components/listings/MatchQuality";
 import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
 import { formatPrice } from "@/lib/format";
@@ -63,20 +64,33 @@ function ListingsPageContent() {
   // keystroke. 400 ms of quiet before anything goes out.
   const debouncedSearch = useDebouncedValue(search, 400);
 
+  // Same reasoning as the search debounce: typing "1000" is four keystrokes, and each
+  // one otherwise costs a request, a router.replace and a flip to skeletons.
+  const debouncedMinPrice = useDebouncedValue(minPrice, 400);
+  const debouncedMaxPrice = useDebouncedValue(maxPrice, 400);
+
   const query = useMemo(() => {
     const params = new URLSearchParams();
     params.set("page", String(page));
     params.set("limit", "12");
     if (debouncedSearch.trim()) params.set("search", debouncedSearch.trim());
     if (categoryId !== null) params.set("categoryId", String(categoryId));
-    if (minPrice) params.set("minPrice", minPrice);
-    if (maxPrice) params.set("maxPrice", maxPrice);
+    if (debouncedMinPrice) params.set("minPrice", debouncedMinPrice);
+    if (debouncedMaxPrice) params.set("maxPrice", debouncedMaxPrice);
     if (sort) params.set("sort", sort);
     // Only written when on: a keyword-mode URL stays byte-identical to what it was before
     // this story, so shared links keep working unchanged.
     if (smartSearch) params.set("mode", "hybrid");
     return params.toString();
-  }, [page, debouncedSearch, categoryId, minPrice, maxPrice, sort, smartSearch]);
+  }, [
+    page,
+    debouncedSearch,
+    categoryId,
+    debouncedMinPrice,
+    debouncedMaxPrice,
+    sort,
+    smartSearch,
+  ]);
 
   // Keep the address bar in sync so filters survive a reload or a shared link.
   useEffect(() => {
@@ -87,15 +101,25 @@ function ListingsPageContent() {
     `/api/listings?${query}`,
   );
 
+  const announce = useAnnounce();
+
+  // A screen reader user types a search term and the page silently replaces its
+  // contents. Announce the count once the request settles.
+  useEffect(() => {
+    if (loading || !data) return;
+    announce(`${data.total} ${data.total === 1 ? "listing" : "listings"} found`);
+  }, [loading, data, announce]);
+
   // Stale results are kept under the error banner rather than cleared. With a debounced
   // search firing while someone is still typing, blanking the grid on a transient failure
   // is worse than showing slightly old rows and saying so (AI-8 AC5).
   const listings = data?.data ?? [];
   const totalPages = Math.max(1, data?.totalPages || 1);
 
+  // Filters apply as they change; there is nothing to submit. This exists so pressing
+  // Enter in the search field does not reload the page.
   function handleFiltersSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPage(1);
   }
 
   function clearFilters() {
@@ -124,7 +148,12 @@ function ListingsPageContent() {
                 : "Search by title"
             }
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              // Every sibling control does this. Search did not, and it is the one
+              // that feeds a debounce, so a stale page number outlived the query.
+              setPage(1);
+            }}
             className="lg:col-span-2"
           />
 
@@ -166,7 +195,10 @@ function ListingsPageContent() {
             type="number"
             placeholder="0"
             value={minPrice}
-            onChange={(event) => setMinPrice(event.target.value)}
+            onChange={(event) => {
+              setMinPrice(event.target.value);
+              setPage(1);
+            }}
             min={0}
             step={0.01}
           />
@@ -176,7 +208,10 @@ function ListingsPageContent() {
             type="number"
             placeholder="1000"
             value={maxPrice}
-            onChange={(event) => setMaxPrice(event.target.value)}
+            onChange={(event) => {
+              setMaxPrice(event.target.value);
+              setPage(1);
+            }}
             min={0}
             step={0.01}
           />
@@ -204,7 +239,6 @@ function ListingsPageContent() {
           </div>
 
           <div className="flex items-end gap-2 md:col-span-2 lg:col-span-6">
-            <Button type="submit">Apply filters</Button>
             <Button type="button" variant="secondary" onClick={clearFilters}>
               Clear
             </Button>
