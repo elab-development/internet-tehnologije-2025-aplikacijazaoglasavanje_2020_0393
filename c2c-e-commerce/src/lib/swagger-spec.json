@@ -408,7 +408,7 @@
             }
           },
           "429": {
-            "description": "Too many login attempts from this IP",
+            "description": "Too many login attempts from this IP, or too many *failed* attempts against this email address. A correct password is never refused with a 429.\n",
             "headers": {
               "Retry-After": {
                 "schema": {
@@ -889,7 +889,7 @@
             }
           },
           "429": {
-            "description": "Too many registration attempts from this IP",
+            "description": "Too many registration attempts from this IP, or too many *rejected* attempts against this email address. A registration that would succeed is never refused with a 429.\n",
             "headers": {
               "Retry-After": {
                 "schema": {
