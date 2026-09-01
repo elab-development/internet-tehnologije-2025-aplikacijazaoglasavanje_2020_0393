@@ -27,15 +27,21 @@ const NOOP: Announce = () => {};
 export function AnnouncerProvider({ children }: { children: React.ReactNode }) {
   const [polite, setPolite] = useState("");
   const [assertive, setAssertive] = useState("");
-  // Identical text is not a DOM change, so a repeated message would be silent. A
-  // zero-width space alternates on each announcement to force one.
-  const parity = useRef(false);
+  // One parity flag per region. A single shared flag was wrong: an odd number of
+  // intervening calls to the OTHER region returns this one's flag to its previous
+  // value, so the same message re-renders byte-identical and React skips the update —
+  // silently dropping the announcement the suffix exists to guarantee.
+  const politeParity = useRef(false);
+  const assertiveParity = useRef(false);
 
   const announce = useCallback<Announce>((message, options) => {
-    parity.current = !parity.current;
-    const text = parity.current ? `${message}\u200B` : message;
-    if (options?.assertive) setAssertive(text);
-    else setPolite(text);
+    if (options?.assertive) {
+      assertiveParity.current = !assertiveParity.current;
+      setAssertive(assertiveParity.current ? `${message}\u200B` : message);
+    } else {
+      politeParity.current = !politeParity.current;
+      setPolite(politeParity.current ? `${message}\u200B` : message);
+    }
   }, []);
 
   return (

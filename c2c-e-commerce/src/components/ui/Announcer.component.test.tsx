@@ -74,6 +74,21 @@ describe("Announcer", () => {
     expect(screen.getByRole("status")).toHaveClass("sr-only");
     expect(screen.getByRole("alert")).toHaveClass("sr-only");
   });
+
+  it("re-announces a repeated polite message even after an assertive one in between", async () => {
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: "polite" }));
+    const first = screen.getByRole("status").textContent;
+
+    await userEvent.click(screen.getByRole("button", { name: "assertive" }));
+    await userEvent.click(screen.getByRole("button", { name: "again" }));
+
+    // With one shared parity flag the intervening assertive call returns the polite
+    // flag to its prior value, so this rendered byte-identical to `first` and the
+    // announcement was silently dropped.
+    expect(screen.getByRole("status").textContent).not.toBe(first);
+    expect(screen.getByRole("status")).toHaveTextContent("12 listings found");
+  });
 });
 
 describe("useAnnounce outside a provider", () => {
