@@ -7,22 +7,24 @@ import { forwardRef } from "react";
 type Variant = "primary" | "secondary" | "danger" | "ghost";
 type Size = "sm" | "md" | "lg";
 
-export type ButtonProps = {
+export type ButtonProps = Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  "type"
+> & {
   variant?: Variant;
   size?: Size;
   icon?: React.ReactNode;
   loading?: boolean;
-  disabled?: boolean;
-  onClick?: React.MouseEventHandler<HTMLButtonElement>;
-  type?: "button" | "submit" | "reset";
-  children?: React.ReactNode;
-  className?: string;
   fullWidth?: boolean;
   /**
    * Native tooltip. A disabled button that does not say why it is disabled is the
    * frustrating kind — C2C-AI-6 AC5 requires the explanation.
+   *
+   * Declared explicitly rather than inherited only so this note survives.
    */
   title?: string;
+  /** Narrowed from the native `string` so a typo cannot silently become a submit. */
+  type?: "button" | "submit" | "reset";
 };
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -53,12 +55,11 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
     icon,
     loading = false,
     disabled = false,
-    onClick,
     type = "button",
     children,
     className = "",
     fullWidth = false,
-    title,
+    ...rest
   },
   ref
 ) {
@@ -66,11 +67,10 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
 
   return (
     <button
+      {...rest}
       ref={ref}
       type={type}
       disabled={isDisabled}
-      onClick={onClick}
-      title={title}
       className={[
         "inline-flex items-center justify-center rounded-lg font-medium",
         "transition-colors duration-150",
