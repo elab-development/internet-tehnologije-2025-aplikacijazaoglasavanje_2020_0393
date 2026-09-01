@@ -9,6 +9,7 @@
  * silent on error.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { useLayoutEffect } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import toast from "react-hot-toast";
 
@@ -20,6 +21,13 @@ vi.mock("react-hot-toast", () => ({
 
 let resolvers: Array<(value: unknown) => void>;
 
+/** Every COMMITTED render's (data, loading) pair, in order. Pushed from a layout
+ *  effect rather than during render: a render-phase setState makes React discard that
+ *  pass and re-invoke the component, but the discarded pass still runs its body, so a
+ *  bare push during render can't tell a committed frame from a discarded-and-retried
+ *  one. useLayoutEffect fires only for renders that actually committed. */
+let renderLog: string[];
+
 vi.mock("@/lib/api", () => ({
   api: {
     get: vi.fn(
@@ -30,6 +38,7 @@ vi.mock("@/lib/api", () => ({
 
 beforeEach(() => {
   resolvers = [];
+  renderLog = [];
   vi.clearAllMocks();
 });
 
@@ -42,6 +51,15 @@ function Probe({ endpoint, silent }: { endpoint: string; silent?: boolean }) {
     endpoint,
     silent ? { onError: "silent" } : undefined,
   );
+
+  // Logged from a layout effect, not during render. A render pass discarded by a
+  // render-phase setState still executes its body, so a bare push cannot tell a
+  // committed frame from a discarded-and-retried one. useLayoutEffect fires only
+  // for renders that actually committed — which is what "a painted frame" means.
+  useLayoutEffect(() => {
+    renderLog.push(`${data?.title ?? "none"}|${loading}`);
+  });
+
   return (
     <div>
       <span data-testid="loading">{String(loading)}</span>
@@ -56,14 +74,16 @@ describe("useFetch — data and loading can never disagree", () => {
 
     resolvers.shift()!({ title: "First listing" });
     await waitFor(() => expect(screen.getByTestId("title")).toHaveTextContent("First listing"));
-    expect(screen.getByTestId("loading")).toHaveTextContent("false");
 
-    // Switch endpoints. The stale frame this pins: data still "First listing" while
-    // loading already reads false, at the URL of listing 2.
+    // Only the renders caused by the endpoint switch matter.
+    renderLog = [];
     rerender(<Probe endpoint="/api/listings/2" />);
 
-    expect(screen.getByTestId("title")).toHaveTextContent("none");
-    expect(screen.getByTestId("loading")).toHaveTextContent("true");
+    // With the reset in render, the very first render at the new endpoint is already
+    // cleared. With the reset in an effect, React renders once with listing 1's data
+    // and loading:false before the effect runs — that render is the bug.
+    expect(renderLog[0]).toBe("none|true");
+    expect(renderLog).not.toContain("First listing|false");
   });
 });
 
