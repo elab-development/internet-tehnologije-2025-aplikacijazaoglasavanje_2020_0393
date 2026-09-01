@@ -111,6 +111,24 @@ function renderPage() {
   );
 }
 
+/**
+ * Finds text in the page proper, excluding the announcer's live regions.
+ *
+ * AnnouncerProvider deliberately renders a copy of every announced message into an
+ * aria-live region, so any text that is both displayed and announced now matches twice.
+ * Filtering on aria-live is structural; matching on the announcer's zero-width-space
+ * suffix is not, because that suffix alternates per call and is absent on every second
+ * announcement to the same region.
+ */
+function getInPage(text: string | RegExp): HTMLElement {
+  const matches = screen
+    .getAllByText(text)
+    .filter((element) => element.closest("[aria-live]") === null);
+
+  expect(matches).toHaveLength(1);
+  return matches[0];
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   currentListing = BASE_LISTING;
@@ -176,16 +194,17 @@ describe("H5 — the page reflects the purchase that just happened", () => {
     await user.click(await screen.findByRole("button", { name: "Buy Now" }));
     await user.click(screen.getByRole("button", { name: /confirm/i }));
 
+    // Wait for the state update to settle before the synchronous `getInPage` lookup.
+    await screen.findByRole("button", { name: /refresh listing/i });
+
     // The server's prose reaches the user intact, and the page offers a way forward
     // rather than leaving them to press a button that can only 409 again.
     //
-    // Exact match, not a substring regex: `AnnouncerProvider`'s own assertive live
-    // region (also `role="alert"`) carries this same message, appended with a
-    // zero-width space marking it as a fresh announcement (see Announcer.tsx). A
-    // non-anchored regex matches both elements and is ambiguous; the ErrorAlert's
-    // rendering of the message has no such suffix, so an exact match is unique to it.
+    // `getInPage`, not a bare `findByText`: `AnnouncerProvider`'s own assertive live
+    // region (also `role="alert"`) carries this same message, so a substring regex
+    // matches both. Scoping past `[aria-live]` is what disambiguates them.
     expect(
-      await screen.findByText("This listing has just been reserved by another buyer"),
+      getInPage(/has just been reserved by another buyer/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /refresh listing/i })).toBeInTheDocument();
   });
@@ -199,7 +218,14 @@ describe("H5 — the page reflects the purchase that just happened", () => {
     await user.click(await screen.findByRole("button", { name: "Buy Now" }));
     await user.click(screen.getByRole("button", { name: /confirm/i }));
 
-    expect(await screen.findByText("Something went wrong")).toBeInTheDocument();
+    // Wait for the state update to settle before the synchronous `getInPage` lookup.
+    // `getAllByText` (not `findByText`/`getByText`) so this doesn't itself throw on the
+    // announcer's duplicate once it lands.
+    await waitFor(() =>
+      expect(screen.getAllByText(/something went wrong/i).length).toBeGreaterThan(0),
+    );
+
+    expect(getInPage(/something went wrong/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /refresh listing/i })).toBeNull();
   });
 });
