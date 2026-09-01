@@ -201,8 +201,10 @@ describe("the threat model describes the limiter that exists", () => {
   it("documents that IP-keyed limits are skipped, not shared, at zero trusted hops", () => {
     // The alternative -- a shared fallback bucket -- would let one abuser lock out every
     // caller, which is the actual reason the limit is skipped rather than degraded.
+    // Pinned as one phrase, not just the words "skipped entirely" in isolation: "are NOT
+    // skipped entirely" would still satisfy a bare substring match on that fragment.
     const t7 = sectionOf(threatModel, "T7");
-    expect(t7).toMatch(/skipped entirely/i);
+    expect(t7).toMatch(phrase("IP-keyed limits are skipped entirely"));
   });
 
   it("no longer lists the password-change gap as a limitation", () => {
@@ -210,15 +212,26 @@ describe("the threat model describes the limiter that exists", () => {
     expect(sectionOf(threatModel, "4")).not.toMatch(/refresh famil(y|ies) .* remain/i);
   });
 
-  it("lists CSP as partially applied rather than absent", () => {
-    expect(sectionOf(threatModel, "4")).toMatch(/frame-ancestors/);
+  it("lists CSP as partially applied, tied to a stated 'applied' status", () => {
+    // A bare /frame-ancestors/ match would also pass "frame-ancestors is NOT applied" --
+    // require the term and an unnegated "applied" verdict in the same table row.
+    const row = rowFor(threatModel, "Content-Security-Policy");
+    expect(row).toMatch(/frame-ancestors/);
+    expect(row).toMatch(phrase("frame-ancestors 'none'` is applied"));
+    expect(row).not.toMatch(/frame-ancestors[^|]*\bnot\s+(?:yet\s+)?applied\b/i);
   });
 
   it("records HSTS, Referrer-Policy and X-Content-Type-Options as applied", () => {
-    const section = sectionOf(threatModel, "4");
-    expect(section).toMatch(/Strict-Transport-Security|HSTS/);
-    expect(section).toMatch(/Referrer-Policy/);
-    expect(section).toMatch(/X-Content-Type-Options/);
+    // Same row as the CSP claim above (one markdown table line). Requiring the shared
+    // "are already applied on every route" verdict alongside all three names means a
+    // rewrite that carves one header out into its own "is not yet applied" clause changes
+    // this same row and trips the negative guard below, whichever header it targets.
+    const row = rowFor(threatModel, "Content-Security-Policy");
+    expect(row).toMatch(/HSTS|Strict-Transport-Security/i);
+    expect(row).toMatch(/Referrer-Policy/);
+    expect(row).toMatch(/X-Content-Type-Options/);
+    expect(row).toMatch(phrase("are already applied on every route"));
+    expect(row).not.toMatch(/not\s+(?:yet\s+)?applied\b|isn't\s+applied|is\s+not\s+applied/i);
   });
 });
 
@@ -233,24 +246,40 @@ describe("the threat model's T4 does not repeat the disproven hyphen claim", () 
   });
 
   it("names the actual gap the fixed predicate closed", () => {
-    expect(t4).toMatch(/C1/);
+    // Bare /C1/ and /U\+0080/i checks would also pass a rewrite claiming the C1 block was
+    // *already* covered and so was never the gap. Pin the verdict, not just the term.
+    expect(t4).toMatch(phrase("gap was the C1 block"));
     expect(t4).toMatch(/U\+0080/i);
   });
 });
 
 describe("the RBAC matrix matches the routes", () => {
   it("does not describe /similar as unconditionally public", () => {
+    // A bare /owner|admin/i match would also pass "no owner-or-admin restriction, fully
+    // public" -- pin the clause that ties the restriction to the images route it mirrors.
     const row = rowFor(rbacMatrix, "/similar");
-    expect(row).toMatch(/owner|admin/i);
+    expect(row).toMatch(phrase("owner-or-admin, matching `GET /api/images/{id}`"));
   });
 
   it("records that /orders/seller projects the buyer's email", () => {
-    expect(rowFor(rbacMatrix, "/orders/seller")).toMatch(/buyerEmail/);
+    // A bare /buyerEmail/ match would also pass "never includes buyerEmail" -- pin the
+    // verb next to the field name so a negated rewrite breaks the match.
+    expect(rowFor(rbacMatrix, "/orders/seller")).toMatch(
+      phrase("projects the buyer's `buyerEmail`"),
+    );
   });
 
-  it("records the migration 0013 data loss as a lesson", () => {
-    expect(rbacMatrix).toMatch(/0013/);
-    expect(rbacMatrix).toMatch(/0015|0017|0019/);
+  it("records the migration 0013 data loss as a lesson, not merely the numbers", () => {
+    // Citing "0013" alongside "0015|0017|0019" passes even for a garbled rewrite that
+    // claims 0013 also raised a notice before deleting. Pin the specific contrast: that
+    // 0013 did none of what each later migration is credited with doing.
+    expect(rbacMatrix).toMatch(phrase("`0013` did none of that"));
+    expect(rbacMatrix).toMatch(phrase("no check, no count"));
+    expect(rbacMatrix).toMatch(phrase("`0015_orders_collapse.sql` refuses to run"));
+    expect(rbacMatrix).toMatch(
+      phrase("`0017_reviews_reanchor.sql` announces the row count with `RAISE NOTICE`"),
+    );
+    expect(rbacMatrix).toMatch(phrase("`0019_users_email_lower.sql` refuses"));
   });
 });
 
@@ -284,6 +313,22 @@ function sectionOf(markdown: string, id: string): string {
 /** The one row of a markdown table (matrix or limitations) whose text mentions `needle`. */
 function rowFor(markdown: string, needle: string): string {
   return markdown.split("\n").find((l) => l.startsWith("| ") && l.includes(needle)) ?? "";
+}
+
+/**
+ * A case-insensitive regex that matches `text` literally, except any run of whitespace in
+ * `text` also matches a markdown line wrap (an ordinary newline, or a newline followed by
+ * the couple of spaces a bullet's continuation line is indented with).
+ *
+ * Pinning an exact multi-word claim -- rather than checking each significant word is
+ * present somewhere in the section -- is what makes these assertions fail on an inverted
+ * or garbled rewrite instead of passing on a substring match alone.
+ */
+function phrase(text: string): RegExp {
+  const escaped = text
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(/\s+/g, "\\s+");
+  return new RegExp(escaped, "i");
 }
 
 /** Depth-first search for a file by basename. */
