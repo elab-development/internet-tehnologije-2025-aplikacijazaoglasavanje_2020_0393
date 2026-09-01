@@ -15,10 +15,11 @@ import {
   Modal,
   StatusBadge,
 } from "@/components/ui";
+import { useAnnounce } from "@/components/ui/Announcer";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
-import { api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { formatPrice } from "@/lib/format";
 import type {
   Category,
@@ -38,6 +39,7 @@ export default function ListingDetailPage() {
     data: listing,
     loading,
     error: loadError,
+    refetch: refetchListing,
   } = useFetch<ListingDetail>(hasValidId ? `/api/listings/${listingId}` : null);
 
   const { data: categoryData } = useFetch<Category[]>("/api/categories");
@@ -49,6 +51,11 @@ export default function ListingDetailPage() {
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
+
+  // Set when the server tells us the world changed underneath this page. The Buy
+  // button cannot succeed again until the listing is refetched, so say so.
+  const [isStale, setIsStale] = useState(false);
+  const announce = useAnnounce();
 
   const conversion = useCurrencyConversion();
   const { formatConverted } = conversion;
@@ -79,11 +86,25 @@ export default function ListingDetailPage() {
 
       setOrderSuccessId(order.id);
       setIsBuyModalOpen(false);
+      setIsStale(false);
       toast.success(`Order #${order.id} placed successfully!`);
+      announce(`Order ${order.id} placed successfully`);
+
+      // The status this page is rendering was fetched before the mutation. Without
+      // this the success banner sits above a still-live Buy Now button.
+      refetchListing();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create order";
       setActionError(msg);
       toast.error(msg);
+      announce(msg, { assertive: true });
+
+      // 409 means the world changed, not that the request was malformed. Retrying the
+      // same click can only produce the same answer; only a reload can help.
+      if (err instanceof ApiError && err.status === 409) {
+        setIsStale(true);
+        setIsBuyModalOpen(false);
+      }
     } finally {
       setBuying(false);
     }
@@ -150,10 +171,22 @@ export default function ListingDetailPage() {
           <CurrencySelect conversion={conversion} className="sm:max-w-xs" />
 
           <div className="flex flex-wrap items-center gap-2 pt-2">
-            {isForSale ? (
+            {isForSale && !isStale ? (
               <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
             ) : (
               <StatusBadge status={listing.status} kind="listing" size="md" />
+            )}
+            {isStale && (
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  setIsStale(false);
+                  setActionError(null);
+                  refetchListing();
+                }}
+              >
+                Refresh listing
+              </Button>
             )}
             {orderSuccessId && (
               <Button
