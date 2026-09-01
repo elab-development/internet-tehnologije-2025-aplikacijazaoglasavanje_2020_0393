@@ -56,4 +56,14 @@ describe("Button — the behaviour 37 call sites already rely on", () => {
       "Add at least one photo first",
     );
   });
+
+  it("ignores a caller trying to re-enable a loading button", async () => {
+    const onClick = vi.fn();
+    render(<Button loading disabled={false} onClick={onClick}>Save</Button>);
+
+    const button = screen.getByRole("button");
+    expect(button).toBeDisabled();
+    await userEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
 });
