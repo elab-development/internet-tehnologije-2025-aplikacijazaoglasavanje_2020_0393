@@ -275,7 +275,63 @@ describe("X-Forwarded-For is no longer a fresh-bucket button", () => {
   });
 });
 
+/**
+ * The account key stops an IP-rotating guesser, but the first version of it counted every
+ * attempt *before* the password was checked and never cleared on success. Ten garbage
+ * POSTs against a known address then answered 429 to the address's real owner, from any
+ * IP, holding the correct password -- an unauthenticated denial of service against any
+ * account whose email an attacker knows.
+ *
+ * The property these cases pin: a correct password is never rate-limited. Counting only
+ * failures is not enough on its own, because the attacker's failures are exactly what
+ * fills the bucket -- the credentials have to be checked *first*, and the bucket consulted
+ * only once they are known to be wrong.
+ */
 describe("per-account login limit", () => {
+  const CORRECT = "correct-horse-battery";
+
+  async function login(email: string, password: string) {
+    return POST(
+      new NextRequest("http://test/api/auth/login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      }),
+    );
+  }
+
+  it("lets the victim in with the correct password after an attacker empties the bucket", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    const victim = await makeUser({ password: CORRECT });
+
+    // The attacker, from anywhere, against an address they merely know.
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit + 2; i += 1) {
+      expect((await login(victim.email, `guess-${i}`)).status).not.toBe(200);
+    }
+
+    // The owner. Their password is right, so no bucket may stand between them and it.
+    expect((await login(victim.email, CORRECT)).status).toBe(200);
+  });
+
+  it("clears the account bucket on a successful login", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    const victim = await makeUser({ password: CORRECT });
+
+    // Nine failures: one short of the limit, so the tenth attempt is still permitted.
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit - 1; i += 1) {
+      await login(victim.email, `guess-${i}`);
+    }
+    expect((await login(victim.email, CORRECT)).status).toBe(200);
+
+    // Had the success left the nine hits in place, this run would 429 on its second
+    // attempt rather than answering 401 the whole way.
+    for (let i = 0; i < LOGIN_RATE_LIMIT.limit - 1; i += 1) {
+      expect((await login(victim.email, `guess-again-${i}`)).status).toBe(401);
+    }
+  });
+
   it("blocks a password-guessing run even when the address is unknowable", async () => {
     process.env.TRUSTED_PROXY_HOPS = "0";
 

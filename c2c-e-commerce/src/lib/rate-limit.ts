@@ -65,6 +65,64 @@ export function rateLimit(
   key: string,
   { limit, windowMs }: RateLimitOptions
 ): RateLimitResult {
+  const now = tick();
+
+  // Drop hits that have aged out of *this* policy's window.
+  const hits = liveHits(key, windowMs, now);
+
+  if (hits.length >= limit) {
+    buckets.set(key, { windowMs, hits });
+    return blocked(hits, windowMs, now);
+  }
+
+  hits.push(now);
+  buckets.set(key, { windowMs, hits });
+
+  return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
+}
+
+/**
+ * Record a hit against `key` and report the caller's standing *afterwards*.
+ *
+ * The difference from `rateLimit` is who decides: `rateLimit` answers "may this request
+ * proceed?" and so must be consulted *before* the work happens. This one is for a caller
+ * that has already decided — it is booking a failure that occurred — and wants to know
+ * whether the key is now spent. The hit is always recorded, including the one that tips
+ * the bucket over, so `allowed: false` here means "this key has now reached its limit",
+ * not "this call was refused".
+ *
+ * ```ts
+ * const spent = recordRateLimitHit(`login:email:${email}`, LOGIN_RATE_LIMIT);
+ * if (!spent.allowed) return jsonError("Too many attempts", 429, ...);
+ * ```
+ */
+export function recordRateLimitHit(
+  key: string,
+  { limit, windowMs }: RateLimitOptions,
+): RateLimitResult {
+  const now = tick();
+
+  const hits = liveHits(key, windowMs, now);
+  hits.push(now);
+  buckets.set(key, { windowMs, hits });
+
+  if (hits.length >= limit) return blocked(hits, windowMs, now);
+
+  return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
+}
+
+/**
+ * Drop `key`'s bucket outright, restoring its full budget immediately.
+ *
+ * For the moment a caller proves it was never the abuser the bucket was filling up
+ * against — a correct password on an account key that a failed run had loaded up.
+ */
+export function clearRateLimit(key: string): void {
+  buckets.delete(key);
+}
+
+/** `Date.now()`, plus the periodic sweep every entry point owes the Map. */
+function tick(): number {
   const now = Date.now();
 
   if (++callsSinceSweep >= SWEEP_EVERY_N_CALLS) {
@@ -72,23 +130,21 @@ export function rateLimit(
     sweep(now);
   }
 
-  // Drop hits that have aged out of *this* policy's window.
-  const hits = (buckets.get(key)?.hits ?? []).filter((t) => now - t < windowMs);
+  return now;
+}
 
-  if (hits.length >= limit) {
-    buckets.set(key, { windowMs, hits });
-    const oldest = hits[0];
-    return {
-      allowed: false,
-      remaining: 0,
-      retryAfterSeconds: Math.max(1, Math.ceil((windowMs - (now - oldest)) / 1000)),
-    };
-  }
+/** `key`'s hits that are still inside `windowMs`, as a fresh array safe to push onto. */
+function liveHits(key: string, windowMs: number, now: number): number[] {
+  return (buckets.get(key)?.hits ?? []).filter((t) => now - t < windowMs);
+}
 
-  hits.push(now);
-  buckets.set(key, { windowMs, hits });
-
-  return { allowed: true, remaining: limit - hits.length, retryAfterSeconds: 0 };
+/** The refusal, with the wait derived from when the oldest live hit ages out. */
+function blocked(hits: number[], windowMs: number, now: number): RateLimitResult {
+  return {
+    allowed: false,
+    remaining: 0,
+    retryAfterSeconds: Math.max(1, Math.ceil((windowMs - (now - hits[0])) / 1000)),
+  };
 }
 
 /**

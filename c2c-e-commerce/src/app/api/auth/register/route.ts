@@ -7,9 +7,10 @@ import { USERS_EMAIL_LOWER_INDEX } from "@/db/users";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
 import {
+  clearRateLimit,
   rateLimitByIp,
-  rateLimitByKey,
   rateLimitHeaders,
+  recordRateLimitHit,
   REGISTER_RATE_LIMIT,
 } from "@/lib/rate-limit";
 import { clientIdentity } from "@/lib/client-ip";
@@ -75,7 +76,10 @@ import { issueRefreshToken } from "@/lib/refresh-token";
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       429:
- *         description: Too many registration attempts from this IP
+ *         description: >
+ *           Too many registration attempts from this IP, or too many *rejected* attempts
+ *           against this email address. A registration that would succeed is never
+ *           refused with a 429.
  *         headers:
  *           Retry-After:
  *             schema:
@@ -112,22 +116,35 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, RegisterBodySchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
+    const { email, password, name, phoneNumber, role } = parsed.data;
+
     // The key that survives IP rotation, and the only one that applies at all when no
     // proxy is trusted. Normalised the same way the column is, so `A@x.com` and
     // `a@x.com` cannot each get their own budget against one account.
-    const byAccount = rateLimitByKey(
-      `register:email:${parsed.data.email.trim().toLowerCase()}`,
-      REGISTER_RATE_LIMIT,
-    );
-    if (!byAccount.allowed) {
+    const accountKey = `register:email:${email.trim().toLowerCase()}`;
+
+    /**
+     * Book a *rejected* attempt against the address, and refuse outright once spent.
+     *
+     * Same shape and same reason as login: this gate used to run before the request was
+     * evaluated, so anyone could burn an address's budget with ten cheap POSTs and the
+     * person who actually holds that address was then told to come back in an hour. The
+     * budget now counts only the collisions — which is all this key was ever usefully
+     * bounding, since it is the 409/201 difference that leaks which addresses are
+     * registered — and a signup that is going to succeed never consults it.
+     */
+    const refuseConflict = () => {
+      const spent = recordRateLimitHit(accountKey, REGISTER_RATE_LIMIT);
+      if (spent.allowed) {
+        return jsonError("An account with that email already exists", 409);
+      }
+
       return jsonError(
         "Too many registration attempts. Please try again later.",
         429,
-        rateLimitHeaders(byAccount, REGISTER_RATE_LIMIT),
+        rateLimitHeaders(spent, REGISTER_RATE_LIMIT),
       );
-    }
-
-    const { email, password, name, phoneNumber, role } = parsed.data;
+    };
 
     // ── Uniqueness check ──────────────────────────────────────────────────────
     const existing = await db
@@ -136,12 +153,7 @@ export async function POST(request: NextRequest) {
       .where(eq(users.email, email))
       .limit(1);
 
-    if (existing.length > 0) {
-      return jsonError(
-        "An account with that email already exists",
-        409
-      );
-    }
+    if (existing.length > 0) return refuseConflict();
 
     // ── Create user ───────────────────────────────────────────────────────────
     const passwordHash = await hashPassword(password);
@@ -157,10 +169,14 @@ export async function POST(request: NextRequest) {
       // and only the index decides. Reaching here is a real conflict, not a server
       // fault, and it used to surface as a 500.
       if (isUniqueViolation(err, USERS_EMAIL_LOWER_INDEX)) {
-        return jsonError("An account with that email already exists", 409);
+        return refuseConflict();
       }
       throw err;
     }
+
+    // The address is now this account's. Nothing an earlier caller did to the bucket
+    // should follow the person who successfully claimed it.
+    clearRateLimit(accountKey);
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 

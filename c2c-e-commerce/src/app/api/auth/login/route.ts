@@ -5,9 +5,10 @@ import { users } from "@/db/schema";
 import { verifyPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonError, jsonOk } from "@/lib/response";
 import {
+  clearRateLimit,
   rateLimitByIp,
-  rateLimitByKey,
   rateLimitHeaders,
+  recordRateLimitHit,
   LOGIN_RATE_LIMIT,
 } from "@/lib/rate-limit";
 import { clientIdentity } from "@/lib/client-ip";
@@ -64,7 +65,9 @@ import { issueRefreshToken } from "@/lib/refresh-token";
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *       429:
- *         description: Too many login attempts from this IP
+ *         description: >
+ *           Too many login attempts from this IP, or too many *failed* attempts against
+ *           this email address. A correct password is never refused with a 429.
  *         headers:
  *           Retry-After:
  *             schema:
@@ -101,22 +104,12 @@ export async function POST(request: NextRequest) {
     const parsed = await parseRequest(request, LoginBodySchema);
     if (!parsed.ok) return jsonError(parsed.error, 400);
 
+    const { email, password } = parsed.data;
+
     // The key that survives IP rotation, and the only one that applies at all when no
     // proxy is trusted. Normalised the same way the column is, so `A@x.com` and
     // `a@x.com` cannot each get their own budget against one account.
-    const byAccount = rateLimitByKey(
-      `login:email:${parsed.data.email.trim().toLowerCase()}`,
-      LOGIN_RATE_LIMIT,
-    );
-    if (!byAccount.allowed) {
-      return jsonError(
-        "Too many login attempts. Please try again later.",
-        429,
-        rateLimitHeaders(byAccount, LOGIN_RATE_LIMIT),
-      );
-    }
-
-    const { email, password } = parsed.data;
+    const accountKey = `login:email:${email.trim().toLowerCase()}`;
 
     // ── Look up user ──────────────────────────────────────────────────────────
     const [user] = await db
@@ -128,10 +121,43 @@ export async function POST(request: NextRequest) {
     // Use a consistent error message to avoid user enumeration
     const invalidCredentials = jsonError("Invalid email or password", 401);
 
-    if (!user) return invalidCredentials;
+    /**
+     * Book this failure against the account, and refuse outright once the key is spent.
+     *
+     * The account gate is deliberately *after* the credential check, not before it. When
+     * it ran first it counted every attempt, so ten garbage POSTs against an address an
+     * attacker merely knows answered 429 to that address's real owner, from any IP, with
+     * the correct password — an unauthenticated lockout of any account, renewable
+     * indefinitely at a few requests an hour. Counting only failures does not fix that on
+     * its own: the attacker's failures are precisely what fills the bucket. Only checking
+     * the credentials first does, because then a correct password never consults the
+     * bucket at all.
+     *
+     * The cost is real and worth naming: bcrypt now runs before the account gate, so that
+     * key no longer bounds bcrypt CPU for a single address — the IP key is what does,
+     * wherever `TRUSTED_PROXY_HOPS >= 1`. Burning a server's CPU is recoverable; denying
+     * people their own accounts, from anywhere, for as long as the attacker cares to keep
+     * it up, is the worse harm. That is the trade being made here.
+     */
+    const refuse = () => {
+      const spent = recordRateLimitHit(accountKey, LOGIN_RATE_LIMIT);
+      if (spent.allowed) return invalidCredentials;
+
+      return jsonError(
+        "Too many login attempts. Please try again later.",
+        429,
+        rateLimitHeaders(spent, LOGIN_RATE_LIMIT),
+      );
+    };
+
+    if (!user) return refuse();
 
     const passwordMatch = await verifyPassword(password, user.passwordHash);
-    if (!passwordMatch) return invalidCredentials;
+    if (!passwordMatch) return refuse();
+
+    // Whoever was filling this bucket, it was not the person holding the password. Drop
+    // it so a failed run cannot follow the owner into their next session either.
+    clearRateLimit(accountKey);
 
     // ── Issue token ───────────────────────────────────────────────────────────
     const token = signToken({ sub: user.id, email: user.email, role: user.role });

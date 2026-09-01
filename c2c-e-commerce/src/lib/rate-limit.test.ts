@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  clearRateLimit,
   rateLimit,
+  recordRateLimitHit,
   resetRateLimits,
   LOGIN_RATE_LIMIT,
   REGISTER_RATE_LIMIT,
@@ -161,5 +163,63 @@ describe("sweep isolation", () => {
 
     // Past its own window, so the earlier hit no longer counts against the caller.
     expect(rateLimit("minutely:someone", POLICY).remaining).toBe(2);
+  });
+});
+
+// ─── recordRateLimitHit / clearRateLimit ──────────────────────────────────────
+
+/**
+ * The pair that lets a caller check credentials *before* consulting a bucket.
+ *
+ * `rateLimit` answers "may this proceed?" and so has to run first, which is why an
+ * account-keyed login gate built on it counted the attacker's attempts and then refused
+ * the victim. These two invert the order: book the failure afterwards, and drop the
+ * bucket entirely for the caller who turned out to be legitimate.
+ */
+describe("recordRateLimitHit", () => {
+  const policy = { limit: 3, windowMs: 60_000 };
+
+  it("records the hit that tips the bucket over, rather than refusing it", () => {
+    // The distinction from `rateLimit`: the third call *is* counted and reports the key
+    // as spent, where `rateLimit` would have refused a fourth without recording it.
+    expect(recordRateLimitHit("k", policy).remaining).toBe(2);
+    expect(recordRateLimitHit("k", policy).remaining).toBe(1);
+
+    const spent = recordRateLimitHit("k", policy);
+    expect(spent.allowed).toBe(false);
+    expect(spent.remaining).toBe(0);
+    expect(spent.retryAfterSeconds).toBeGreaterThan(0);
+  });
+
+  it("shares its bucket with rateLimit under the same key", () => {
+    recordRateLimitHit("shared", policy);
+    recordRateLimitHit("shared", policy);
+
+    // Two failures booked, so one attempt is left before `rateLimit` starts refusing.
+    expect(rateLimit("shared", policy).allowed).toBe(true);
+    expect(rateLimit("shared", policy).allowed).toBe(false);
+  });
+});
+
+describe("clearRateLimit", () => {
+  const policy = { limit: 3, windowMs: 60_000 };
+
+  it("restores a spent key's full budget", () => {
+    for (let i = 0; i < 3; i += 1) recordRateLimitHit("spent", policy);
+    expect(recordRateLimitHit("spent", policy).allowed).toBe(false);
+
+    clearRateLimit("spent");
+
+    expect(recordRateLimitHit("spent", policy).remaining).toBe(2);
+  });
+
+  it("touches nothing but the key it is given", () => {
+    recordRateLimitHit("a", policy);
+    recordRateLimitHit("b", policy);
+
+    clearRateLimit("a");
+
+    expect(recordRateLimitHit("a", policy).remaining).toBe(2);
+    expect(recordRateLimitHit("b", policy).remaining).toBe(1);
   });
 });
