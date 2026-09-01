@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { useAuth } from "@/context/AuthContext";
 import { useFetch } from "@/hooks/useFetch";
+import { formatPrice } from "@/lib/format";
 import type { RecommendationsResponse } from "@/types/api";
 
 /**
@@ -59,12 +60,7 @@ export default function RecommendedForYou(): React.ReactElement | null {
                 <p className="line-clamp-2 text-sm font-medium text-zinc-900">
                   {listing.title}
                 </p>
-                <p className="mt-1 text-sm text-zinc-600">
-                  {Number(listing.price).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+                <p className="mt-1 text-sm text-zinc-600">{formatPrice(listing.price)}</p>
               </div>
             </Link>
           </li>

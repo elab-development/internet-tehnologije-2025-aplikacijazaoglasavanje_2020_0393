@@ -19,6 +19,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
+import { formatPrice } from "@/lib/format";
 import type {
   Category,
   CreatedOrder,
@@ -137,8 +138,8 @@ export default function ListingDetailPage() {
 
           <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
             <p>
-              <span className="font-medium text-zinc-900">Price:</span> $
-              {Number(listing.price).toFixed(2)}
+              <span className="font-medium text-zinc-900">Price:</span>{" "}
+              {formatPrice(listing.price)}
             </p>
             <p>
               <span className="font-medium text-zinc-900">Converted:</span>{" "}
@@ -190,7 +191,7 @@ export default function ListingDetailPage() {
             for
             <span className="font-medium text-zinc-900">
               {" "}
-              ${Number(listing.price).toFixed(2)}
+              {formatPrice(listing.price)}
             </span>
             .
           </p>

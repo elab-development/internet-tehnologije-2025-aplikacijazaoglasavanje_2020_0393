@@ -4,6 +4,7 @@ import Image from "next/image";
 
 import OrderActions from "@/components/orders/OrderActions";
 import { StatusBadge } from "@/components/ui";
+import { formatPrice } from "@/lib/format";
 import type { OrderStatus } from "@/lib/order-lifecycle";
 import type { SellerOrder } from "@/types/api";
 
@@ -55,7 +56,7 @@ export default function OrderCard({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-zinc-800">{order.listingTitle}</p>
           <p className="text-xs text-zinc-500">
-            ${price.toFixed(2)} ({formatConverted(price)})
+            {formatPrice(price)} ({formatConverted(price)})
           </p>
         </div>
       </div>

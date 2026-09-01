@@ -6,6 +6,7 @@ import {
   RiEyeOffLine,
 } from "@remixicon/react";
 import { Button, Card, StatusBadge } from "@/components/ui";
+import { formatPrice } from "@/lib/format";
 import type { Listing } from "@/types/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ export default function SellerListingCard({
           <div className="flex items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-zinc-900">
-                ${Number(listing.price).toFixed(2)}
+                {formatPrice(listing.price)}
               </span>
               <span className="text-zinc-500">
                 ({formatConverted(Number(listing.price))})

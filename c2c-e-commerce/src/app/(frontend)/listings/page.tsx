@@ -16,6 +16,7 @@ import { useFetch } from "@/hooks/useFetch";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import MatchQuality from "@/components/listings/MatchQuality";
 import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
+import { formatPrice } from "@/lib/format";
 import type { Category, ListingsResponse } from "@/types/api";
 
 export const _metadata: Pick<Metadata, "title"> = {
@@ -258,7 +259,7 @@ function ListingsPageContent() {
             <Card
               key={listing.id}
               title={listing.title}
-              description={`$${Number(listing.price).toFixed(2)}`}
+              description={formatPrice(listing.price)}
               image={listing.coverImageId ? `/api/images/${listing.coverImageId}` : null}
               badge={
                 listing.categoryId
@@ -268,7 +269,7 @@ function ListingsPageContent() {
               footer={
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm font-semibold text-zinc-900">
-                    ${Number(listing.price).toFixed(2)}
+                    {formatPrice(listing.price)}
                   </span>
                   <MatchQuality similarity={listing.similarity} />
                   <Button

@@ -14,6 +14,7 @@ import {
 } from "@/components/ui";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
+import { formatPrice } from "@/lib/format";
 import type { OrdersResponse } from "@/types/api";
 
 function OrdersPageContent() {
@@ -70,7 +71,7 @@ function OrdersPageContent() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
                     <span className="font-semibold text-zinc-900">
-                      ${Number(order.price).toFixed(2)}
+                      {formatPrice(order.price)}
                     </span>
                     <span className="text-zinc-500">
                       ({formatConverted(Number(order.price))})

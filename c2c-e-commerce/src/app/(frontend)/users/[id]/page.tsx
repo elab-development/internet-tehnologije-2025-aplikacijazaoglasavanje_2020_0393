@@ -7,6 +7,7 @@ import SellerReviewFeed from "@/components/reviews/SellerReviewFeed";
 import StarRating from "@/components/reviews/StarRating";
 import { ErrorAlert, Skeleton } from "@/components/ui";
 import { useFetch } from "@/hooks/useFetch";
+import { formatPrice } from "@/lib/format";
 import type { ListingsResponse, SellerReviewsResponse } from "@/types/api";
 
 /**
@@ -103,7 +104,7 @@ export default function SellerProfilePage() {
                       {listing.title}
                     </p>
                     <p className="mt-1 text-sm text-zinc-600">
-                      ${Number(listing.price).toFixed(2)}
+                      {formatPrice(listing.price)}
                     </p>
                   </div>
                 </Link>

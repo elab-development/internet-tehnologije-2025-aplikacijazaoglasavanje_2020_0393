@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { useFetch } from "@/hooks/useFetch";
+import { formatPrice } from "@/lib/format";
 import type { SimilarListing } from "@/types/api";
 
 export type SimilarListingsProps = {
@@ -60,12 +61,7 @@ export default function SimilarListings({
                 <p className="line-clamp-2 text-sm font-medium text-gray-900">
                   {listing.title}
                 </p>
-                <p className="mt-1 text-sm text-gray-600">
-                  {Number(listing.price).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </p>
+                <p className="mt-1 text-sm text-gray-600">{formatPrice(listing.price)}</p>
               </div>
             </Link>
           </li>

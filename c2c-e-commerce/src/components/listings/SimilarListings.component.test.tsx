@@ -79,6 +79,15 @@ describe("C2C-AI-9 — AC8: the section renders", () => {
 
     expect(screen.getByText(/120/)).toBeInTheDocument();
   });
+
+  it("renders the price with a currency symbol, like every other surface", () => {
+    // Regression: this strip rendered "120.00" while /listings rendered "$120.00"
+    // for the same listing. getByText(/120/) matched both, which is why it survived.
+    fetchState.data = [row(2, "Second-hand road bicycle")];
+    render(<SimilarListings listingId={1} />);
+
+    expect(screen.getByText("$120.00")).toBeInTheDocument();
+  });
 });
 
 describe("C2C-AI-9 — AC9: the section hides itself", () => {

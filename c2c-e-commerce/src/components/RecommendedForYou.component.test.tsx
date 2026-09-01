@@ -83,6 +83,16 @@ describe("C2C-AI-10 — AC8: who sees the section", () => {
       "/listings/7",
     );
   });
+
+  it("renders the price with a currency symbol, like every other surface", () => {
+    // Regression: this strip rendered "120.00" while /listings rendered "$120.00"
+    // for the same listing. getByText(/120/) matched both, which is why it survived.
+    auth.isAuthenticated = true;
+    fetchState.data = { data: [row(2, "Gravel bike")], strategy: "personalised" };
+
+    render(<RecommendedForYou />);
+    expect(screen.getByText("$120.00")).toBeInTheDocument();
+  });
 });
 
 describe("C2C-AI-10 — AC8: the strategy is shown honestly", () => {
