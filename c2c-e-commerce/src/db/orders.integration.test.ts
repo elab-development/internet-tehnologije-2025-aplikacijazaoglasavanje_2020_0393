@@ -307,14 +307,16 @@ describe("transitionOrder", () => {
       // Deliberately not awaited yet: B's UPDATE has to reach the server and block on A's
       // row lock while A is still open, which is the interleaving under test.
       const bResult = transitionOrder(dbB, order.id, "pending", "cancelled");
-      // The delay isn't what makes this deterministic -- it just makes it likely that B's
-      // UPDATE is already queued on A's row lock by the time A commits. Either way the
-      // result is the same: transitionOrder's WHERE re-checks `status = from`, so a B that
-      // was queued wakes up, re-evaluates against the now-confirmed row and matches nothing;
-      // a B that (were this shorter) instead reached the server after the commit would just
-      // see that same committed row directly and match nothing anyway. Postgres serialises
-      // the outcome regardless of real-time interleaving, which is what makes this a
-      // lock-forced test rather than a lucky `Promise.all`.
+      // Unlike the FOR UPDATE tests in delete-with-orders and concurrent-move, the lock here
+      // isn't load-bearing for correctness -- transitionOrder is one atomic `UPDATE ... WHERE
+      // status = from`, so there's no read-then-decide step a stale read could mislead. The
+      // compare-and-set itself needs no concurrency to prove; the sequential case already
+      // covers it above ("returns null when the order has already moved"). What the overlap
+      // adds is narrower: it gives B's UPDATE a chance to actually block on A's still-open row
+      // lock and get woken by Postgres's re-check (EvalPlanQual) after A commits, rather than
+      // just reading the already-committed row outright -- a path nothing else in this file
+      // exercises. The delay only makes that more likely to trigger; it isn't what makes the
+      // assertion correct.
       await new Promise((resolve) => setTimeout(resolve, 250));
 
       await a.query("COMMIT");
