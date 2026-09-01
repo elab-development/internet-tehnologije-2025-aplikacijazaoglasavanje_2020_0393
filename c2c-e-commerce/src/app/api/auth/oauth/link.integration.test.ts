@@ -18,7 +18,7 @@ import { oauthAccounts, users } from "@/db/schema";
 import { AUTH_COOKIE } from "@/lib/cookies";
 import { LINK_COOKIE, openLinkToken, sealLinkToken } from "@/lib/oauth/link-token";
 import { REFRESH_COOKIE } from "@/lib/refresh-cookies";
-import { resetRateLimits } from "@/lib/rate-limit";
+import { LINK_RATE_LIMIT, resetRateLimits } from "@/lib/rate-limit";
 import { OAUTH_TX_COOKIE, sealTransaction } from "@/lib/oauth/state";
 import { getTestDb, resetDb } from "@/test/db";
 import { authHeaderFor } from "@/test/auth";
@@ -241,6 +241,45 @@ describe("C2C-SEC-8 AC3 — the wrong password", () => {
     for (let i = 0; i < 12; i += 1) statuses.push((await attempt()).status);
 
     expect(statuses).toContain(429);
+  });
+});
+
+/**
+ * The IP key above is the whole guard only when a proxy is trusted. `TRUSTED_PROXY_HOPS`
+ * defaults to 0, and at 0 `rateLimitByIp` reports `applied: false` and the guard does not
+ * run at all -- so the route's own claim to be treated "like login" was, under the
+ * shipped default, untrue. An account key keyed on the signed token's `userId` is what
+ * makes it true, and it inherits login's property along with its shape.
+ */
+describe("the link limit under the default TRUSTED_PROXY_HOPS=0", () => {
+  it("still bounds guessing when the caller's address is unknowable", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    await makeUser({ email: MOCK_EMAIL, password: PASSWORD });
+    const linkCookie = cookieValue(await callback(), LINK_COOKIE);
+
+    const statuses: number[] = [];
+    for (let i = 0; i < LINK_RATE_LIMIT.limit + 1; i += 1) {
+      statuses.push((await link({ password: `guess-${i}` }, linkCookie)).status);
+    }
+
+    // `link` rotates the address on every call, so nothing but the account key can bite.
+    expect(statuses).toContain(429);
+  });
+
+  it("does not let a guesser refuse the account's owner their own link", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "0";
+
+    await makeUser({ email: MOCK_EMAIL, password: PASSWORD });
+    const linkCookie = cookieValue(await callback(), LINK_COOKIE);
+
+    for (let i = 0; i < LINK_RATE_LIMIT.limit + 2; i += 1) {
+      await link({ password: `guess-${i}` }, linkCookie);
+    }
+
+    // The bucket is spent, and the right password still completes the link -- the same
+    // property login carries, for the same reason: the credentials decide first.
+    expect((await link({ password: PASSWORD }, linkCookie)).status).toBe(200);
   });
 });
 
