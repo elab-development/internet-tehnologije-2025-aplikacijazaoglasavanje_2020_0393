@@ -16,12 +16,17 @@ import type { RecommendationsResponse } from "@/types/api";
  * calling it "recommended for you" would be a small lie the UI tells on every first visit —
  * which is precisely why the story puts `strategy` in the response rather than leaving the
  * two paths indistinguishable.
+ *
+ * Silent on error, like "Similar listings": this strip is supplementary, and
+ * `onError: "silent"` tells the hook to honour that instead of raising a toast for
+ * something the user cannot see.
  */
 export default function RecommendedForYou(): React.ReactElement | null {
   const { isAuthenticated } = useAuth();
 
   const { data } = useFetch<RecommendationsResponse>(
     isAuthenticated ? "/api/recommendations?limit=6" : null,
+    { onError: "silent" },
   );
 
   if (!isAuthenticated) return null;

@@ -17,6 +17,30 @@ export type UseFetchResult<T> = {
   refetch: () => void;
 };
 
+export type UseFetchOptions = {
+  /**
+   * How a failure is reported. `"toast"` is the default because eleven consumers
+   * rely on it; `"silent"` is for sections that render `null` on error and would
+   * otherwise raise a toast about something the user cannot see.
+   */
+  onError?: "toast" | "silent";
+};
+
+/**
+ * One state object rather than three `useState` calls.
+ *
+ * `data` and `loading` used to move independently, and `setLoading(true)` ran in a
+ * passive effect — after paint. That produced one rendered frame carrying the previous
+ * endpoint's data with `loading: false`, at the new URL.
+ */
+type FetchState<T> = {
+  data: T | null;
+  loading: boolean;
+  error: string | null;
+};
+
+const INITIAL: FetchState<never> = { data: null, loading: true, error: null };
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -26,9 +50,9 @@ export type UseFetchResult<T> = {
  * const { data: orders, loading, error } = useFetch<Order[]>("/api/orders");
  * ```
  *
- * Pass `null` as the endpoint when the request is not ready yet — for example
- * while waiting for the authenticated user — and `loading` stays `true` until a
- * real endpoint arrives:
+ * Pass `null` as the endpoint when the request is not ready yet — for example while
+ * waiting for the authenticated user — and `loading` stays `true` until a real
+ * endpoint arrives:
  *
  * ```tsx
  * const { data } = useFetch<ListingsResponse>(
@@ -36,22 +60,41 @@ export type UseFetchResult<T> = {
  * );
  * ```
  *
- * `deps` is appended to the effect's dependency array for values the endpoint
- * string does not already capture.
- *
- * A response that arrives after the endpoint changed (or after unmount) is
- * discarded, and failures both set `error` and raise a toast.
+ * A response that arrives after the endpoint changed (or after unmount) is discarded.
+ * Failures set `error` and, unless `onError: "silent"`, raise a toast.
  */
 export function useFetch<T>(
   endpoint: string | null,
-  deps: unknown[] = []
+  options: UseFetchOptions = {},
 ): UseFetchResult<T> {
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { onError = "toast" } = options;
+
+  const [state, setState] = useState<FetchState<T>>(INITIAL);
   const [reloadCount, setReloadCount] = useState(0);
+  const [lastEndpoint, setLastEndpoint] = useState(endpoint);
+
+  // Reset during render, not in an effect. An effect runs after paint, which is what
+  // produced the stale frame; adjusting state while rendering means the browser never
+  // sees the previous endpoint's data under the new one.
+  if (endpoint !== lastEndpoint) {
+    setLastEndpoint(endpoint);
+    setState(INITIAL);
+  }
 
   const refetch = useCallback(() => setReloadCount((count) => count + 1), []);
+
+  const setData = useCallback<React.Dispatch<React.SetStateAction<T | null>>>(
+    (update) => {
+      setState((prev) => ({
+        ...prev,
+        data:
+          typeof update === "function"
+            ? (update as (previous: T | null) => T | null)(prev.data)
+            : update,
+      }));
+    },
+    [],
+  );
 
   useEffect(() => {
     if (endpoint === null) return;
@@ -60,18 +103,14 @@ export function useFetch<T>(
 
     async function load() {
       try {
-        setLoading(true);
-        setError(null);
         const result = await api.get<T>(endpoint as string);
         if (!alive) return;
-        setData(result);
+        setState({ data: result, loading: false, error: null });
       } catch (err: unknown) {
         if (!alive) return;
-        const msg = err instanceof Error ? err.message : "Failed to load";
-        setError(msg);
-        toast.error(msg);
-      } finally {
-        if (alive) setLoading(false);
+        const message = err instanceof Error ? err.message : "Failed to load";
+        setState({ data: null, loading: false, error: message });
+        if (onError === "toast") toast.error(message);
       }
     }
 
@@ -80,9 +119,7 @@ export function useFetch<T>(
     return () => {
       alive = false;
     };
-    // `deps` is caller-supplied, so its length is not statically known.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endpoint, reloadCount, ...deps]);
+  }, [endpoint, reloadCount, onError]);
 
-  return { data, setData, loading, error, refetch };
+  return { ...state, setData, refetch };
 }

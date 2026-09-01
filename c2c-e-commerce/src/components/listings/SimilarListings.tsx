@@ -16,7 +16,8 @@ export type SimilarListingsProps = {
  * Renders nothing at all unless there is something to show. Loading, error, an empty
  * array and a malformed body all produce `null`: this strip is supplementary, and a
  * spinner or an error banner for it would compete with the page's actual content — which
- * has loaded fine in every one of those cases.
+ * has loaded fine in every one of those cases. `onError: "silent"` tells the hook to
+ * honour that instead of raising a toast for something the user cannot see.
  */
 export default function SimilarListings({
   listingId,
@@ -25,6 +26,7 @@ export default function SimilarListings({
     Number.isInteger(listingId) && listingId > 0
       ? `/api/listings/${listingId}/similar?limit=6`
       : null,
+    { onError: "silent" },
   );
 
   // The array check also covers an error body, which arrives as `{ error: … }`.
