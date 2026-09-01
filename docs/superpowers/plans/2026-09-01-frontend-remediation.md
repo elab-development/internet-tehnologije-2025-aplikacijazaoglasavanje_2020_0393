@@ -974,7 +974,7 @@ Closes **C3**. Spec D7.
   - `export function AnnouncerProvider({ children }: { children: React.ReactNode })`
   - `export function useAnnounce(): (message: string, options?: { assertive?: boolean }) => void`
 
-  Tasks 7, 8, 10, 12 and 19 call `useAnnounce()`.
+  Tasks 7, 8, 10 and 32 call `useAnnounce()`.
 
 **Background.** Zero matches for `aria-live` or `role="status"` in the entire app. Every asynchronous change is silent: the results grid after a debounced search, the page counter, every loading state, the AI description landing in the textarea, the image-count error, the gallery swap. A screen reader user types a search term and receives no feedback at all — not even a results count.
 
@@ -5044,21 +5044,28 @@ const ORDER_STATUSES = [
 const LISTING_STATUSES = ["draft", "active", "reserved", "sold"] as const;
 
 describe("StatusBadge", () => {
-  it.each(ORDER_STATUSES)("renders a word for the order status %s", (status) => {
+  // `getByText(/\w/)` would pass for any non-empty string, including a status the
+  // map does not know. Assert the badge renders a label that is not the raw enum
+  // value, which is what a missing map entry would leave behind.
+  it.each(ORDER_STATUSES)("gives the order status %s a human label", (status) => {
     render(<StatusBadge status={status} kind="order" />);
-    expect(screen.getByText(/\w/)).toBeInTheDocument();
+    const label = screen.getByText(/\S/).textContent?.trim() ?? "";
+    expect(label.length).toBeGreaterThan(0);
+    expect(label).not.toBe(status);
   });
 
-  it.each(LISTING_STATUSES)("renders a word for the listing status %s", (status) => {
+  it.each(LISTING_STATUSES)("gives the listing status %s a human label", (status) => {
     render(<StatusBadge status={status} kind="listing" />);
-    expect(screen.getByText(/\w/)).toBeInTheDocument();
+    const label = screen.getByText(/\S/).textContent?.trim() ?? "";
+    expect(label.length).toBeGreaterThan(0);
+    expect(label).not.toBe(status);
   });
 
   it("gives each status a distinguishable label, not just a colour", () => {
     const labels = new Set(
       ORDER_STATUSES.map((status) => {
         const { unmount } = render(<StatusBadge status={status} kind="order" />);
-        const text = screen.getByText(/\w/).textContent;
+        const text = screen.getByText(/\S/).textContent;
         unmount();
         return text;
       }),
