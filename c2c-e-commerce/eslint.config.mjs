@@ -5,6 +5,16 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      // Raw <img> is allowed here -- next/image cannot serve our own /api/images route
+      // without remote patterns for a same-origin path -- but it must be an explicit
+      // decision, not something a warning count can quietly stop meaning anything for.
+      // Every <img> gets an eslint-disable-next-line, no exceptions.
+      "@next/next/no-img-element": "error",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

@@ -307,6 +307,14 @@ describe("transitionOrder", () => {
       // Deliberately not awaited yet: B's UPDATE has to reach the server and block on A's
       // row lock while A is still open, which is the interleaving under test.
       const bResult = transitionOrder(dbB, order.id, "pending", "cancelled");
+      // The delay isn't what makes this deterministic -- it just makes it likely that B's
+      // UPDATE is already queued on A's row lock by the time A commits. Either way the
+      // result is the same: transitionOrder's WHERE re-checks `status = from`, so a B that
+      // was queued wakes up, re-evaluates against the now-confirmed row and matches nothing;
+      // a B that (were this shorter) instead reached the server after the commit would just
+      // see that same committed row directly and match nothing anyway. Postgres serialises
+      // the outcome regardless of real-time interleaving, which is what makes this a
+      // lock-forced test rather than a lucky `Promise.all`.
       await new Promise((resolve) => setTimeout(resolve, 250));
 
       await a.query("COMMIT");

@@ -38,6 +38,7 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
 
   return (
     <div className="flex flex-col gap-2">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={`/api/images/${displayImageId}`}
         alt={title}
