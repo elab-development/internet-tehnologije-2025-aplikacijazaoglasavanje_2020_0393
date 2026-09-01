@@ -424,10 +424,29 @@ Expected: clean. All 37 existing `<Button>` usages still type-check.
 
 - [ ] **Step 6: Deliberate break**
 
-Move `{...rest}` to *after* `disabled={isDisabled}` in the JSX.
-Run: `npm test -- --project component src/components/ui/Button.component.test.tsx -t "double submit"`
-Expected: FAIL — a caller-supplied `disabled` would now win over the loading guard.
-Restore the spread to first position and confirm PASS.
+Note: moving `{...rest}` after `disabled` does NOT work as a break, because `disabled`
+is destructured out of the parameter list and so never reaches `rest`. Break the
+property that actually holds instead.
+
+First add this test, which pins the guarantee the 37 call sites depend on:
+
+```tsx
+it("ignores a caller trying to re-enable a loading button", async () => {
+  const onClick = vi.fn();
+  render(<Button loading disabled={false} onClick={onClick}>Save</Button>);
+
+  const button = screen.getByRole("button");
+  expect(button).toBeDisabled();
+  await userEvent.click(button);
+  expect(onClick).not.toHaveBeenCalled();
+});
+```
+
+Then break it: remove `disabled = false` from the destructured parameter list so a
+caller's `disabled` flows through `...rest` onto the element.
+Run: `npm test -- --project component src/components/ui/Button.component.test.tsx -t "re-enable a loading button"`
+Expected: FAIL — the button renders enabled and the click fires.
+Restore the destructuring and confirm PASS.
 
 - [ ] **Step 7: Commit**
 
@@ -1575,7 +1594,19 @@ Closes **H5**.
 
 **Files:**
 - Modify: `src/app/(frontend)/listings/[id]/page.tsx` (`:36-40`, `:57`, `:76-89`, `:151-156`)
-- Test: `src/app/(frontend)/listings/[id]/page.component.test.tsx` (exists — append)
+- Test: `src/app/(frontend)/listings/[id]/page.component.test.tsx` — **CREATE. This file does not exist.** You are building the harness as well as the tests.
+
+**Harness you must write** (there is no existing helper to reuse; follow the mocking idiom in `src/context/AuthContext.component.test.tsx` and `src/app/(frontend)/listings/page.component.test.tsx`):
+
+- mock `next/navigation` for `useParams` (return `{ id: "7" }`) and `useRouter` (a `push` spy)
+- mock `@/context/AuthContext`'s `useAuth` to return an authenticated non-seller buyer
+- mock `@/lib/api` — `api.get` resolves the listing fixture, `api.post` is the seat of `mockOrderFailure`
+- wrap renders in `AnnouncerProvider` from `@/components/ui/Announcer` (Task 5 added it) so `getByRole("status")` resolves
+- `mockListing(overrides)` sets what the next `api.get` resolves to; calling it again before the refetch is what lets a test return `active` first and `reserved` second
+- `mockOrderFailure(status, message)` rejects `api.post` with `new ApiError(message, status, new Headers())` — imported from `@/lib/api`; the 409 branch reads `err.status`, so a plain `Error` will not exercise it
+- `renderPage()` renders the page component
+
+This page also carries an untested change from Task 3: the `$`/number JSX split at `:140-141` was rewritten with an explicit `{" "}`. Add one assertion that the price renders as a single `$120.00` string with no stray space, and say in your report whether it held.
 
 **Interfaces:**
 - Consumes: `ApiError` (Task 1), `useAnnounce` (Task 5), `formatPrice` (Task 3).
@@ -2402,13 +2433,15 @@ In the catch block, when `draftId` is set, extend the message rather than replac
 
 - [ ] **Step 9: Implement — make that promise true**
 
-`SellerListingCard.tsx:44` currently reads `canDelete={user?.role === "admin"}`. A seller must be able to delete their own draft:
+**Corrected location.** The `canDelete` decision is made at **`SellerListingsTab.tsx:122`**, which
+passes it down; `SellerListingCard.tsx` only receives it as a prop (`:20` declares it, `:38`
+defaults it to `false`, `:97` renders on it). Edit the parent, not the card:
 
 ```tsx
-        canDelete={user?.role === "admin" || listing.status === "draft"}
+              canDelete={user?.role === "admin" || listing.status === "draft"}
 ```
 
-And in `SellerListingsTab.tsx:122`, the activate toggle deliberately excludes `draft`. Leave that alone — publishing a draft belongs to the form, which is where the photos are. Deleting is the escape hatch the comment promised.
+The activate toggle in the same file deliberately excludes `draft`. Leave that alone — publishing a draft belongs to the form, which is where the photos are. Deleting is the escape hatch the comment promised.
 
 - [ ] **Step 10: Implement — confirm the photo delete**
 
@@ -2530,7 +2563,7 @@ it("M5 — carries the attempted path into the login redirect", () => {
 });
 ```
 
-And in the login page's component test:
+And in the login page's component test — **`src/app/(frontend)/login/page.component.test.tsx` does not exist yet, so create it.** Mock `next/navigation` (`useSearchParams` returning the case's query string, `useRouter` with a `push` spy), mock `useAuth` so `login()` resolves, and give the file a `renderLogin({ searchParams })` helper plus a `signIn(user)` helper that fills both fields and submits. `pushSpy` is the router mock's `push`:
 
 ```tsx
 it("M5 — sends the user where they were going after a password sign-in", async () => {
@@ -3711,7 +3744,9 @@ export default function FormErrorSummary({ errors }: { errors: FieldError[] }) {
 - [ ] **Step 4: Adopt it in the three forms**
 
 - **`login/page.tsx`** — build the array from `fieldErrors` and render `<FormErrorSummary errors={…} />` in place of the individual alert regions. Keep the per-field `error` prop on `InputField`, which is already wired correctly through `aria-describedby`; the summary is additive.
-- **`register/page.tsx`** — same, replacing the three simultaneous alerts.
+- **`register/page.tsx`** — same, replacing the three simultaneous alerts. Its test file
+  `src/app/(frontend)/register/page.component.test.tsx` does not exist; create it with the
+  same harness shape Task 11 established for the login page.
 - **`ListingForm.tsx`** — this one has no field-level errors at all. Split the single "Title, description, and price are required" string into per-field entries:
 
 ```tsx
@@ -5319,7 +5354,15 @@ grep -rn "_metadata" src
 
 Expected: no output, because Task 24 removed both. If output appears, Task 24 is incomplete — restore nothing, and report L2 as blocked on it.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: This task is exempt from the deliberate-break requirement**
+
+Global Constraint 3 asks for an observed failure. Deleting dead code has no behaviour to
+falsify, so do NOT invent one. The equivalent proof is already in Steps 1 and 2 and it is
+a real one: if a barrel you deleted did have an importer, `npx tsc --noEmit` and
+`npm run build` fail and name the importing file. Record in your report that the
+constraint was satisfied this way, and quote the passing output.
+
+- [ ] **Step 5: Commit**
 
 ```bash
 git add -A src/components
@@ -5343,7 +5386,7 @@ Closes **L5**, **L6**, **L7**.
 **Background.**
 - **L5** — `Navbar` writes its whole nav twice and the seller block four times: ~110 duplicated lines out of 281.
 - **L6** — three auth pages share a copy-pasted 20-line shell.
-- **L7** — a byte-identical email regex in those three pages: a **fourth** definition of "valid email", alongside `lib/validation.ts` and the API's Zod schema.
+- **L7** — a byte-identical email regex in **two** of those pages (`login`, `register`; `link-account` has none): a **third** definition of "valid email", alongside `lib/validation.ts` and the API's Zod schema. Verified by grep at plan time — the review said three pages.
 
 - [ ] **Step 1: Fix L7 first — it is the smallest and the highest value**
 
@@ -5362,7 +5405,7 @@ export function looksLikeEmail(value: string): boolean {
 }
 ```
 
-Replace the inline regex in all three pages with `looksLikeEmail(email)`.
+Replace the inline regex in both pages with `looksLikeEmail(email)`. Do not add a call to `link-account`, which does not validate an email.
 
 Add to `src/lib/validation.test.ts`:
 
@@ -5513,6 +5556,16 @@ Pagination currently renders **below** the empty state, so a user on page 4 of a
 
 Run: `npm test -- --project component --project unit` → PASS.
 Run: `npx tsc --noEmit && npm run lint` → clean.
+
+- [ ] **Step 7b: Deliberate break**
+
+This task is a batch of small changes; break the one with real behaviour behind it.
+Delete the zero-results branch you added in Step 1, so the reviews list renders its
+normal empty markup instead of `EmptyState`.
+
+Run: `npm test -- --project component -t "shows an empty state when a seller has no reviews"`
+
+Expected: FAIL. Restore and confirm PASS.
 
 - [ ] **Step 8: Commit**
 
