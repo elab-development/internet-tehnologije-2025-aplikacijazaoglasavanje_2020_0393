@@ -60,6 +60,21 @@ describe("Modal — focus management", () => {
     expect(screen.getByRole("button", { name: "Confirm" })).toHaveFocus();
   });
 
+  it("wraps backwards to the last control when Shift+Tab is the first key after opening", async () => {
+    const user = userEvent.setup();
+    open();
+
+    // No Tab has been pressed yet, so the panel itself still holds focus. Without the
+    // `active === panel` clause the handler no-ops here and native Shift+Tab walks
+    // focus backwards out of the dialog, onto "outside before".
+    expect(screen.getByRole("dialog")).toHaveFocus();
+
+    await user.tab({ shift: true });
+
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "outside before" })).not.toHaveFocus();
+  });
+
   it("restores focus to the element that was focused before it opened", async () => {
     const user = userEvent.setup();
 
