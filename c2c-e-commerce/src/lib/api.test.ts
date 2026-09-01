@@ -15,14 +15,18 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { api, __resetRefreshState } from "./api";
+import { api, ApiError, __resetRefreshState } from "./api";
 
 type Call = { url: string; init: RequestInit };
 
 let calls: Call[];
 
 /** A queue of canned responses, consumed in order; the last one repeats. */
-function respondWith(...statuses: Array<number | { status: number; body?: unknown }>) {
+function respondWith(
+  ...statuses: Array<
+    number | { status: number; body?: unknown; headers?: Record<string, string> }
+  >
+) {
   const queue = statuses.map((s) => (typeof s === "number" ? { status: s } : s));
 
   vi.stubGlobal(
@@ -33,7 +37,7 @@ function respondWith(...statuses: Array<number | { status: number; body?: unknow
 
       return new Response(JSON.stringify(spec.body ?? { ok: true }), {
         status: spec.status,
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(spec.headers ?? {}) },
       });
     }),
   );
@@ -240,5 +244,54 @@ describe("C2C-SEC-4 AC1/AC10 — no token in browser storage", () => {
     await api.get("/api/listings");
 
     expect(getItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("ApiError — the client preserves what the server said", () => {
+  it("carries the HTTP status so callers can tell 409 from 500", async () => {
+    respondWith({ status: 409, body: { error: "This listing already has an order in progress" } });
+
+    const err = await api.post("/api/orders", { listingId: 7 }).catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect((err as ApiError).status).toBe(409);
+    expect((err as ApiError).message).toBe("This listing already has an order in progress");
+  });
+
+  it("parses Retry-After and X-RateLimit-Remaining on a 429", async () => {
+    respondWith({
+      status: 429,
+      body: { error: "Too many requests" },
+      headers: { "Retry-After": "45", "X-RateLimit-Remaining": "0" },
+    });
+
+    const err = (await api.get("/api/listings").catch((e: unknown) => e)) as ApiError;
+
+    expect(err.status).toBe(429);
+    expect(err.retryAfterSeconds).toBe(45);
+    expect(err.rateLimitRemaining).toBe(0);
+  });
+
+  it("yields null rather than a wrong number for a non-integer Retry-After", async () => {
+    // The HTTP-date form is legal but our API does not send it. Guessing would be worse
+    // than admitting we do not know.
+    respondWith({
+      status: 429,
+      body: { error: "slow down" },
+      headers: { "Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT" },
+    });
+
+    const err = (await api.get("/api/listings").catch((e: unknown) => e)) as ApiError;
+
+    expect(err.retryAfterSeconds).toBeNull();
+  });
+
+  it("is still an Error, so every existing `instanceof Error` site keeps working", async () => {
+    respondWith({ status: 500, body: { error: "boom" } });
+
+    const err = await api.get("/api/listings").catch((e: unknown) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err instanceof Error ? err.message : null).toBe("boom");
   });
 });

@@ -4,7 +4,7 @@
 //   • Sends the httpOnly session cookies with every request
 //   • Sets Content-Type: application/json
 //   • Recovers from an expired access token by refreshing once, silently
-//   • Throws a plain Error with the server's message on non-2xx responses
+//   • Throws an `ApiError` carrying the server's message, the status and the rate-limit headers
 //
 // No token is handled here. Both the access token and the refresh token live in
 // httpOnly cookies the browser attaches automatically, so no script -- ours or an
@@ -21,6 +21,41 @@ const REFRESH_ENDPOINT = "/api/auth/refresh";
  * the same rejection; refreshing after a failed refresh is an infinite loop.
  */
 const NO_REFRESH = [REFRESH_ENDPOINT, "/api/auth/login", "/api/auth/register"];
+
+/**
+ * A failed API response, with the parts of it callers need to decide what to do next.
+ *
+ * Extends `Error` on purpose: every existing `err instanceof Error ? err.message : …`
+ * site keeps working untouched, and branching on `status` is opt-in.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly retryAfterSeconds: number | null;
+  readonly rateLimitRemaining: number | null;
+
+  constructor(message: string, status: number, headers: Headers) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.retryAfterSeconds = parseIntegerHeader(headers.get("Retry-After"));
+    this.rateLimitRemaining = parseIntegerHeader(headers.get("X-RateLimit-Remaining"));
+  }
+}
+
+/**
+ * Reads a header that should be a non-negative integer.
+ *
+ * `Retry-After` also has a legal HTTP-date form. Our API never sends it, and a wrong
+ * number here would be shown to the user as a countdown — so anything that is not a
+ * plain integer yields null rather than a guess.
+ */
+function parseIntegerHeader(raw: string | null): number | null {
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const value = Number(trimmed);
+  return Number.isSafeInteger(value) ? value : null;
+}
 
 type RequestOptions = {
   method?: string;
@@ -118,7 +153,7 @@ async function request<T>(
       (data as { error?: string; message?: string }).error ??
       (data as { error?: string; message?: string }).message ??
       `HTTP ${res.status}`;
-    throw new Error(message);
+    throw new ApiError(message, res.status, res.headers);
   }
 
   return data as T;
