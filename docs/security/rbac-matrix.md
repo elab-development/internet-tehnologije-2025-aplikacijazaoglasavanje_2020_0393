@@ -65,11 +65,11 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/auth/oauth/link/{provider}` | DELETE | required | ✓ | ✓ | ✓ | Own link only → **404**; refuses the last credential → 409 |
 | `/api/categories` | GET | — | ✓ | ✓ | ✓ | — |
 | `/api/categories` | POST | required | ✗ | ✗ | ✓ | — |
-| `/api/categories/{id}` | PUT · DELETE | required | ✗ | ✗ | ✓ | — |
+| `/api/categories/{id}` | PATCH · DELETE | required | ✗ | ✗ | ✓ | — |
 | `/api/listings` | GET | optional | ✓ | ✓ | ✓ | Anonymous and non-owners see `active` only; a seller sees their own `sold`/`removed`; admin sees all |
 | `/api/listings` | POST | required | ✗ | ✓ | ✓ | `sellerId` is taken from the token, never the body |
 | `/api/listings/{id}` | GET | optional | ✓ | ✓ | ✓ | Published rows (`active`/`reserved`/`sold`) are public; `draft` and `removed` are owner-or-admin |
-| `/api/listings/{id}` | PUT · DELETE | required | ✗ | owner | ✓ | `canMutateListing`; a **409** on any status change while the listing is `reserved` |
+| `/api/listings/{id}` | PATCH · DELETE | required | ✗ | owner | ✓ | `canMutateListing`; a **409** on any status change while the listing is `reserved`. DELETE is a hard delete only when no order references the listing; one that has order history is soft-deleted to `removed` — out of browse, search and the public detail route, with the buyer's order still pointing at a real row |
 | `/api/listings/{id}/images` | POST | required | ✗ | owner | ✓ | `canMutateListing`; magic-byte sniffed, re-encoded, rate limited |
 | `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
 | `/api/listings/{id}/images/{imageId}` | DELETE | required | ✗ | owner | ✓ | `canMutateListing`; row deleted, then the object, best-effort |
@@ -79,7 +79,7 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/orders` | GET | required | own | own | all | The caller's purchases, whatever their role — `buyerId = caller` |
 | `/api/orders` | POST | required | ✓ | ✓ | ✓ | Anyone signed in may buy (D5); `buyerId` from the token; the listing's own seller gets **403** |
 | `/api/orders/{id}` | GET | required | party | party | ✓ | `canViewOrder` — buyer or seller of *this* order; refusal is **404** |
-| `/api/orders/{id}` | PUT | required | party | party | ✓ | `canTransition(from, to, actor)`; a non-party gets **404**, an illegal transition **400** |
+| `/api/orders/{id}` | PUT | required | party | party | ✓ | `canTransition(from, to, actor)`; a non-party gets **404**, an illegal transition **409** |
 | `/api/orders/{id}` | DELETE | required | ✗ | ✗ | ✓ | Releases the listing in the same transaction |
 | `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to `orders.sellerId`; the response projects the buyer's `buyerEmail` alongside `buyerName` |
 | `/api/orders/{id}/review` | POST | required | buyer | buyer | ✗ | Buyer of *this* order, status `completed`. A non-party gets **404**; the seller and admins get **403** — reading an order is not a licence to write its buyer's opinion. One review per order, enforced by `reviews_one_per_order_idx` → **409** |
@@ -88,7 +88,7 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/users` | GET | required | ✗ | ✗ | ✓ | — |
 | `/api/users/{id}/reviews` | GET | — | ✓ | ✓ | ✓ | Public. Name, avatar and the two rating integers only — `GET /api/users/{id}` stays `isSelfOrAdmin` |
 | `/api/users/{id}` | GET | required | self | self | ✓ | `isSelfOrAdmin` |
-| `/api/users/{id}` | PUT | required | self | self | ✓ | `isSelfOrAdmin`; `role` is admin-only even on your own record |
+| `/api/users/{id}` | PATCH | required | self | self | ✓ | `isSelfOrAdmin`; `role` is admin-only even on your own record |
 | `/api/users/{id}` | DELETE | required | ✗ | ✗ | ✓ | — |
 | `/api/docs` | GET | — | ✓ | ✓ | ✓ | Swagger spec; no secrets |
 

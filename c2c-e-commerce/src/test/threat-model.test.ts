@@ -269,6 +269,61 @@ describe("the RBAC matrix matches the routes", () => {
     );
   });
 
+  /**
+   * Task 18 renamed three `PUT` handlers to `PATCH` and Task 19 moved an illegal order
+   * transition from 400 to 409, and the matrix went on documenting the old shape for both
+   * -- four rows describing verbs that now answer 405. The tests above check prose, which
+   * is why none of them noticed: nothing was reading the verb column at all.
+   *
+   * Asserted as the *complete* verb column per route rather than as the presence of the
+   * word "PATCH", because a row reading "PUT (deprecated) / PATCH" would satisfy a
+   * presence check while still being wrong, and because a rename that drops a row
+   * entirely has to fail here too.
+   */
+  const VERB_ROWS = [
+    { path: "/api/categories/{id}", verbs: ["PATCH · DELETE"] },
+    { path: "/api/listings/{id}", verbs: ["GET", "PATCH · DELETE"] },
+    { path: "/api/users/{id}", verbs: ["GET", "PATCH", "DELETE"] },
+    { path: "/api/orders/{id}", verbs: ["GET", "PUT", "DELETE"] },
+    { path: "/api/reviews/{id}", verbs: ["PATCH · DELETE"] },
+  ];
+
+  it.each(VERB_ROWS)("$path is documented as answering $verbs", ({ path: route, verbs }) => {
+    expect(
+      matrixRows(route).map((row) => row.verbs),
+      `the verb column for ${route} does not match the handlers the route exports`,
+    ).toEqual(verbs);
+  });
+
+  it("mentions PUT for the one route that still answers it, and no other", () => {
+    // The catch-all for the next rename: any row whose verb cell still says PUT has to be
+    // the orders row, whatever else changes around it.
+    const withPut = matrixRows()
+      .filter((row) => /\bPUT\b/.test(row.verbs))
+      .map((row) => row.path);
+
+    expect(withPut).toEqual(["`/api/orders/{id}`"]);
+  });
+
+  it("records that a listing with order history is withdrawn rather than deleted", () => {
+    // `orders.listing_id` is RESTRICT, so DELETE cannot be the hard delete this row used
+    // to describe. A bare /removed/ check would also pass "is never moved to `removed`";
+    // pin the clause, and refuse a row that calls the delete unconditional.
+    const [row] = matrixRows("/api/listings/{id}").filter((r) => r.verbs.includes("DELETE"));
+
+    expect(row.notes).toMatch(phrase("soft-deleted to `removed`"));
+    expect(row.notes).toMatch(phrase("hard delete only when no order references"));
+  });
+
+  it("records an illegal order transition as a 409", () => {
+    // Moved from 400 in Task 19: the body parsed and the status is real, so what is wrong
+    // is the resource's state. The negative guard is what makes a half-edited row fail.
+    const [row] = matrixRows("/api/orders/{id}").filter((r) => r.verbs === "PUT");
+
+    expect(row.notes).toMatch(phrase("an illegal transition **409**"));
+    expect(row.notes).not.toMatch(/illegal transition[^|]*\*\*400\*\*/);
+  });
+
   it("records the migration 0013 data loss as a lesson, not merely the numbers", () => {
     // Citing "0013" alongside "0015|0017|0019" passes even for a garbled rewrite that
     // claims 0013 also raised a notice before deleting. Pin the specific contrast: that
@@ -308,6 +363,31 @@ function sectionOf(markdown: string, id: string): string {
   const rest = markdown.slice(start);
   const nextHeading = rest.slice(1).search(/^### /m);
   return nextHeading === -1 ? rest : rest.slice(0, nextHeading + 1);
+}
+
+/**
+ * The RBAC matrix's rows, split into cells, optionally narrowed to one route path.
+ *
+ * `rowFor` below finds the *first* row mentioning a substring, which is exactly wrong for
+ * a route with several rows: `/api/users/{id}` has three, and a search for it also matches
+ * `/api/users/{id}/reviews`. This matches the path cell in full instead, so each row is
+ * attributed to the route that actually owns it.
+ */
+function matrixRows(routePath?: string): Array<{ path: string; verbs: string; notes: string }> {
+  return rbacMatrix
+    .split("\n")
+    .filter((line) => line.startsWith("| ") && !line.includes("---"))
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    // Seven columns: path, verbs, auth, buyer, seller, admin, notes. Cell 0 is the empty
+    // string before the leading pipe, and the notes run to the trailing one -- rejoined
+    // rather than indexed, so a note containing a pipe cannot truncate itself.
+    .filter((cells) => cells.length >= 9 && cells[1].startsWith("`/api/"))
+    .map((cells) => ({
+      path: cells[1],
+      verbs: cells[2],
+      notes: cells.slice(7, cells.length - 1).join("|"),
+    }))
+    .filter((row) => routePath === undefined || row.path === `\`${routePath}\``);
 }
 
 /** The one row of a markdown table (matrix or limitations) whose text mentions `needle`. */

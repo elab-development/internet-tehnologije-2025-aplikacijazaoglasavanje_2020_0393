@@ -138,6 +138,29 @@ describe("password change", () => {
     expect(await loginStatus(user.email, "reset-password-3")).toBe(200);
   });
 
+  it("refuses a body that authorises a change without making one, with a 400 not a 500", async () => {
+    // `currentPassword` is the one schema key that never becomes an update, so the
+    // "at least one field" refinement -- which counts schema keys -- passes on a body
+    // that sets nothing. That reached `set({})`, which Drizzle rejects synchronously,
+    // turning a client-controlled body into a 500.
+    const { user, accessToken } = await seedUserWithSession("old-password-1");
+    const { PATCH } = await import("./route");
+
+    const response = await PATCH(authed(accessToken, { currentPassword: "old-password-1" }), {
+      params: Promise.resolve({ id: String(user.id) }),
+    });
+
+    expect(response.status).toBe(400);
+    // The message has to name what is missing; "Internal server error" told the caller
+    // nothing, and neither would a bare "Bad request".
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toMatch(/currentPassword/);
+    expect(body.error).toMatch(/password/);
+
+    // And nothing was written: the account still answers to what it had.
+    expect(await loginStatus(user.email, "old-password-1")).toBe(200);
+  });
+
   it("does not require a current password for an account that has none", async () => {
     // OAuth-only accounts have passwordHash null: there is nothing to verify against, and
     // setting a first password must stay possible.

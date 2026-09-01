@@ -175,9 +175,15 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
         // checks below are only meaningful against a tree that cannot change underneath
         // them, and a cycle is not something the schema can refuse on their behalf.
         //
-        // Ordered by id so two concurrent moves of the same pair take the locks in the
-        // same sequence and one waits rather than both deadlocking. De-duplicated so a
-        // self-move (parentId === id, rejected below) does not lock the same row twice.
+        // De-duplicated so a self-move (parentId === id, rejected below) does not lock
+        // the same row twice.
+        //
+        // The `ORDER BY` is the part that makes the acquisition order deterministic, and
+        // it is not interchangeable with sorting the array: Postgres takes row locks in
+        // whatever order the plan emits rows, which for a small table is physical heap
+        // order, so the sorted `IN` list decided nothing at all. Two concurrent moves of
+        // the same pair could each hold one of the two rows and wait for the other.
+        // Sorting `lockIds` is kept only because it makes the emitted SQL stable to read.
         const rawLockIds = [id, parentId].filter((value): value is number => value !== null);
         const lockIds = [...new Set(rawLockIds)].sort((a, b) => a - b);
 
@@ -185,6 +191,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
           .select({ id: categories.id })
           .from(categories)
           .where(inArray(categories.id, lockIds))
+          .orderBy(categories.id)
           .for("update");
 
         // Re-read the node itself now that its row is locked. The pre-lock read above

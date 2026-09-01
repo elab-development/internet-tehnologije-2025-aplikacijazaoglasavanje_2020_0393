@@ -228,6 +228,21 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       updates.role = role;
     }
 
+    // `UpdateUserSchema`'s "at least one field" refinement counts *schema* keys, and
+    // `currentPassword` is the one key that never becomes an update -- it authorises a
+    // password change rather than being one. So `{"currentPassword":"x"}` satisfies the
+    // schema, sets nothing, and used to reach `set({})`, which Drizzle throws on
+    // synchronously: a 500 on a body the client fully controls. A refusal is the honest
+    // answer, and it belongs here rather than in the schema, which cannot see that this
+    // particular field does not map through.
+    if (Object.keys(updates).length === 0) {
+      return jsonError(
+        "No updatable fields provided: currentPassword only authorises a password " +
+          "change, send it together with password",
+        400,
+      );
+    }
+
     const [updated] = await db.transaction(async (tx) => {
       const rows = await tx
         .update(users)

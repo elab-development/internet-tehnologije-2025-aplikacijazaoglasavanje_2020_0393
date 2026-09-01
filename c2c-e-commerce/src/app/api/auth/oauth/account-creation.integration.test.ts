@@ -41,7 +41,21 @@ describe("OAuth account creation", () => {
     );
 
     try {
-      await expect(findOrCreateOAuthUser("google", PROFILE)).rejects.toThrow();
+      // The injected failure by name, not merely "something threw". A regression that
+      // made this throw *before* the first write -- a bad argument, a missing import --
+      // would satisfy a bare `rejects.toThrow()` and both row counts below at once, and
+      // the test would pass while proving nothing about the rollback it exists for.
+      const failure = await findOrCreateOAuthUser("google", PROFILE).then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(failure, "the link insert was expected to fail").not.toBeNull();
+      // Drizzle reports the statement and wraps the driver's error, which is the half
+      // carrying the constraint name -- so both halves of the chain are asserted: the
+      // write that failed, and why.
+      expect(causeChain(failure)).toMatch(/insert into "oauth_accounts"/);
+      expect(causeChain(failure)).toMatch(/deliberate_test_failure/);
 
       // Neither row may survive. A user with no link is the unreachable-account state.
       expect(await db.select().from(users)).toHaveLength(0);
@@ -59,3 +73,14 @@ describe("OAuth account creation", () => {
     expect(await db.select().from(oauthAccounts)).toHaveLength(1);
   });
 });
+
+/** An error and everything it wraps, flattened so a nested driver message is searchable. */
+function causeChain(error: unknown): string {
+  const messages: string[] = [];
+
+  for (let current = error; current instanceof Error; current = current.cause) {
+    messages.push(current.message);
+  }
+
+  return messages.join(" | ");
+}

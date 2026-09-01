@@ -51,4 +51,8 @@ CREATE UNIQUE INDEX "users_email_lower_idx" ON "users" (lower("email"));
 -- register route would never match and a raced duplicate would surface as a 500 again --
 -- the very failure this migration exists to close. Dropping it makes the new index the
 -- single source of truth its own comment above claims it to be.
-ALTER TABLE "users" DROP CONSTRAINT "users_email_unique";
+-- `IF EXISTS` because the constraint's presence depends on how the database was
+-- provisioned: `drizzle-kit push` builds the schema from `schema.ts` and never creates
+-- the named constraint `0000` did, so on a pushed database this statement would abort the
+-- migration over the absence of something it wanted gone anyway.
+ALTER TABLE "users" DROP CONSTRAINT IF EXISTS "users_email_unique";
