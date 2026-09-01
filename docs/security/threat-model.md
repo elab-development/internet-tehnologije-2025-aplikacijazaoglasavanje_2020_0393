@@ -51,7 +51,11 @@ storage"; `refresh/route.integration.test.ts` reads attributes from the raw `set
 header rather than a friendlier API that could hide a missing flag.
 
 **Residual.** A script can still *use* the session by issuing same-origin requests. Only
-a shorter window and a Content-Security-Policy reduce that; CSP is not in this backlog.
+a shorter window and a `script-src` Content-Security-Policy reduce that. The
+`Content-Security-Policy` header this app sends is `frame-ancestors 'none'` only — it
+stops the app being framed, not an injected script from running — and a `script-src`
+policy needs a nonce strategy for Next's inline scripts that is not in this backlog; see
+§4.
 
 ### T2 — Refresh-token theft
 
@@ -91,17 +95,36 @@ posts.
 `returnTo` sends the user to an attacker's origin after login.
 
 **Mitigation.** `safeReturnTo` allows exactly one shape — a single leading slash not
-followed by another slash or a backslash — and rejects rather than sanitises.
-`src/lib/oauth/return-to.ts`.
+followed by another slash or a backslash — and rejects rather than sanitises. A second,
+separate check rejects control characters and whitespace anywhere in the value —
+``[\u0000-\u001f\u007f-\u009f]|\s`` — covering the C0 controls, the C1 block and
+every `\s` whitespace codepoint. `src/lib/oauth/return-to.ts`.
 
-**Proof.** `return-to.test.ts` covers `//evil.test`, `/\evil.test`, `javascript:` and
-control-character prefixes; `link-account/page.component.test.tsx` is a regression test.
+**Proof.** `return-to.test.ts` "rejected destinations" covers `//evil.test`,
+`/\evil.test`, `javascript:`, and a leading tab or newline ahead of one of those two
+shapes; its "safeReturnTo character handling" block exercises the control-character
+predicate directly — NUL, bell, backspace, vertical tab, escape, DEL, the Unicode line
+separator, plain space, NBSP and the byte-order mark — and confirms an ordinary
+hyphenated path (`/link-account`) is accepted, not rejected.
+`link-account/page.component.test.tsx` is a regression test for the missing call site.
 
 **Note.** This was found by review *after* the predicate had been written correctly. It
 was applied on the server and not on the client, so `/link-account?returnTo=https://evil.test`
-worked. A guard is only as good as its call sites — and the predicate's own unit tests
-were added at the same time as the fix, because until then it had only ever been covered
-indirectly through the routes that happened to use it.
+worked. A guard is only as good as its call sites.
+
+**Note, corrected.** A later review pass misdiagnosed the character predicate itself —
+worth recording here because the misdiagnosis reached this document first. The predicate
+had been written with raw control bytes rather than `\x`/`\u` escapes — a literal NUL, a
+literal DEL, and the text `\s` — which reads, to a person, as the three-member class
+`{space, hyphen, whitespace}`. Under that misreading it looked as if the predicate
+rejected ordinary hyphenated paths such as `/link-account`. **It did not**: the hyphen sat
+between two raw control bytes and was a range operator there, not a literal, and the
+predicate already covered every C0 control code (U+0000–U+001F), DEL, and the codepoints
+`\s` matches — including the Unicode line separators. The real, narrow gap was the C1
+block (U+0080–U+009F). Comparing the current predicate against the reconstructed
+byte-for-byte original across every codepoint U+0000–U+FFFF confirms it is a strict
+superset: it adds exactly those 32 C1 codepoints and rejects nothing the old one let
+through.
 
 ### T5 — Account takeover via unverified email
 
@@ -133,13 +156,29 @@ and watching AC1 and AC2 fail.
 
 Password or `state` guessing at machine speed.
 
-**Mitigation.** Sliding-window limits on login, register, refresh, both OAuth routes and
-the link screen. `src/lib/rate-limit.ts`; the policy table is in `README.md`.
+**Mitigation.** Sliding-window limits, keyed on more than the caller's declared address.
+`clientIdentity` derives that address through a configured trusted-proxy hop count
+(`TRUSTED_PROXY_HOPS`, default `0`) and reads `X-Forwarded-For` from the right so a
+client-written prefix is ignored. Login and register additionally key on the submitted
+email, normalised (`trim().toLowerCase()`), so a per-account ceiling survives IP
+rotation. Authenticated routes — `POST /api/listings/generate-description` — key on the
+token subject instead of an address. Each bucket sweeps against its own recorded window,
+not the window of whichever policy happened to trigger the periodic sweep.
+`src/lib/rate-limit.ts`, `src/lib/client-ip.ts`.
 
-**Proof.** `rate-limits.integration.test.ts`, `rate-limit.test.ts`,
-`rate-limit-headers.test.ts`.
+**Proof.** `rate-limits.integration.test.ts` "X-Forwarded-For is no longer a
+fresh-bucket button" and "per-account login limit"; `client-ip.test.ts` for the hop
+arithmetic; `rate-limit.test.ts` "sweep isolation" for per-bucket windows;
+`rate-limit-headers.test.ts` for the response headers.
 
-**Residual.** The limiter is in-memory and per instance — see §4.
+**Residual.** Two limitations, stated plainly rather than left implicit:
+
+- The state is per-instance and does not survive horizontal scaling — see §4.
+- **At `TRUSTED_PROXY_HOPS=0`, the IP-keyed limits are skipped entirely** — deliberately,
+  because a shared fallback bucket would let one abuser lock out everyone — so a
+  deployment behind a proxy that forgets to set it is protected only by the account keys
+  on login and register. Refresh and the OAuth routes key on the address alone, so in
+  that misconfiguration they carry no rate limit at all.
 
 ### T8 — OAuth `state` and PKCE replay
 
@@ -226,7 +265,7 @@ accepted list", and "never lets the client's filename reach the storage key";
 | `email_verified = false` for every legacy password account | Correct, not a gap: this app has never run a verification flow, and claiming otherwise would be a falsehood that SEC-8's linking policy then trusts |
 | No email verification flow for password signup | Deferred, backlog §6. OAuth users are verified by their provider |
 | Logout does not invalidate an access token already copied out of the cookie | Accepted: it expires within 15 minutes. Closing it needs a `jti` blocklist or a `tokenVersion` column checked in `authenticate()` |
-| No Content-Security-Policy | Not in this backlog. Would reduce T1's residual risk |
+| No comprehensive Content-Security-Policy — only `frame-ancestors 'none'` is applied | Accepted for now: HSTS (`max-age=31536000; includeSubDomains`), `Referrer-Policy` (`strict-origin-when-cross-origin`) and `X-Content-Type-Options: nosniff` are already applied on every route (`next.config.ts`). A `script-src` policy needs a nonce strategy for Next's inline scripts, which is its own piece of work — not in this backlog. Would reduce T1's residual risk |
 | No session-management UI ("sign out other devices") | `revokeRefreshTokenFamily` exists; only the screen is missing. Deferred, backlog §6 |
 
 ## 5. Sequence diagrams

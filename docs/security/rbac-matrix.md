@@ -74,14 +74,14 @@ Legend: **—** public · **✓** permitted · **✗** refused
 | `/api/listings/{id}/images` | PATCH | required | ✗ | owner | ✓ | `canMutateListing`; reorder is scoped to this listing's own image ids |
 | `/api/listings/{id}/images/{imageId}` | DELETE | required | ✗ | owner | ✓ | `canMutateListing`; row deleted, then the object, best-effort |
 | `/api/images/{id}` | GET | optional | ✓ | ✓ | ✓ | Public for a published listing (`active`/`reserved`/`sold`); owner or admin otherwise → **404**, not 403 (see below) |
-| `/api/listings/{id}/similar` | GET | — | ✓ | ✓ | ✓ | Embeddings never leave the server |
+| `/api/listings/{id}/similar` | GET | optional | ✓ | ✓ | ✓ | Public for a published source listing (`active`/`reserved`/`sold`); `draft`/`removed` sources are owner-or-admin, matching `GET /api/images/{id}` → **404**, not 403. Embeddings never leave the server |
 | `/api/listings/generate-description` | POST | required | ✗ | ✓ | ✓ | Rate limited per **user id** (SEC-11) |
 | `/api/orders` | GET | required | own | own | all | The caller's purchases, whatever their role — `buyerId = caller` |
 | `/api/orders` | POST | required | ✓ | ✓ | ✓ | Anyone signed in may buy (D5); `buyerId` from the token; the listing's own seller gets **403** |
 | `/api/orders/{id}` | GET | required | party | party | ✓ | `canViewOrder` — buyer or seller of *this* order; refusal is **404** |
 | `/api/orders/{id}` | PUT | required | party | party | ✓ | `canTransition(from, to, actor)`; a non-party gets **404**, an illegal transition **400** |
 | `/api/orders/{id}` | DELETE | required | ✗ | ✗ | ✓ | Releases the listing in the same transaction |
-| `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to `orders.sellerId` |
+| `/api/orders/seller` | GET | required | ✗ | own sales | ✓ | Scoped to `orders.sellerId`; the response projects the buyer's `buyerEmail` alongside `buyerName` |
 | `/api/orders/{id}/review` | POST | required | buyer | buyer | ✗ | Buyer of *this* order, status `completed`. A non-party gets **404**; the seller and admins get **403** — reading an order is not a licence to write its buyer's opinion. One review per order, enforced by `reviews_one_per_order_idx` → **409** |
 | `/api/recommendations` | GET | required | ✓ | ✓ | ✓ | Built from the caller's own history |
 | `/api/reviews/{id}` | PATCH · DELETE | required | author | author | ✓ | `canMutateReview`; **not** the seller being reviewed. Both verbs adjust the seller's aggregates in the same transaction |
@@ -126,3 +126,14 @@ Legend: **—** public · **✓** permitted · **✗** refused
   from browse for 48 hours; one self-registered account could therefore reserve the whole
   catalogue and hold it. An abuse control was never in this part's scope and the shape it
   should take — a limiter, a per-buyer cap, or both — is a product decision; deferred.
+- **Migration `0013` (`drizzle/0013_drop_listing_image_url.sql`) dropped
+  `listings.image_url` without migrating its data into `listing_images`.** It is applied,
+  and the column's contents are gone — not something a later migration can recover. This
+  is recorded as a lesson, not an open item, and the contrast is with the migrations that
+  came after it in the same redesign: `0015_orders_collapse.sql` refuses to run
+  (`RAISE EXCEPTION`) rather than silently collapse an `order_items` row it cannot migrate
+  losslessly; `0017_reviews_reanchor.sql` announces the row count with `RAISE NOTICE`
+  before each of its two destructive deletes; `0019_users_email_lower.sql` refuses
+  (`RAISE EXCEPTION`) when lowercasing an email would collide with an existing account,
+  and reports the row count it changed with `RAISE NOTICE`. `0013` did none of that — no
+  check, no count, no way to run it again with the data preserved.

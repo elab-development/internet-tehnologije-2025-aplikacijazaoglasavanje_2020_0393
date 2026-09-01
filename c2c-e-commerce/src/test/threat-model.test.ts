@@ -139,7 +139,7 @@ describe("C2C-SEC-12 AC3 — the rotation diagram", () => {
 
 describe("C2C-SEC-12 AC4 — known limitations", () => {
   it("names every limitation's disposition", () => {
-    const section = threatModel.split("## 4. Known limitations")[1]?.split("## 5.")[0] ?? "";
+    const section = sectionOf(threatModel, "4");
 
     for (const limitation of [
       "in-memory and per instance",
@@ -154,7 +154,7 @@ describe("C2C-SEC-12 AC4 — known limitations", () => {
   });
 
   it("says whether each is deferred or accepted", () => {
-    const section = threatModel.split("## 4. Known limitations")[1]?.split("## 5.")[0] ?? "";
+    const section = sectionOf(threatModel, "4");
     const rows = section.split("\n").filter((l) => l.startsWith("| ") && !l.includes("---"));
 
     // Header plus at least six entries, each stating a disposition.
@@ -179,10 +179,111 @@ describe("C2C-SEC-12 — the RBAC matrix is linked and present", () => {
   });
 });
 
+/**
+ * api-remediation Task 21 — the documents have to keep saying what is true.
+ *
+ * Twenty tasks changed the ground under these two documents: the rate limiter learned a
+ * trusted-proxy hop count and per-account keys, `safeReturnTo`'s control-character
+ * predicate turned out to have been misdiagnosed by an earlier review, a password change
+ * now revokes every refresh family, a narrow CSP shipped, and two RBAC rows fell out of
+ * date with the routes they describe. These tests pin the corrected claims so a future
+ * edit that reintroduces a stale or false one fails here rather than surviving to be
+ * trusted by a reader.
+ */
+describe("the threat model describes the limiter that exists", () => {
+  it("names the trusted-hop model rather than implying raw XFF is trusted", () => {
+    const t7 = sectionOf(threatModel, "T7");
+    expect(t7).toMatch(/TRUSTED_PROXY_HOPS/);
+    // The old text described sliding-window limits without mentioning that the key was
+    // client-controlled. Naming the variable is what makes the claim checkable.
+  });
+
+  it("documents that IP-keyed limits are skipped, not shared, at zero trusted hops", () => {
+    // The alternative -- a shared fallback bucket -- would let one abuser lock out every
+    // caller, which is the actual reason the limit is skipped rather than degraded.
+    const t7 = sectionOf(threatModel, "T7");
+    expect(t7).toMatch(/skipped entirely/i);
+  });
+
+  it("no longer lists the password-change gap as a limitation", () => {
+    // Closed by the revocation in the password-change handler.
+    expect(sectionOf(threatModel, "4")).not.toMatch(/refresh famil(y|ies) .* remain/i);
+  });
+
+  it("lists CSP as partially applied rather than absent", () => {
+    expect(sectionOf(threatModel, "4")).toMatch(/frame-ancestors/);
+  });
+
+  it("records HSTS, Referrer-Policy and X-Content-Type-Options as applied", () => {
+    const section = sectionOf(threatModel, "4");
+    expect(section).toMatch(/Strict-Transport-Security|HSTS/);
+    expect(section).toMatch(/Referrer-Policy/);
+    expect(section).toMatch(/X-Content-Type-Options/);
+  });
+});
+
+describe("the threat model's T4 does not repeat the disproven hyphen claim", () => {
+  const t4 = sectionOf(threatModel, "T4");
+
+  it("does not claim the old predicate rejected an ordinary hyphenated path", () => {
+    // The finding that /link-account was rejected by the character predicate was itself
+    // wrong -- the hyphen sat between two raw control bytes and was a range operator, not
+    // a literal. This is the specific false claim that must not survive in the document.
+    expect(t4).not.toMatch(/rejected `?\/link-account`?/i);
+  });
+
+  it("names the actual gap the fixed predicate closed", () => {
+    expect(t4).toMatch(/C1/);
+    expect(t4).toMatch(/U\+0080/i);
+  });
+});
+
+describe("the RBAC matrix matches the routes", () => {
+  it("does not describe /similar as unconditionally public", () => {
+    const row = rowFor(rbacMatrix, "/similar");
+    expect(row).toMatch(/owner|admin/i);
+  });
+
+  it("records that /orders/seller projects the buyer's email", () => {
+    expect(rowFor(rbacMatrix, "/orders/seller")).toMatch(/buyerEmail/);
+  });
+
+  it("records the migration 0013 data loss as a lesson", () => {
+    expect(rbacMatrix).toMatch(/0013/);
+    expect(rbacMatrix).toMatch(/0015|0017|0019/);
+  });
+});
+
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 function mermaidBlocks(markdown: string): string[] {
   return [...markdown.matchAll(/```mermaid\n([\s\S]*?)```/g)].map((m) => m[1]);
+}
+
+/**
+ * Slices out one section of `threat-model.md`: a `### T<n>` threat, by its id (e.g.
+ * `"T7"`), or the `## 4. Known limitations` table via the id `"4"`.
+ *
+ * The existing AC2/AC3 tests read mermaid blocks positionally and AC4 sliced section 4
+ * inline; this generalises that same split-on-heading approach rather than adding a
+ * second way of reading the document.
+ */
+function sectionOf(markdown: string, id: string): string {
+  if (id === "4") {
+    return markdown.split("## 4. Known limitations")[1]?.split("## 5.")[0] ?? "";
+  }
+
+  const start = markdown.search(new RegExp(`^### ${id}\\b`, "m"));
+  if (start === -1) return "";
+
+  const rest = markdown.slice(start);
+  const nextHeading = rest.slice(1).search(/^### /m);
+  return nextHeading === -1 ? rest : rest.slice(0, nextHeading + 1);
+}
+
+/** The one row of a markdown table (matrix or limitations) whose text mentions `needle`. */
+function rowFor(markdown: string, needle: string): string {
+  return markdown.split("\n").find((l) => l.startsWith("| ") && l.includes(needle)) ?? "";
 }
 
 /** Depth-first search for a file by basename. */
