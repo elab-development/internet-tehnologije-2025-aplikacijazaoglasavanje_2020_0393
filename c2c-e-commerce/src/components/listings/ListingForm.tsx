@@ -29,6 +29,21 @@ const listingStatuses: ListingStatus[] = ["active", "sold", "removed"];
 const selectClasses =
   "rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
 
+/**
+ * Parses what a person typed into a price.
+ *
+ * `<input type="number">` reports an empty value for anything the browser thinks is
+ * malformed, and this app lists RSD — where the decimal separator people type is a
+ * comma. "1500,50" arrived as "" and the form said the price was required while the
+ * field visibly held a number.
+ */
+export function parsePriceInput(raw: string): number | null {
+  const normalised = raw.trim().replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(normalised)) return null;
+  const value = Number(normalised);
+  return Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 // ─── Loading placeholder ──────────────────────────────────────────────────────
 
 function ListingFormSkeleton() {
@@ -76,6 +91,7 @@ export default function ListingForm(props: ListingFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [priceError, setPriceError] = useState<string | null>(null);
 
   /**
    * The draft created by a previous, failed submit.
@@ -155,16 +171,23 @@ export default function ListingForm(props: ListingFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError(null);
+    setPriceError(null);
 
     if (!title.trim() || !description.trim() || !price.trim()) {
       setSubmitError("Title, description, and price are required");
       return;
     }
 
+    const parsedPrice = parsePriceInput(price);
+    if (parsedPrice === null) {
+      setPriceError("Enter a price like 19.99");
+      return;
+    }
+
     const payload = {
       title: title.trim(),
       description: description.trim(),
-      price: Number(price),
+      price: parsedPrice,
       categoryId,
     };
 
@@ -288,12 +311,12 @@ export default function ListingForm(props: ListingFormProps) {
 
         <InputField
           label="Price"
-          type="number"
+          type="text"
+          inputMode="decimal"
           value={price}
           onChange={(event) => setPrice(event.target.value)}
-          min={0}
-          step={0.01}
           placeholder="0.00"
+          error={priceError ?? undefined}
           required
         />
 

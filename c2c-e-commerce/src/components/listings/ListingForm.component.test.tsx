@@ -116,6 +116,20 @@ function createListingCalls() {
   return post.mock.calls.filter(([url]) => url === "/api/listings");
 }
 
+/** The body of the (first) create-listing call, for asserting on the submitted payload. */
+function createListingBody() {
+  return createListingCalls()[0]?.[1];
+}
+
+/** Fills title and description only, leaving price for the test to set. */
+async function fillTitleAndDescription(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText(/^title/i), "Mountain bike");
+  await user.type(
+    descriptionBox(),
+    "A well-loved aluminium mountain bike, ready for the trails.",
+  );
+}
+
 function deleteCalls() {
   return del.mock.calls;
 }
@@ -323,5 +337,35 @@ describe("M7 — deleting a saved photo asks first", () => {
 
     await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: /remove photo/i }));
     await waitFor(() => expect(deleteCalls()).toHaveLength(1));
+  });
+});
+
+describe("M6 — a comma decimal is a price, not an empty field", () => {
+  it("accepts 1500,50 and submits 1500.5", async () => {
+    const user = userEvent.setup();
+    mockCreateListing({ id: 1 });
+    renderCreateForm();
+    await fillTitleAndDescription(user);
+
+    await user.type(screen.getByLabelText(/^price/i), "1500,50");
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    await waitFor(() =>
+      expect(createListingBody()).toMatchObject({ price: 1500.5 }),
+    );
+    expect(
+      screen.queryByText(/title, description, and price are required/i),
+    ).toBeNull();
+  });
+
+  it("still rejects text that is not a price", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+    await fillTitleAndDescription(user);
+
+    await user.type(screen.getByLabelText(/^price/i), "abc");
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    expect(await screen.findByText(/enter a price like 19\.99/i)).toBeInTheDocument();
   });
 });

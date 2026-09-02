@@ -7,6 +7,7 @@ import { forwardRef, useId } from "react";
 export type InputFieldProps = {
   label: string;
   type?: "text" | "email" | "password" | "number" | "tel" | "search";
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   placeholder?: string;
   value: string | number;
   onChange: React.ChangeEventHandler<HTMLInputElement>;
@@ -28,6 +29,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
     {
       label,
       type = "text",
+      inputMode,
       placeholder,
       value,
       onChange,
@@ -64,6 +66,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
           id={id}
           name={name}
           type={type}
+          inputMode={inputMode}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
