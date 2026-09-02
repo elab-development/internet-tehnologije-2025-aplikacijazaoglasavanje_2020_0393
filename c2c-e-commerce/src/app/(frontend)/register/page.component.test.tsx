@@ -75,8 +75,13 @@ describe("M11 — the role selector is not colour-only", () => {
 
     await user.click(await screen.findByRole("radio", { name: "Sell" }));
 
-    expect(screen.getByRole("radio", { name: "Sell" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Buy" })).not.toBeChecked();
+    // Direct attribute assertions rather than toBeChecked(): the matcher throws a
+    // usage error when aria-checked is absent entirely, which would mask the defect
+    // this test exists to catch rather than reporting it as a wrong value. The second
+    // line matters — aria-checked="false" is meaningfully different from the attribute
+    // being absent, and only a direct assertion distinguishes them.
+    expect(screen.getByRole("radio", { name: "Sell" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Buy" })).toHaveAttribute("aria-checked", "false");
   });
 
   it("defaults to buyer, matching the pre-selected visual state", async () => {

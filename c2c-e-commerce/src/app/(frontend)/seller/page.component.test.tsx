@@ -71,8 +71,10 @@ function renderSellerDashboard() {
 describe("H10 — the dashboard does not claim to be a tab widget", () => {
   it("offers plain buttons, not tabs", async () => {
     renderSellerDashboard();
-    expect(screen.queryByRole("tab")).toBeNull();
-    expect(screen.queryByRole("tablist")).toBeNull();
+    // queryByRole throws on multiple matches, so it would crash rather than fail if the
+    // roles came back — and would behave differently for one leftover role than for two.
+    expect(screen.queryAllByRole("tab")).toHaveLength(0);
+    expect(screen.queryAllByRole("tablist")).toHaveLength(0);
     expect(
       await screen.findByRole("button", { name: /incoming orders/i }),
     ).toBeInTheDocument();
