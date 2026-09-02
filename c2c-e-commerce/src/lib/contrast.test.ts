@@ -75,8 +75,15 @@ export function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-// The page background, from globals.css `--background`.
-const PAGE = "#f8f9fc";
+// Read from globals.css rather than duplicated here: zinc-500 clears this background by
+// only 0.085, so a change to --background could push the real page under 4.5:1 while a
+// hardcoded copy kept this test green.
+const PAGE = (() => {
+  const css = readFileSync("src/app/globals.css", "utf8");
+  const match = css.match(/--background:\s*(#[0-9a-fA-F]{3,8})\s*;/);
+  if (!match) throw new Error("could not read --background from globals.css");
+  return match[1];
+})();
 const WHITE = "#ffffff";
 
 // Tailwind v4.2.1's zinc oklch triples (from theme.css, confirmed by compiling the

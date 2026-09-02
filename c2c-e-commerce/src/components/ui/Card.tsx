@@ -68,11 +68,17 @@ export default function Card({
             sizes="(max-width: 768px) 100vw, 400px"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center">
-            {/* Decorative placeholder-image glyph, not content — contrast-exempt. */}
+          // This glyph is the only indication the listing has no photo — not decorative,
+          // so it needs a real accessible name (as StarRating.tsx does for its glyphs)
+          // rather than being hidden, and a shade that clears 4.5:1.
+          <div
+            className="flex h-full w-full items-center justify-center"
+            role="img"
+            aria-label="No image available"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              className="h-14 w-14 text-zinc-300"
+              className="h-14 w-14 text-zinc-500"
               aria-hidden="true"
               fill="none"
               viewBox="0 0 24 24"

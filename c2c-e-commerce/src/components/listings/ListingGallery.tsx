@@ -30,10 +30,13 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
 
   if (!displayImageId) {
     return (
-      // Decorative placeholder glyph, not content — contrast-exempt.
+      // This emoji is the only indication the listing has no photo — not decorative, so
+      // it gets a real accessible name (as StarRating.tsx does for its glyphs) instead of
+      // aria-hidden, and a shade that clears 4.5:1.
       <div
-        className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none"
-        aria-hidden="true"
+        className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-500 text-5xl select-none"
+        role="img"
+        aria-label="No photo available"
       >
         🖼️
       </div>
