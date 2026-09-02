@@ -359,13 +359,19 @@ describe("M3 — the decorative submit button is gone", () => {
 
 describe("C3 — results are announced", () => {
   it("announces the result count after a search settles", async () => {
+    // The mocked useFetch returns the same one-row fixture (total: 1) regardless of the
+    // search term, so this can't actually exercise "after a search settles" -- the
+    // announce effect fires on `!loading && data`, which is already true at mount, and
+    // `/\d+ listings? found/` would match any count including a stale one. Assert the
+    // exact count against the fixture's `total` instead, which fails if the effect stops
+    // firing or the count goes wrong.
     const user = userEvent.setup();
     renderPage();
 
     await user.type(screen.getByLabelText(/^search/i), "jacket");
 
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(/\d+ listings? found/),
+      expect(screen.getByRole("status")).toHaveTextContent("1 listing found"),
     );
   });
 });

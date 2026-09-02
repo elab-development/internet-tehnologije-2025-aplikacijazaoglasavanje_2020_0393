@@ -51,9 +51,16 @@ describe("SellerReviews", () => {
     expect(screen.queryAllByRole("article")).toHaveLength(0);
   });
 
-  it("L16 — shows an empty state when a seller has no reviews", async () => {
+  it("L16 — the empty state renders EmptyState's explanatory copy, not just its title", async () => {
+    // The test above already covers the heading role. "No reviews yet." itself predates
+    // L16 -- it was plain text before this used EmptyState too, so asserting just that
+    // text would pass whether or not EmptyState is actually in use. The description
+    // sentence only exists because this renders an EmptyState; asserting it fails if
+    // EmptyState is ever swapped back out for a bare string.
     render(<SellerReviews reviews={[]} />);
-    expect(await screen.findByText(/no reviews yet/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/once a buyer reviews an order with this seller/i),
+    ).toBeInTheDocument();
   });
 
   it("L18 fix round 1 — renders the review date without a time, unlike the transactional sites", () => {

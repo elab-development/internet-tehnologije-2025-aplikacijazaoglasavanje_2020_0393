@@ -57,4 +57,8 @@ describe("sellerForMetadata", () => {
 it("supplies the %s that title.template was waiting for", async () => {
   const { metadata } = await import("@/app/(frontend)/settings/layout");
   expect(metadata.title).toBe("Settings");
+  // spec D8: nine layouts set `robots: { index: false }` and none of them were
+  // asserted anywhere. This file already imports the object carrying it -- one line
+  // closes that gap for the settings layout.
+  expect(metadata.robots).toEqual({ index: false });
 });

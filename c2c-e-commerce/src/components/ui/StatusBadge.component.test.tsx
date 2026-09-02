@@ -36,8 +36,14 @@ describe("StatusBadge", () => {
     expect(label).not.toBe(status);
   });
 
+  // Not "distinct" from the short label: `orderStatusLabels` and
+  // `orderStatusShortLabels` are byte-identical for shipped/completed/cancelled by
+  // design (there is no extra detail to add), so a distinctness assertion would be
+  // false for those three regardless of whether the component is broken. What this
+  // test actually checks -- and can actually fail on -- is that the descriptive
+  // variant is a human label, not the raw enum value.
   it.each(ORDER_STATUSES)(
-    "gives the order status %s a distinct descriptive label",
+    "gives the order status %s a descriptive human label",
     (status) => {
       render(<StatusBadge status={status} kind="order" descriptive />);
       const label = screen.getByText(/\S/).textContent?.trim() ?? "";

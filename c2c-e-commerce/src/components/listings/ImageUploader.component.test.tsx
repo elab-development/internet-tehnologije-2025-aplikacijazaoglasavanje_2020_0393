@@ -12,7 +12,13 @@ import ImageUploader from "./ImageUploader";
 
 beforeAll(() => {
   // jsdom implements neither; the component only needs them to be callable.
-  URL.createObjectURL = vi.fn(() => "blob:preview");
+  // A distinct URL per call, not a constant, matters for L23 below: the component
+  // keys each preview `<li>` on this URL, so a mock that returned the same string
+  // for every file would make two files collide on the key regardless of whether
+  // the component keys on the URL or (the pre-fix) file name -- the test could
+  // never tell the two apart.
+  let counter = 0;
+  URL.createObjectURL = vi.fn(() => `blob:preview-${counter++}`);
   URL.revokeObjectURL = vi.fn();
 });
 
@@ -161,6 +167,12 @@ describe("L27 — alt text describes position, not a database id", () => {
 
 describe("L23 — two files with the same name and size", () => {
   it("renders both without a duplicate React key", async () => {
+    // getAllByAltText alone can't tell this apart from the bug: React renders both
+    // list items either way and only warns to the console on a key collision -- it
+    // does not drop or merge either child. Spy on console.error and assert that
+    // warning specifically.
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
     const onFilesChange = vi.fn();
     const a = new File(["x"], "photo.jpg", { type: "image/jpeg" });
     const b = new File(["x"], "photo.jpg", { type: "image/jpeg" });
@@ -168,5 +180,12 @@ describe("L23 — two files with the same name and size", () => {
     render(<ImageUploader files={[a, b]} existing={[]} onFilesChange={onFilesChange} onRemoveExisting={vi.fn()} />);
 
     expect(screen.getAllByAltText("photo.jpg")).toHaveLength(2);
+    expect(
+      consoleError.mock.calls.some((args) =>
+        String(args[0]).includes("Encountered two children with the same key"),
+      ),
+    ).toBe(false);
+
+    consoleError.mockRestore();
   });
 });

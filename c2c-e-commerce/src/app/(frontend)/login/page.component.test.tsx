@@ -16,6 +16,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import LoginPage from "./page";
+import { DEFAULT_RETURN_TO } from "@/lib/oauth/return-to";
 
 const pushSpy = vi.hoisted(() => vi.fn());
 const replaceSpy = vi.hoisted(() => vi.fn());
@@ -103,17 +104,27 @@ describe("M5 — sends the user where they were going after signing in", () => {
     await waitFor(() => expect(pushSpy).toHaveBeenCalledWith("/"));
   });
 
-  it("refuses a returnTo that points off-site", async () => {
+  it("refuses a returnTo that points off-site, unlike a same-origin one", async () => {
     const user = userEvent.setup();
-    renderLogin({ searchParams: "returnTo=https://evil.example/steal" });
 
+    // Off-site: falls back to the default, never to the attacker's URL.
+    const offSite = renderLogin({ searchParams: "returnTo=https://evil.example/steal" });
     await signIn(user);
-
     // safeReturnTo's default for anything off-site — see src/lib/oauth/return-to.ts.
-    await waitFor(() => expect(pushSpy).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(pushSpy).toHaveBeenCalledWith(DEFAULT_RETURN_TO));
     expect(pushSpy).not.toHaveBeenCalledWith(
       expect.stringContaining("evil.example"),
     );
+    offSite.unmount();
+
+    // Paired same-origin case: a page that ignored `returnTo` entirely (the M5 defect
+    // this file exists to catch) would land here too, and be indistinguishable from the
+    // off-site refusal above. The two branches must produce different destinations.
+    pushSpy.mockClear();
+    renderLogin({ searchParams: "returnTo=/orders/999" });
+    await signIn(user);
+    await waitFor(() => expect(pushSpy).toHaveBeenCalledWith("/orders/999"));
+    expect(pushSpy).not.toHaveBeenCalledWith(DEFAULT_RETURN_TO);
   });
 
   it("does not navigate when the sign-in fails", async () => {
@@ -138,11 +149,19 @@ describe("M5 — the already-authenticated redirect also honours returnTo", () =
     await waitFor(() => expect(replaceSpy).toHaveBeenCalledWith("/orders/412"));
   });
 
-  it("refuses an off-site returnTo on the already-authenticated redirect too", async () => {
+  it("refuses an off-site returnTo on the already-authenticated redirect too, unlike a same-origin one", async () => {
     auth.isAuthenticated = true;
-    renderLogin({ searchParams: "returnTo=https://evil.example/steal" });
 
-    await waitFor(() => expect(replaceSpy).toHaveBeenCalledWith("/"));
+    const offSite = renderLogin({ searchParams: "returnTo=https://evil.example/steal" });
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledWith(DEFAULT_RETURN_TO));
+    offSite.unmount();
+
+    // Paired same-origin case: a redirect that ignored `returnTo` entirely would also
+    // land on DEFAULT_RETURN_TO here, indistinguishable from the off-site refusal above.
+    replaceSpy.mockClear();
+    renderLogin({ searchParams: "returnTo=/orders/999" });
+    await waitFor(() => expect(replaceSpy).toHaveBeenCalledWith("/orders/999"));
+    expect(replaceSpy).not.toHaveBeenCalledWith(DEFAULT_RETURN_TO);
   });
 
   it("goes home when there is no returnTo and the visitor is already signed in", async () => {
