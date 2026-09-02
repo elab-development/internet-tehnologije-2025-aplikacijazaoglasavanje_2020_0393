@@ -5294,6 +5294,29 @@ export type StatusBadgeProps =
 
 Import the two status types from `@/lib/order-lifecycle` and `@/db/schema` rather than restating them. Remove the internal casts — with the union in place the maps index safely.
 
+**Also replace the `?? status` fallback while you are here.** Task 27's review recommended
+this land with the type change, and the reasoning is that the union makes the fallback
+*dead for every status the compiler knows about* — a missing map entry becomes a compile
+error once the maps are `Record<OrderStatus, string>`. What survives is the runtime case:
+a status this frontend has not been taught yet, arriving from an API that added one.
+Today that renders the raw slug, so a user sees `awaiting_pickup` in the UI.
+
+```tsx
+  const label = labels[status] ?? "Unknown status";
+
+  if (label === "Unknown status") {
+    // Drift between the API's enum and this component's map. Rendering the raw slug
+    // put database vocabulary in front of users; this is at least honest, and the
+    // console error is what makes the drift findable.
+    console.error(`StatusBadge: no label for ${kind} status "${status}"`);
+  }
+```
+
+Give the unknown case a visually neutral style rather than reusing a status colour that
+would imply a meaning. Add a test asserting an unmapped status renders "Unknown status"
+and not the raw value — cast through `as never` or similar to construct the case, since
+the union deliberately makes it unreachable through normal typing.
+
 - [ ] **Step 4: Implement — sort validation**
 
 ```tsx
