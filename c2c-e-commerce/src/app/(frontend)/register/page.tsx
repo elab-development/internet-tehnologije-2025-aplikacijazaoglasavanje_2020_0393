@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -43,6 +43,19 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+
+  const roleRefs = useRef<Record<Role, HTMLButtonElement | null>>({
+    buyer: null,
+    seller: null,
+  });
+
+  // Roving tabindex means only the checked option is in the tab order, so the arrow-key
+  // handler has to move focus itself as it moves the selection — otherwise Tab would land
+  // on an option that arrow keys can no longer reach.
+  function selectRole(next: Role) {
+    setRole(next);
+    roleRefs.current[next]?.focus();
+  }
 
   // ── Validation ────────────────────────────────────────────────────────────
   function validate(): boolean {
@@ -147,16 +160,38 @@ export default function RegisterPage() {
 
             {/* Role selector */}
             <div className="flex flex-col gap-1">
-              <span className="text-sm font-medium text-zinc-700">
+              <span id="role-label" className="text-sm font-medium text-zinc-700">
                 I want to&hellip;
                 <span className="ml-0.5 text-red-500" aria-hidden="true">*</span>
               </span>
-              <div className="grid grid-cols-2 gap-2">
+              <div
+                role="radiogroup"
+                aria-labelledby="role-label"
+                aria-required="true"
+                className="grid grid-cols-2 gap-2"
+              >
                 {(["buyer", "seller"] as Role[]).map((r) => (
                   <button
                     key={r}
+                    ref={(el) => {
+                      roleRefs.current[r] = el;
+                    }}
                     type="button"
-                    onClick={() => setRole(r)}
+                    role="radio"
+                    aria-checked={role === r}
+                    tabIndex={role === r ? 0 : -1}
+                    onClick={() => selectRole(r)}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === "ArrowRight" ||
+                        event.key === "ArrowDown" ||
+                        event.key === "ArrowLeft" ||
+                        event.key === "ArrowUp"
+                      ) {
+                        event.preventDefault();
+                        selectRole(r === "buyer" ? "seller" : "buyer");
+                      }
+                    }}
                     className={[
                       "rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors",
                       role === r
@@ -164,7 +199,10 @@ export default function RegisterPage() {
                         : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400",
                     ].join(" ")}
                   >
-                    {r === "buyer" ? "🛍 Buy" : "🏪 Sell"}
+                    {/* The emoji is decoration; unhidden it made the accessible name
+                        "shopping bags Buy". */}
+                    <span aria-hidden="true">{r === "buyer" ? "🛍" : "🏪"}</span>{" "}
+                    {r === "buyer" ? "Buy" : "Sell"}
                   </button>
                 ))}
               </div>
