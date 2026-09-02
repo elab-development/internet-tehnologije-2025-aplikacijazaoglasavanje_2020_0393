@@ -89,3 +89,27 @@ body {
   outline: 2px solid var(--brand-600);
   outline-offset: 2px;
 }
+
+/* ─── Reduced motion ────────────────────────────────────────────────────────── */
+/* A grid of eight shimmering skeletons on a slow connection animates indefinitely,
+   which is the classic vestibular trigger. Everything here is decoration; none of it
+   carries meaning, so switching it off costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton-shimmer {
+    animation: none;
+    background: #f3f4f6;
+  }
+}
