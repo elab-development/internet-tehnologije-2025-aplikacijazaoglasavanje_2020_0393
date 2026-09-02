@@ -185,6 +185,10 @@ describe("C2C-AI-6 — AC6: no double submission", () => {
 
     expect(post).toHaveBeenCalledTimes(1);
     release(generated);
+    // The component clears its loading state once the promise resolves; without
+    // awaiting that settle, the update lands after this test has already returned,
+    // outside any act() scope.
+    await waitFor(() => expect(button).not.toBeDisabled());
   });
 });
 

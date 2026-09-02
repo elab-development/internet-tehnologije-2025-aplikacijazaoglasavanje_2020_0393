@@ -102,6 +102,9 @@ describe("ReviewForm", () => {
     expect(post).toHaveBeenCalledTimes(1);
 
     release({ id: 1 });
+    // On success the form closes the dialog; without awaiting that settle, the
+    // update lands after this test has already returned, outside any act() scope.
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Submit review" })).toBeNull());
   });
 });
 

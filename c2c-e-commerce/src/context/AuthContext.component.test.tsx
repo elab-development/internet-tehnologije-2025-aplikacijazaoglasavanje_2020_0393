@@ -76,11 +76,15 @@ describe("C2C-SEC-4 AC2 — the session survives a reload", () => {
     expect(apiMock.get).toHaveBeenCalledWith("/api/auth/me");
   });
 
-  it("shows a loading state first, not a flash of logged-out UI", () => {
+  it("shows a loading state first, not a flash of logged-out UI", async () => {
     renderProvider();
 
     // Before the bootstrap resolves the provider must not claim the user is signed out.
     expect(screen.getByText("loading")).toBeInTheDocument();
+
+    // Let the mocked bootstrap fetch settle before the test ends — otherwise its state
+    // update lands after this test has already returned, outside any act() scope.
+    await waitFor(() => expect(screen.getByTestId("state")).toBeInTheDocument());
   });
 });
 
@@ -137,7 +141,7 @@ describe("C2C-SEC-4 AC9 — proactive refresh", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
 
     renderProvider();
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(screen.getByTestId("state")).toHaveTextContent("in:Ada"),
     );
 
@@ -156,7 +160,7 @@ describe("C2C-SEC-4 AC9 — proactive refresh", () => {
     apiMock.get.mockRejectedValue(new Error("Not authenticated"));
 
     renderProvider();
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(screen.getByTestId("state")).toHaveTextContent("out"),
     );
 
@@ -223,12 +227,12 @@ describe("C2C-SEC-4 AC8 — logout", () => {
   it("stops the proactive refresh timer after logout", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     renderHarness();
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(screen.getByTestId("state")).toHaveTextContent("in:Ada"),
     );
 
     screen.getByText("sign out").click();
-    await vi.waitFor(() =>
+    await waitFor(() =>
       expect(screen.getByTestId("state")).toHaveTextContent("out"),
     );
     apiMock.post.mockClear();

@@ -275,7 +275,9 @@ describe("C2C-AI-8 — AC7: layout", () => {
 
     const wrapper = toggle().closest("[data-testid='smart-search-control']");
     expect(wrapper).not.toBeNull();
-    expect(wrapper!.className).toMatch(/flex/);
+    // `toMatch(/flex/)` also matched `min-w-0` in the same class list, so this could not
+    // fail for the regression the comment above describes.
+    expect(wrapper!.className.split(/\s+/)).toContain("flex");
   });
 });
 

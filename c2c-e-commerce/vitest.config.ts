@@ -66,7 +66,16 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov", "html"],
       reportsDirectory: "coverage",
-      include: ["src/lib/**", "src/app/api/**"],
+      include: [
+        "src/lib/**",
+        "src/app/api/**",
+        // The frontend was excluded from measurement entirely, so a component with no
+        // tests looked identical to one with full coverage.
+        "src/app/(frontend)/**",
+        "src/components/**",
+        "src/hooks/**",
+        "src/context/**",
+      ],
       exclude: [
         "**/*.test.ts",
         "**/*.test.tsx",

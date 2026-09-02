@@ -164,8 +164,11 @@ describe("C2C-SEC-9 AC7/AC9 — keyboard and screen reader", () => {
     render(<OAuthButtons />);
     const google = await screen.findByRole("button", { name: /google/i });
 
+    // A conditional assertion here would pass vacuously if the icon were removed
+    // entirely — assert its presence first so the check cannot silently no-op.
     const icon = google.querySelector("svg");
-    if (icon) expect(icon).toHaveAttribute("aria-hidden", "true");
+    expect(icon).not.toBeNull();
+    expect(icon).toHaveAttribute("aria-hidden", "true");
   });
 
   it("uses real buttons, not clickable divs", async () => {
