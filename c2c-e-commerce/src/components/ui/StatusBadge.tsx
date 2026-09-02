@@ -33,6 +33,32 @@ const orderStatusLabels: Record<OrderStatus, string> = {
   expired: "Reservation expired",
 };
 
+/**
+ * Short buyer-facing wording for an order status, used when `descriptive` is not
+ * set. Previously the non-descriptive badge fell back to the raw enum value with a
+ * CSS `capitalize` class — which capitalizes only the rendered glyphs, not the text
+ * node, so a status with no map entry was indistinguishable from one with a real
+ * label at the DOM level.
+ */
+const orderStatusShortLabels: Record<OrderStatus, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  shipped: "Shipped",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  declined: "Declined",
+  expired: "Expired",
+};
+
+/** Buyer-facing wording for a listing status. */
+const listingStatusLabels: Record<ListingStatus, string> = {
+  draft: "Draft",
+  active: "Active",
+  reserved: "Reserved",
+  sold: "Sold",
+  removed: "Removed",
+};
+
 const FALLBACK_CLASSES = "bg-zinc-100 text-zinc-500";
 
 const sizeClasses = {
@@ -71,9 +97,11 @@ export default function StatusBadge({
       : orderStatusClasses[status as OrderStatus];
 
   const label =
-    kind === "order" && descriptive
-      ? (orderStatusLabels[status as OrderStatus] ?? status)
-      : status;
+    kind === "order"
+      ? descriptive
+        ? (orderStatusLabels[status as OrderStatus] ?? status)
+        : (orderStatusShortLabels[status as OrderStatus] ?? status)
+      : (listingStatusLabels[status as ListingStatus] ?? status);
 
   return (
     <span
