@@ -261,6 +261,11 @@ export default function ListingForm(props: ListingFormProps) {
   if (isEdit && listingLoading) return <ListingFormSkeleton />;
 
   const error = submitError ?? loadError;
+  // Looks up a field's message in the same list that feeds the summary, so Title and
+  // Price get the same aria-invalid/aria-describedby wiring /login and /register's
+  // fields already have — the summary is additive, not a replacement for the per-field
+  // error M10 also named as missing here.
+  const problemFor = (field: string) => fieldProblems.find((p) => p.field === field)?.message;
 
   return (
     <div className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -288,6 +293,7 @@ export default function ListingForm(props: ListingFormProps) {
           value={title}
           onChange={(event) => setTitle(event.target.value)}
           placeholder="Product title"
+          error={problemFor("listing-title")}
           required
         />
 
@@ -334,6 +340,7 @@ export default function ListingForm(props: ListingFormProps) {
           value={price}
           onChange={(event) => setPrice(event.target.value)}
           placeholder="0.00"
+          error={problemFor("listing-price")}
           required
         />
 

@@ -23,9 +23,18 @@ export type FieldError = { field: string; message: string };
 export default function FormErrorSummary({ errors }: { errors: FieldError[] }) {
   const ref = useRef<HTMLDivElement>(null);
 
+  // Keyed on content, not array identity: a caller that builds the error list inline
+  // would otherwise hand us a new array every render and re-steal focus on each one,
+  // pulling the cursor out of whatever the user was typing. All three current callers
+  // happen to store the array in state (a stable reference across keystroke re-renders),
+  // but that's a convention on the caller's side, not a guarantee this component can rely
+  // on.
+  const signature = errors.map((e) => `${e.field}:${e.message}`).join("|");
+
   useEffect(() => {
     if (errors.length > 0) ref.current?.focus();
-  }, [errors]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
 
   if (errors.length === 0) return null;
 

@@ -366,10 +366,13 @@ describe("M6 — a comma decimal is a price, not an empty field", () => {
     await user.type(screen.getByLabelText(/^price/i), "abc");
     await user.click(screen.getByRole("button", { name: /create listing/i }));
 
-    // Task 13's own priceError field is superseded by the M10 summary — this message
-    // now arrives as a summary entry rather than a field-level <p role="alert">, but
-    // the wording (and the seller seeing it at all) is unchanged.
-    expect(await screen.findByText(/enter a price like 19\.99/i)).toBeInTheDocument();
+    // Task 13's own priceError field is superseded by the M10 summary, but the fix
+    // round that added per-field wiring back (M10's other half — see the "wires an
+    // invalid (non-empty) price" test below) means this message now appears twice:
+    // once as a summary link, once as the field's own <p role="alert">. findByText
+    // would throw "multiple elements" here, so this only asserts the message reached
+    // the page at all — the per-field and summary tests below cover *where*.
+    expect(await screen.findAllByText(/enter a price like 19\.99/i)).not.toHaveLength(0);
   });
 });
 
@@ -437,5 +440,44 @@ describe("M10 — a blank submit shows one error summary", () => {
 
     await waitFor(() => expect(createListingCalls()).toHaveLength(1));
     expect(screen.queryByText(/fields need attention/i)).toBeNull();
+  });
+
+  it("wires aria-invalid and aria-describedby on Title and Price themselves, not just the summary", async () => {
+    // M10 named two defects for this form: a collapsed banner string, AND no
+    // field-level error at all. The summary fixes the first; this fixes the second —
+    // a screen reader user who tabs straight to an invalid field, without ever
+    // encountering the summary, must still hear why it's invalid.
+    const user = userEvent.setup();
+    renderCreateForm();
+
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const title = screen.getByLabelText(/^title/i);
+    expect(title).toHaveAttribute("aria-invalid", "true");
+    const titleDescribedBy = title.getAttribute("aria-describedby");
+    expect(titleDescribedBy).toBeTruthy();
+    expect(document.getElementById(titleDescribedBy!)).toHaveTextContent("Title is required");
+
+    const priceField = screen.getByLabelText(/^price/i);
+    expect(priceField).toHaveAttribute("aria-invalid", "true");
+    const priceDescribedBy = priceField.getAttribute("aria-describedby");
+    expect(priceDescribedBy).toBeTruthy();
+    expect(document.getElementById(priceDescribedBy!)).toHaveTextContent("Price is required");
+  });
+
+  it("wires an invalid (non-empty) price's own message to the Price field", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+    await fillTitleAndDescription(user);
+
+    await user.type(screen.getByLabelText(/^price/i), "abc");
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    const priceField = await screen.findByLabelText(/^price/i);
+    await waitFor(() => expect(priceField).toHaveAttribute("aria-invalid", "true"));
+    const describedBy = priceField.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent("Enter a price like 19.99");
   });
 });
