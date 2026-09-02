@@ -20,9 +20,13 @@ import { Button } from "@/components/ui";
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const NAV_LINKS = [
-  { href: "/listings", label: "Listings", icon: <RiStoreLine size={18} /> },
-  { href: "/orders", label: "My Orders", icon: <RiShoppingBagLine size={18} /> },
-  { href: "/api-docs", label: "API Docs", icon: <RiCodeLine size={18} /> },
+  { href: "/listings", label: "Listings", icon: <RiStoreLine size={18} aria-hidden="true" /> },
+  {
+    href: "/orders",
+    label: "My Orders",
+    icon: <RiShoppingBagLine size={18} aria-hidden="true" />,
+  },
+  { href: "/api-docs", label: "API Docs", icon: <RiCodeLine size={18} aria-hidden="true" /> },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -67,7 +71,7 @@ export default function Navbar() {
           href="/"
           className="flex items-center gap-2 text-xl font-bold text-indigo-600 hover:text-indigo-700 transition-colors"
         >
-          <RiStoreLine size={24} />
+          <RiStoreLine size={24} aria-hidden="true" />
           <span>C2C Market</span>
         </Link>
 
@@ -103,7 +107,7 @@ export default function Navbar() {
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
                 ].join(" ")}
               >
-                <RiDashboardLine size={18} />
+                <RiDashboardLine size={18} aria-hidden="true" />
                 Seller Dashboard
               </Link>
             </li>
@@ -119,7 +123,7 @@ export default function Navbar() {
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
                 ].join(" ")}
               >
-                <RiAddCircleLine size={18} />
+                <RiAddCircleLine size={18} aria-hidden="true" />
                 Sell Item
               </Link>
             </li>
@@ -143,7 +147,7 @@ export default function Navbar() {
                       className="h-7 w-7 rounded-full border border-zinc-200 bg-zinc-50"
                     />
                   ) : (
-                    <RiUserLine size={16} />
+                    <RiUserLine size={16} aria-hidden="true" />
                   )}
                   <span className="max-w-[140px] truncate font-medium">{user.name}</span>
                 </span>
@@ -176,7 +180,11 @@ export default function Navbar() {
             className="flex sm:hidden items-center justify-center rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 transition-colors"
             onClick={() => setMobileOpen((v) => !v)}
           >
-            {mobileOpen ? <RiCloseLine size={22} /> : <RiMenuLine size={22} />}
+            {mobileOpen ? (
+              <RiCloseLine size={22} aria-hidden="true" />
+            ) : (
+              <RiMenuLine size={22} aria-hidden="true" />
+            )}
           </button>
         </div>
       </nav>
@@ -212,7 +220,7 @@ export default function Navbar() {
                   : "text-zinc-700 hover:bg-zinc-100",
               ].join(" ")}
             >
-              <RiDashboardLine size={18} />
+              <RiDashboardLine size={18} aria-hidden="true" />
               Seller Dashboard
             </Link>
           )}
@@ -226,7 +234,7 @@ export default function Navbar() {
                   : "text-zinc-700 hover:bg-zinc-100",
               ].join(" ")}
             >
-              <RiAddCircleLine size={18} />
+              <RiAddCircleLine size={18} aria-hidden="true" />
               Sell Item
             </Link>
           )}
@@ -255,7 +263,7 @@ export default function Navbar() {
                   onClick={handleLogout}
                   className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100 transition-colors"
                 >
-                  <RiLogoutBoxLine size={18} />
+                  <RiLogoutBoxLine size={18} aria-hidden="true" />
                   Logout
                 </button>
               </>

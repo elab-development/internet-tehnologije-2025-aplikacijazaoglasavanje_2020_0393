@@ -117,12 +117,14 @@ export default function ImageUploader({
 
       {total > 0 && (
         <ul className="flex flex-wrap gap-2">
-          {existing.map((image) => (
+          {existing.map((image, index) => (
             <li key={`existing-${image.id}`} className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`/api/images/${image.id}`}
-                alt={`Listing photo ${image.id}`}
+                // L27: `Listing photo ${image.id}` told a blind user "Listing photo
+                // 4162" — a database id conveys nothing. Position among the set does.
+                alt={`Listing photo ${index + 1} of ${existing.length}`}
                 className="h-20 w-20 rounded-lg border border-zinc-200 object-cover"
               />
               <button

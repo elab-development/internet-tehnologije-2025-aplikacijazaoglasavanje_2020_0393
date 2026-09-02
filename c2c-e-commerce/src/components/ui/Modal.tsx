@@ -161,7 +161,7 @@ export default function Modal({
             aria-label="Close modal"
             className="rounded-lg p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
-            <RiCloseLine size={20} />
+            <RiCloseLine size={20} aria-hidden="true" />
           </button>
         </div>
 

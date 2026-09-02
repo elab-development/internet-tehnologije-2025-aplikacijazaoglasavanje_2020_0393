@@ -138,6 +138,27 @@ describe("H3 — files are validated before they are accepted", () => {
   });
 });
 
+describe("L27 — alt text describes position, not a database id", () => {
+  it("describes saved photos by position, not by database id", () => {
+    render(
+      <ImageUploader
+        files={[]}
+        existing={[
+          { id: 4162, sortOrder: 0, width: 800, height: 600 },
+          { id: 4163, sortOrder: 1, width: 800, height: 600 },
+        ]}
+        onFilesChange={vi.fn()}
+        onRemoveExisting={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByAltText("Listing photo 1 of 2")).toBeInTheDocument();
+    expect(screen.getByAltText("Listing photo 2 of 2")).toBeInTheDocument();
+    expect(screen.queryByAltText(/4162/)).toBeNull();
+    expect(screen.queryByAltText(/4163/)).toBeNull();
+  });
+});
+
 describe("L23 — two files with the same name and size", () => {
   it("renders both without a duplicate React key", async () => {
     const onFilesChange = vi.fn();

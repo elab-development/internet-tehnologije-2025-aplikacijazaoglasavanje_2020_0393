@@ -43,10 +43,12 @@ describe("C2C-AI-8 — AC3: what the indicator says", () => {
     expect(screen.getByText(/loose match/i)).toBeInTheDocument();
   });
 
-  it("AC3: exposes the raw score to assistive technology and on hover", () => {
+  it("AC3: exposes the raw score to assistive technology, not just on hover", () => {
     // A word alone hides the ordering the ranking is built on; the number is the evidence.
+    // L26: a `title` attribute on a non-focusable span was unreachable by keyboard and
+    // unread by most screen readers, so the score lives in the accessible name instead.
     render(<MatchQuality similarity={0.826} />);
-    expect(screen.getByTitle(/83%|0\.83/)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /83% match/i })).toBeInTheDocument();
   });
 
   it("AC3: clamps a similarity above 1 rather than reporting 120%", () => {
@@ -54,12 +56,30 @@ describe("C2C-AI-8 — AC3: what the indicator says", () => {
 
     // Asserted as the clamped value rather than "not 1xx%", which also rejects the
     // correct answer of 100%.
-    expect(screen.getByTitle(/^100% /)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /^100% match/i })).toBeInTheDocument();
   });
 
   it("AC3: treats a zero similarity as present, not absent", () => {
     // 0 is a score AI-7 could in principle return; only `undefined` means "not compared".
     render(<MatchQuality similarity={0} />);
     expect(screen.getByText(/match/i)).toBeInTheDocument();
+  });
+});
+
+describe("L26 — the score is in the accessible name, not a title attribute", () => {
+  it("puts the score in the accessible name, not a title attribute", () => {
+    // The brief's snippet for this test used a `score` prop; the component's actual prop
+    // is `similarity` (see MatchQualityProps above), so this renders against the real
+    // signature rather than the brief's paraphrase.
+    render(<MatchQuality similarity={0.82} />);
+    // A title on a non-focusable span is unreachable by keyboard and unread by most
+    // screen readers.
+    expect(screen.getByRole("img", { name: /82% match/i })).toBeInTheDocument();
+  });
+
+  it("no longer carries a title attribute", () => {
+    // Keeping both would read the value twice.
+    render(<MatchQuality similarity={0.82} />);
+    expect(screen.getByRole("img")).not.toHaveAttribute("title");
   });
 });

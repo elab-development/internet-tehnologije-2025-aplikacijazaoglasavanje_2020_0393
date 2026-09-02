@@ -1,7 +1,7 @@
 /**
  * Part 1 spec — the ancestor breadcrumb on a listing.
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import CategoryBreadcrumb from "./CategoryBreadcrumb";
@@ -85,5 +85,15 @@ describe("CategoryBreadcrumb", () => {
     // Once ancestorChain can resolve, that is the richer (linked, full-path) result —
     // the fallback exists only for the gap before categories arrive.
     expect(screen.getAllByRole("link")).toHaveLength(3);
+  });
+});
+
+describe("L25 — the trail is a navigable list, not a run of spans", () => {
+  it("exposes the trail as a navigable list", () => {
+    render(<CategoryBreadcrumb categories={CATEGORIES} categoryId={7} />);
+
+    const nav = screen.getByRole("navigation", { name: /category/i });
+    expect(within(nav).getByRole("list")).toBeInTheDocument();
+    expect(within(nav).getAllByRole("listitem")).toHaveLength(2);
   });
 });

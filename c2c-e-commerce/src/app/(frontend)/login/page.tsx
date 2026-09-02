@@ -103,7 +103,7 @@ function LoginPageContent() {
           {/* Logo */}
           <div className="mb-8 flex flex-col items-center gap-2 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              <RiStoreLine size={28} />
+              <RiStoreLine size={28} aria-hidden="true" />
             </span>
             <h1 className="text-2xl font-bold text-zinc-900">Welcome back</h1>
             <p className="text-sm text-zinc-500">Sign in to your C2C Market account</p>

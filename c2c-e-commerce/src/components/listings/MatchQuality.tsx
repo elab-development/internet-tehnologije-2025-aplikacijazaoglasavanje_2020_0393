@@ -36,12 +36,17 @@ export default function MatchQuality({
 
   return (
     <span
-      // The number as well as the word: a label alone hides the ordering the ranking is
-      // built on, and this is the thesis's evidence surface.
-      title={`${percent}% similar to your search`}
+      // L26: a `title` attribute on a non-focusable span is unreachable by keyboard and
+      // unread by most screen readers. `role="img"` + `aria-label` is the same pattern
+      // StarRating uses: the accessible name carries the number as well as the word (a
+      // label alone hides the ordering the ranking is built on, and this is the thesis's
+      // evidence surface), and the visible text is hidden from assistive tech so it is
+      // not announced a second time.
+      role="img"
+      aria-label={`${percent}% match — ${label}`}
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
     >
-      {label}
+      <span aria-hidden="true">{label}</span>
     </span>
   );
 }

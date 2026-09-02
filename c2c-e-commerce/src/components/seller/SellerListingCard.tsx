@@ -99,7 +99,7 @@ export default function SellerListingCard({
                 onClick={onDelete}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
               >
-                <RiDeleteBin2Line size={15} />
+                <RiDeleteBin2Line size={15} aria-hidden="true" />
               </button>
             )}
           </div>

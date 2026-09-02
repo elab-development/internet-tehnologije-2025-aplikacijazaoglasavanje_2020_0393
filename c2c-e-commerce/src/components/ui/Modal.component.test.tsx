@@ -122,8 +122,11 @@ describe("Modal — accessible name", () => {
   it("puts the dialog role on the panel, not the backdrop", () => {
     open();
     const dialog = screen.getByRole("dialog");
-    // The overlay is a sibling of the panel, not a descendant of the dialog.
-    expect(dialog.querySelector("[aria-hidden='true']")).toBeNull();
+    // The overlay is a sibling of the panel, not a descendant of the dialog. Targeted by
+    // its own class rather than `[aria-hidden='true']`: the close button's icon (L24)
+    // is now a legitimate `aria-hidden` descendant of the dialog too, so a selector that
+    // matched any `aria-hidden` element would no longer isolate the backdrop.
+    expect(dialog.querySelector(".backdrop-blur-sm")).toBeNull();
   });
 });
 

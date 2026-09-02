@@ -40,23 +40,27 @@ export default function CategoryBreadcrumb({
   }
 
   return (
+    // L25: a chain of spans gave a screen reader no count and no structure. A proper
+    // list exposes both ("list, 3 items") the way the trail's own hierarchy implies.
     <nav aria-label="Category" className="flex flex-wrap items-center gap-1 text-sm">
-      {chain.map((category, index) => (
-        <span key={category.id} className="flex items-center gap-1">
-          {index > 0 && (
-            // Decorative separator glyph, not content — contrast-exempt.
-            <span className="text-zinc-300" aria-hidden="true">
-              ›
-            </span>
-          )}
-          <Link
-            href={`/listings?categoryId=${category.id}`}
-            className="text-indigo-600 hover:underline"
-          >
-            {category.name}
-          </Link>
-        </span>
-      ))}
+      <ol className="flex flex-wrap items-center gap-1">
+        {chain.map((category, index) => (
+          <li key={category.id} className="flex items-center gap-1">
+            {index > 0 && (
+              // Decorative separator glyph, not content — contrast-exempt.
+              <span className="text-zinc-300" aria-hidden="true">
+                ›
+              </span>
+            )}
+            <Link
+              href={`/listings?categoryId=${category.id}`}
+              className="text-indigo-600 hover:underline"
+            >
+              {category.name}
+            </Link>
+          </li>
+        ))}
+      </ol>
     </nav>
   );
 }

@@ -11,7 +11,7 @@ export default function Footer() {
           href="/"
           className="flex items-center gap-2 text-sm font-semibold text-indigo-600"
         >
-          <RiStoreLine size={18} />
+          <RiStoreLine size={18} aria-hidden="true" />
           C2C Market
         </Link>
 

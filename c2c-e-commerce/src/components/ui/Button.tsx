@@ -85,9 +85,19 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
         .join(" ")}
     >
       {loading ? (
-        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        <span
+          className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+          aria-hidden="true"
+        />
       ) : (
-        icon && <span className="shrink-0">{icon}</span>
+        // Every current call site pairs `icon` with visible `children` text (L24):
+        // the icon is decoration next to a labelled control, so it is hidden here once,
+        // centrally, rather than at each of the eight call sites.
+        icon && (
+          <span className="shrink-0" aria-hidden="true">
+            {icon}
+          </span>
+        )
       )}
       {children && <span>{children}</span>}
     </button>
