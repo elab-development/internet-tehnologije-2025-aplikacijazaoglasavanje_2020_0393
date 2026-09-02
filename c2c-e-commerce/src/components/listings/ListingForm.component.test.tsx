@@ -466,6 +466,28 @@ describe("M10 — a blank submit shows one error summary", () => {
     expect(document.getElementById(priceDescribedBy!)).toHaveTextContent("Price is required");
   });
 
+  it("wires aria-invalid and aria-describedby on the Description textarea too, hand-rolled the same as InputField's own", async () => {
+    // Description is a raw <textarea>, not an InputField, so it has no error prop to
+    // lean on -- but leaving it silently un-wired while Title and Price announce their
+    // own invalidity would read as an oversight, not a boundary.
+    const user = userEvent.setup();
+    renderCreateForm();
+
+    // Before any submit: no problem, so aria-describedby must be ABSENT, not merely
+    // empty -- a matcher that only checked falsiness would not catch a stray
+    // aria-describedby="" left pointing at nothing.
+    expect(descriptionBox()).not.toHaveAttribute("aria-describedby");
+
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const description = descriptionBox();
+    expect(description).toHaveAttribute("aria-invalid", "true");
+    const describedBy = description.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent("Description is required");
+  });
+
   it("wires an invalid (non-empty) price's own message to the Price field", async () => {
     const user = userEvent.setup();
     renderCreateForm();

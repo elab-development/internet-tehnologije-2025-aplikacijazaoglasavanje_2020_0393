@@ -298,7 +298,11 @@ export default function ListingForm(props: ListingFormProps) {
         />
 
         {/* A textarea, not an InputField: that renders a single-line input, and a 60-120
-            word generated description is unusable in one. */}
+            word generated description is unusable in one. It still needs the same
+            aria-invalid/aria-describedby wiring InputField does internally, hand-rolled
+            here since there's no InputField error prop to lean on -- Title and Price
+            already announce their own invalidity when tabbed to, and Description
+            silently not doing the same in the same form would read as an oversight. */}
         <div className="space-y-1.5">
           <label
             htmlFor="listing-description"
@@ -313,8 +317,18 @@ export default function ListingForm(props: ListingFormProps) {
             placeholder="Product description"
             rows={6}
             required
+            aria-invalid={problemFor("listing-description") ? "true" : undefined}
+            aria-describedby={
+              problemFor("listing-description") ? "listing-description-error" : undefined
+            }
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
           />
+
+          {problemFor("listing-description") && (
+            <p id="listing-description-error" role="alert" className="text-xs text-red-500">
+              {problemFor("listing-description")}
+            </p>
+          )}
 
           {aiAssisted && (
             <p className="text-xs text-zinc-500">
