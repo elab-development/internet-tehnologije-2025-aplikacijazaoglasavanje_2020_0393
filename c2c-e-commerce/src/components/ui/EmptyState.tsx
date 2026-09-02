@@ -27,7 +27,8 @@ export default function EmptyState({
       >
         {icon}
       </span>
-      <p className="text-lg font-semibold text-zinc-700">{title}</p>
+      {/* Section-placeholder heading: semantic <h2>, not a styled paragraph. */}
+      <h2 className="text-lg font-semibold text-zinc-700">{title}</h2>
       {description && (
         <p className="text-sm text-zinc-500 max-w-xs">{description}</p>
       )}
