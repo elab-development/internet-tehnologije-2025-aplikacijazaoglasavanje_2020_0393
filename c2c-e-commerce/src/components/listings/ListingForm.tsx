@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Button, ErrorAlert, InputField, Modal } from "@/components/ui";
 import { useAnnounce } from "@/components/ui/Announcer";
+import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
 import CategorySelect from "@/components/categories/CategorySelect";
 import DescriptionAssistant from "./DescriptionAssistant";
 import ImageUploader from "./ImageUploader";
@@ -91,7 +92,11 @@ export default function ListingForm(props: ListingFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [priceError, setPriceError] = useState<string | null>(null);
+  // Superseded by fieldProblems (M10): the single "Title, description, and price are
+  // required" banner collapsed several possible failures into one string with no
+  // field-level error at all. Each problem is now its own summary entry, pointing at
+  // its field.
+  const [fieldProblems, setFieldProblems] = useState<FieldError[]>([]);
 
   /**
    * The draft created by a previous, failed submit.
@@ -171,18 +176,19 @@ export default function ListingForm(props: ListingFormProps) {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitError(null);
-    setPriceError(null);
-
-    if (!title.trim() || !description.trim() || !price.trim()) {
-      setSubmitError("Title, description, and price are required");
-      return;
-    }
 
     const parsedPrice = parsePriceInput(price);
-    if (parsedPrice === null) {
-      setPriceError("Enter a price like 19.99");
-      return;
-    }
+
+    const problems: FieldError[] = [];
+    if (!title.trim()) problems.push({ field: "listing-title", message: "Title is required" });
+    if (!description.trim())
+      problems.push({ field: "listing-description", message: "Description is required" });
+    if (!price.trim()) problems.push({ field: "listing-price", message: "Price is required" });
+    if (parsedPrice === null && price.trim())
+      problems.push({ field: "listing-price", message: "Enter a price like 19.99" });
+
+    setFieldProblems(problems);
+    if (problems.length > 0) return;
 
     const payload = {
       title: title.trim(),
@@ -264,8 +270,19 @@ export default function ListingForm(props: ListingFormProps) {
 
       {error && <ErrorAlert message={error} className="mb-4" />}
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      {fieldProblems.length > 0 && (
+        <div className="mb-4">
+          <FormErrorSummary errors={fieldProblems} />
+        </div>
+      )}
+
+      {/* noValidate: the browser's own required-field blocking would otherwise stop a
+          truly blank submit from ever reaching handleSubmit, so a keyboard/screen-reader
+          user would see nothing happen at all rather than the summary below — the same
+          reason login and register's forms already carry it. */}
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <InputField
+          id="listing-title"
           label="Title"
           type="text"
           value={title}
@@ -310,13 +327,13 @@ export default function ListingForm(props: ListingFormProps) {
         </div>
 
         <InputField
+          id="listing-price"
           label="Price"
           type="text"
           inputMode="decimal"
           value={price}
           onChange={(event) => setPrice(event.target.value)}
           placeholder="0.00"
-          error={priceError ?? undefined}
           required
         />
 

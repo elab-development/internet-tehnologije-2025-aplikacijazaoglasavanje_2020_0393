@@ -11,7 +11,7 @@
  * actually calls it, on both the password-submit path and the already-authenticated
  * redirect.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -63,6 +63,16 @@ async function signIn(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/email/i), "ada@example.test");
   await user.type(screen.getByLabelText(/password/i), "password123");
   await user.click(screen.getByRole("button", { name: /sign in/i }));
+}
+
+/**
+ * The M10 error summary, distinguished from the per-field `role="alert"` paragraphs
+ * `InputField` renders for each invalid field — a bare `getByRole("alert")` matches
+ * both and throws "multiple elements". The summary's count line ("N fields need
+ * attention") is unique to it, so locate it from there.
+ */
+function errorSummary(): HTMLElement {
+  return screen.getByText(/fields? need attention/i).closest('[role="alert"]') as HTMLElement;
 }
 
 beforeEach(() => {
@@ -140,5 +150,66 @@ describe("M5 — the already-authenticated redirect also honours returnTo", () =
     renderLogin();
 
     await waitFor(() => expect(replaceSpy).toHaveBeenCalledWith("/"));
+  });
+});
+
+describe("M10 — a blank submit shows one error summary", () => {
+  it("summarises both failed fields in one place and moves focus to it", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+
+    const summary = await screen.findByText(/2 fields need attention/i);
+    expect(summary.closest('[role="alert"]')).toHaveFocus();
+    expect(auth.login).not.toHaveBeenCalled();
+  });
+
+  it("links each summary entry to its field", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const summary = errorSummary();
+    expect(within(summary).getByRole("link", { name: "Email is required" })).toHaveAttribute(
+      "href",
+      "#email",
+    );
+    expect(within(summary).getByRole("link", { name: "Password is required" })).toHaveAttribute(
+      "href",
+      "#password",
+    );
+  });
+
+  it("keeps the per-field errors — the summary is additive, not a replacement", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await screen.findByText(/fields need attention/i);
+
+    // Both the field's own input and its InputField id="email"/"password" wiring stay
+    // intact: aria-invalid and a matching aria-describedby still point at a per-field
+    // message, exactly as before this task.
+    const email = screen.getByLabelText(/email/i);
+    expect(email).toHaveAttribute("aria-invalid", "true");
+    const describedBy = email.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent("Email is required");
+  });
+
+  it("clears the summary once the fields are fixed and submitted successfully", async () => {
+    const user = userEvent.setup();
+    renderLogin();
+
+    await user.click(screen.getByRole("button", { name: /sign in/i }));
+    await screen.findByText(/fields need attention/i);
+
+    await signIn(user);
+
+    await waitFor(() => expect(auth.login).toHaveBeenCalled());
+    expect(screen.queryByText(/fields need attention/i)).toBeNull();
   });
 });

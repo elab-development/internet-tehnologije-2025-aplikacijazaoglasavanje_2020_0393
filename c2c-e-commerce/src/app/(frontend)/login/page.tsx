@@ -9,6 +9,7 @@ import { RiStoreLine, RiLoginBoxLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
+import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
 import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
 import { oauthErrorMessage } from "@/lib/oauth/error-messages";
@@ -49,6 +50,12 @@ function LoginPageContent() {
     email?: string;
     password?: string;
   }>({});
+  // Mirrors fieldErrors for FormErrorSummary. A plain state value (set once per
+  // validate() call) rather than a value derived at render time, so its identity stays
+  // stable across the re-renders every keystroke causes — otherwise the summary's
+  // focus effect would fire on every keystroke and steal focus back from the field the
+  // user is trying to fix.
+  const [fieldErrorList, setFieldErrorList] = useState<FieldError[]>([]);
 
   function validate(): boolean {
     const errs: typeof fieldErrors = {};
@@ -56,8 +63,14 @@ function LoginPageContent() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       errs.email = "Enter a valid email address";
     if (!password) errs.password = "Password is required";
+
+    const list: FieldError[] = [];
+    if (errs.email) list.push({ field: "email", message: errs.email });
+    if (errs.password) list.push({ field: "password", message: errs.password });
+
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    setFieldErrorList(list);
+    return list.length === 0;
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -100,8 +113,15 @@ function LoginPageContent() {
           {error && <ErrorAlert message={error} className="mb-5" />}
           {!error && oauthError && <ErrorAlert message={oauthError} className="mb-5" />}
 
+          {fieldErrorList.length > 0 && (
+            <div className="mb-5">
+              <FormErrorSummary errors={fieldErrorList} />
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <InputField
+              id="email"
               label="Email"
               type="email"
               placeholder="you@example.com"
@@ -113,6 +133,7 @@ function LoginPageContent() {
             />
 
             <InputField
+              id="password"
               label="Password"
               type="password"
               placeholder="••••••••"

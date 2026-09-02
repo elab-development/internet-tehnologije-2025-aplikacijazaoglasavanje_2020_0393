@@ -4,6 +4,9 @@ export type { ButtonProps } from "./Button";
 export { default as InputField } from "./InputField";
 export type { InputFieldProps } from "./InputField";
 
+export { default as FormErrorSummary } from "./FormErrorSummary";
+export type { FieldError } from "./FormErrorSummary";
+
 export { default as Card } from "./Card";
 export type { CardProps } from "./Card";
 

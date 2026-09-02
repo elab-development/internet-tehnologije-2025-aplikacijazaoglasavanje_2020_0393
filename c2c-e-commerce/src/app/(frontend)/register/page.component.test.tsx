@@ -6,7 +6,7 @@
  * `OAuthButtons`'s `GET /api/auth/providers` call resolves to an empty list and stays
  * out of the way of the role-selector assertions.
  */
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -46,6 +46,16 @@ vi.mock("react-hot-toast", () => ({
 
 function renderRegister() {
   return render(<RegisterPage />);
+}
+
+/**
+ * The M10 error summary, distinguished from the per-field `role="alert"` paragraphs
+ * `InputField` renders for each invalid field — a bare `getByRole("alert")` matches
+ * both and throws "multiple elements". The summary's count line ("N fields need
+ * attention") is unique to it, so locate it from there.
+ */
+function errorSummary(): HTMLElement {
+  return screen.getByText(/fields? need attention/i).closest('[role="alert"]') as HTMLElement;
 }
 
 beforeEach(() => {
@@ -102,5 +112,70 @@ describe("M11 — the role selector is not colour-only", () => {
     expect(sell).toHaveFocus();
     expect(sell).toHaveAttribute("tabindex", "0");
     expect(screen.getByRole("radio", { name: "Buy" })).toHaveAttribute("tabindex", "-1");
+  });
+});
+
+describe("M10 — a blank submit shows one error summary", () => {
+  it("summarises all three failed fields in one place and moves focus to it", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    await user.click(await screen.findByRole("button", { name: /create account/i }));
+
+    const summary = await screen.findByText(/3 fields need attention/i);
+    expect(summary.closest('[role="alert"]')).toHaveFocus();
+    expect(auth.register).not.toHaveBeenCalled();
+  });
+
+  it("links each summary entry to its field", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    await user.click(await screen.findByRole("button", { name: /create account/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const summary = errorSummary();
+    expect(within(summary).getByRole("link", { name: "Name is required" })).toHaveAttribute(
+      "href",
+      "#name",
+    );
+    expect(within(summary).getByRole("link", { name: "Email is required" })).toHaveAttribute(
+      "href",
+      "#email",
+    );
+    expect(within(summary).getByRole("link", { name: "Password is required" })).toHaveAttribute(
+      "href",
+      "#password",
+    );
+  });
+
+  it("keeps the per-field errors — the summary is additive, not a replacement", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    await user.click(await screen.findByRole("button", { name: /create account/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const name = screen.getByLabelText(/full name/i);
+    expect(name).toHaveAttribute("aria-invalid", "true");
+    const describedBy = name.getAttribute("aria-describedby");
+    expect(describedBy).toBeTruthy();
+    expect(document.getElementById(describedBy!)).toHaveTextContent("Name is required");
+  });
+
+  it("clears the summary once the fields are fixed and submitted successfully", async () => {
+    const user = userEvent.setup();
+    renderRegister();
+
+    await user.click(await screen.findByRole("button", { name: /create account/i }));
+    await screen.findByText(/fields need attention/i);
+
+    await user.type(screen.getByLabelText(/full name/i), "Ada Lovelace");
+    await user.type(screen.getByLabelText(/^email/i), "ada@example.test");
+    await user.type(screen.getByLabelText(/^password/i), "password123");
+    await user.click(screen.getByRole("button", { name: /create account/i }));
+
+    await waitFor(() => expect(auth.register).toHaveBeenCalled());
+    expect(screen.queryByText(/fields need attention/i)).toBeNull();
   });
 });

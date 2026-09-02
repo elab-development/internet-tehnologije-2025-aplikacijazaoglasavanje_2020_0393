@@ -8,6 +8,7 @@ import { RiStoreLine, RiUserAddLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
+import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
 import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
 
@@ -43,6 +44,12 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // Mirrors fieldErrors for FormErrorSummary. A plain state value (set once per
+  // validate() call) rather than a value derived at render time, so its identity stays
+  // stable across the re-renders every keystroke causes — otherwise the summary's
+  // focus effect would fire on every keystroke and steal focus back from the field the
+  // user is trying to fix.
+  const [fieldErrorList, setFieldErrorList] = useState<FieldError[]>([]);
 
   const roleRefs = useRef<Record<Role, HTMLButtonElement | null>>({
     buyer: null,
@@ -67,8 +74,15 @@ export default function RegisterPage() {
     if (!password) errs.password = "Password is required";
     else if (password.length < 8)
       errs.password = "Password must be at least 8 characters";
+
+    const list: FieldError[] = [];
+    if (errs.name) list.push({ field: "name", message: errs.name });
+    if (errs.email) list.push({ field: "email", message: errs.email });
+    if (errs.password) list.push({ field: "password", message: errs.password });
+
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    setFieldErrorList(list);
+    return list.length === 0;
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -115,8 +129,15 @@ export default function RegisterPage() {
           {/* Global error banner */}
           {error && <ErrorAlert message={error} className="mb-5" />}
 
+          {fieldErrorList.length > 0 && (
+            <div className="mb-5">
+              <FormErrorSummary errors={fieldErrorList} />
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
             <InputField
+              id="name"
               label="Full name"
               type="text"
               placeholder="Jane Doe"
@@ -128,6 +149,7 @@ export default function RegisterPage() {
             />
 
             <InputField
+              id="email"
               label="Email"
               type="email"
               placeholder="you@example.com"
@@ -139,6 +161,7 @@ export default function RegisterPage() {
             />
 
             <InputField
+              id="password"
               label="Password"
               type="password"
               placeholder="Min. 8 characters"

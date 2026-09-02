@@ -366,6 +366,76 @@ describe("M6 — a comma decimal is a price, not an empty field", () => {
     await user.type(screen.getByLabelText(/^price/i), "abc");
     await user.click(screen.getByRole("button", { name: /create listing/i }));
 
+    // Task 13's own priceError field is superseded by the M10 summary — this message
+    // now arrives as a summary entry rather than a field-level <p role="alert">, but
+    // the wording (and the seller seeing it at all) is unchanged.
     expect(await screen.findByText(/enter a price like 19\.99/i)).toBeInTheDocument();
+  });
+});
+
+describe("M10 — a blank submit shows one error summary", () => {
+  it("summarises every missing field in one place and moves focus to it", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    const summary = await screen.findByText(/3 fields need attention/i);
+    expect(summary.closest('[role="alert"]')).toHaveFocus();
+    expect(createListingCalls()).toHaveLength(0);
+  });
+
+  it("links each summary entry to its field", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+    await screen.findByText(/fields need attention/i);
+
+    const summary = screen
+      .getByText(/fields need attention/i)
+      .closest('[role="alert"]') as HTMLElement;
+    expect(within(summary).getByRole("link", { name: "Title is required" })).toHaveAttribute(
+      "href",
+      "#listing-title",
+    );
+    expect(
+      within(summary).getByRole("link", { name: "Description is required" }),
+    ).toHaveAttribute("href", "#listing-description");
+    expect(within(summary).getByRole("link", { name: "Price is required" })).toHaveAttribute(
+      "href",
+      "#listing-price",
+    );
+  });
+
+  it("reports an invalid price as its own summary entry, distinct from a missing one", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+    await fillTitleAndDescription(user);
+
+    await user.type(screen.getByLabelText(/^price/i), "abc");
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    const summary = await screen.findByText(/1 field needs attention/i);
+    expect(
+      within(summary.closest('[role="alert"]') as HTMLElement).getByRole("link", {
+        name: "Enter a price like 19.99",
+      }),
+    ).toHaveAttribute("href", "#listing-price");
+  });
+
+  it("clears the summary once every field is fixed and the form is resubmitted", async () => {
+    const user = userEvent.setup();
+    mockCreateListing({ id: 1 });
+    renderCreateForm();
+
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+    await screen.findByText(/fields need attention/i);
+
+    await fillRequiredFields(user);
+    await user.click(screen.getByRole("button", { name: /create listing/i }));
+
+    await waitFor(() => expect(createListingCalls()).toHaveLength(1));
+    expect(screen.queryByText(/fields need attention/i)).toBeNull();
   });
 });
