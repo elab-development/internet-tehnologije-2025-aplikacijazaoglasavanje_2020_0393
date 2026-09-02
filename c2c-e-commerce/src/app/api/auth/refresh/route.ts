@@ -59,6 +59,17 @@ import { jsonError, jsonOk } from "@/lib/response";
  *               $ref: '#/components/schemas/ErrorResponse'
  */
 export async function POST(request: NextRequest) {
+  const presented = request.cookies.get(REFRESH_COOKIE)?.value;
+
+  // No cookie is the ordinary "not logged in" case -- every page load hits this route
+  // once. It must not touch the database, and it must not spend a slot in the rate
+  // limiter either: `/api/auth/me`'s anonymous 401 lands here on every first paint, and
+  // counting those against the bucket let enough anonymous page views from one NAT
+  // exhaust the allowance and log out a signed-in user on the same network (M2).
+  if (!presented) {
+    return jsonError("Not authenticated", 401);
+  }
+
   // Loose on purpose (C2C-SEC-11 AC6). Single-flight on the client means one refresh
   // per lapse, but several tabs opening together still burst, and throttling that would
   // break the session recovery this protects.
@@ -69,14 +80,6 @@ export async function POST(request: NextRequest) {
       429,
       rateLimitHeaders(byIp.result, REFRESH_RATE_LIMIT),
     );
-  }
-
-  const presented = request.cookies.get(REFRESH_COOKIE)?.value;
-
-  // No cookie is the ordinary "not logged in" case -- every page load hits this route
-  // once. It must not touch the database.
-  if (!presented) {
-    return jsonError("Not authenticated", 401);
   }
 
   try {

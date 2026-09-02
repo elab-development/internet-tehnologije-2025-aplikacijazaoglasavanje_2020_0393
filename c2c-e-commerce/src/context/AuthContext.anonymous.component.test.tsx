@@ -4,9 +4,13 @@
  * The sibling spec (AuthContext.component.test.tsx) mocks `@/lib/api`, and api.test.ts
  * stubs `fetch` but never registers an `onAuthLost` handler. Between them the seam is
  * untested by construction: neither can see what happens when the provider's bootstrap
- * `GET /api/auth/me` 401s, silently refreshes, fails that too, and reaches the real
- * handler. That is every anonymous page load, so this file wires the two together over a
- * stubbed `fetch` and asserts the outcome.
+ * `GET /api/auth/me` 401s and reaches the real handler. That is every anonymous page
+ * load, so this file wires the two together over a stubbed `fetch` and asserts the
+ * outcome.
+ *
+ * `/api/auth/me` is in `NO_REFRESH` (M2, src/lib/api.ts): its 401 on every anonymous
+ * first paint is not a lapsed session, so the bootstrap must settle as logged out
+ * without ever calling `/api/auth/refresh`.
  */
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -103,7 +107,11 @@ describe("C2C-SEC-4 AC7 — a visitor who was never signed in", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("makes exactly one refresh attempt for the whole bootstrap", async () => {
+  it("M2: does not attempt a refresh at all for the whole bootstrap", async () => {
+    // /api/auth/me is in NO_REFRESH (src/lib/api.ts): its 401 on every anonymous first
+    // paint is not a lapsed session, so treating it as one must not spend any of the
+    // refresh route's per-IP budget. This used to assert "exactly one" attempt — that
+    // was the cost this fix removes.
     respondWith({
       "/api/auth/me": { status: 401 },
       "/api/auth/refresh": { status: 401 },
@@ -113,7 +121,7 @@ describe("C2C-SEC-4 AC7 — a visitor who was never signed in", () => {
 
     await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("out"));
 
-    expect(refreshCalls()).toHaveLength(1);
+    expect(refreshCalls()).toHaveLength(0);
   });
 });
 

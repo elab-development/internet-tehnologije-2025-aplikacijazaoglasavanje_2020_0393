@@ -209,6 +209,42 @@ describe("C2C-SEC-11 AC6 — POST /api/auth/refresh", () => {
       token = next!.slice(REFRESH_COOKIE.length + 1).split(";")[0];
     }
   });
+
+  /** A request without the refresh cookie, from the fixed address this suite uses below. */
+  async function postRefresh(
+    { cookie }: { cookie: string | null },
+    ip = "198.51.100.52",
+  ) {
+    const { POST } = await import("./auth/refresh/route");
+    const headers: Record<string, string> = { "x-forwarded-for": ip };
+    if (cookie) headers.cookie = `${REFRESH_COOKIE}=${cookie}`;
+    return POST(
+      new NextRequest("http://localhost/api/auth/refresh", {
+        method: "POST",
+        headers,
+      }),
+    );
+  }
+
+  /** A fresh, real refresh token for a brand-new user. */
+  async function validRefreshCookie() {
+    const user = await makeUser();
+    return (await issueRefreshToken(user.id)).token;
+  }
+
+  it("M2 — a cookieless refresh does not consume the bucket", async () => {
+    process.env.TRUSTED_PROXY_HOPS = "1";
+
+    // Thirty of these used to exhaust the IP's allowance and lock out the next real
+    // refresh from that network.
+    for (let i = 0; i < 35; i += 1) {
+      const res = await postRefresh({ cookie: null });
+      expect(res.status).toBe(401);
+    }
+
+    const real = await postRefresh({ cookie: await validRefreshCookie() });
+    expect(real.status).toBe(200);
+  });
 });
 
 // This suite used to get a fresh bucket by rotating `X-Forwarded-For`. That worked

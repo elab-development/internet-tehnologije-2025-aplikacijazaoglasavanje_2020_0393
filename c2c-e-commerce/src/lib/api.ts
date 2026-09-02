@@ -18,9 +18,18 @@ const REFRESH_ENDPOINT = "/api/auth/refresh";
  * Endpoints whose own 401 is a real answer rather than an expired session.
  *
  * Refreshing after a rejected login would turn "wrong password" into two requests and
- * the same rejection; refreshing after a failed refresh is an infinite loop.
+ * the same rejection; refreshing after a failed refresh is an infinite loop. And
+ * `/api/auth/me` answers 401 for every anonymous visitor on first paint — treating
+ * that as a lapsed session spent one of the thirty refresh attempts allowed per IP per
+ * five minutes, so enough anonymous first-loads behind one NAT could log out a signed-in
+ * user on the same network.
  */
-const NO_REFRESH = [REFRESH_ENDPOINT, "/api/auth/login", "/api/auth/register"];
+const NO_REFRESH = [
+  REFRESH_ENDPOINT,
+  "/api/auth/login",
+  "/api/auth/register",
+  "/api/auth/me",
+];
 
 /**
  * A failed API response, with the parts of it callers need to decide what to do next.

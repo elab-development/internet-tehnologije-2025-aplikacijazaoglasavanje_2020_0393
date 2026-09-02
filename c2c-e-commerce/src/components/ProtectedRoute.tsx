@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { RiLockLine } from "@remixicon/react";
 import { useAuth, type AuthUser } from "@/context/AuthContext";
 
@@ -62,6 +62,7 @@ export default function ProtectedRoute({
 }: ProtectedRouteProps) {
   const { user, isAuthenticated, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const roleAllowed =
     !allowedRoles || (user !== null && allowedRoles.includes(user.role));
@@ -70,7 +71,10 @@ export default function ProtectedRoute({
     if (loading) return;
 
     if (!isAuthenticated) {
-      router.replace(redirectTo);
+      // Without this the user signs in and lands on the home page, and the link they
+      // followed is gone from history because this is a replace.
+      const returnTo = `${pathname}${window.location.search}`;
+      router.replace(`${redirectTo}?returnTo=${encodeURIComponent(returnTo)}`);
       return;
     }
 
@@ -84,6 +88,7 @@ export default function ProtectedRoute({
     router,
     redirectTo,
     forbiddenRedirectTo,
+    pathname,
   ]);
 
   // Still checking — show placeholder

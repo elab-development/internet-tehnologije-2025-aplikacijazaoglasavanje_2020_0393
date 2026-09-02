@@ -214,9 +214,25 @@ describe("C2C-SEC-4 AC7 — a logged-out visitor", () => {
 
     // The caller still gets a rejection to handle; what matters is that the client
     // does not sit in a refresh loop for someone who was never signed in.
-    await expect(api.get("/api/auth/me")).rejects.toThrow();
+    //
+    // Not /api/auth/me: that endpoint is in NO_REFRESH (M2, below), since its 401 on
+    // every anonymous first paint is not a lapsed session. Any other protected endpoint
+    // exercises the same "one attempt, then give up quietly" behaviour.
+    await expect(api.get("/api/listings/mine")).rejects.toThrow();
 
     expect(refreshCalls()).toHaveLength(1);
+  });
+});
+
+describe("M2 — an anonymous bootstrap does not spend a refresh attempt", () => {
+  it("does not refresh when /api/auth/me answers 401", async () => {
+    respondWith(401);
+
+    await api.get("/api/auth/me").catch(() => {});
+
+    // Every anonymous visitor gets this 401 on first paint. Treating it as a lapsed
+    // session cost one of thirty refresh attempts per IP per five minutes.
+    expect(refreshCalls()).toHaveLength(0);
   });
 });
 

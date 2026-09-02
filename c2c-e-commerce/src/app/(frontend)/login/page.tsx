@@ -12,6 +12,7 @@ import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
 import { oauthErrorMessage } from "@/lib/oauth/error-messages";
+import { safeReturnTo } from "@/lib/oauth/return-to";
 
 // Note: metadata export is ignored in client components — title is set in
 // the nearest server layout. Keep it here as documentation intent.
@@ -30,10 +31,12 @@ function LoginPageContent() {
   const oauthError = oauthErrorMessage(searchParams.get("error"));
   const returnTo = searchParams.get("returnTo") ?? undefined;
 
-  // Redirect already-authenticated users away from login
+  // Redirect already-authenticated users away from login. Honours returnTo too, so
+  // arriving at /login?returnTo=… while already signed in lands in the same place
+  // signing in would.
   useEffect(() => {
-    if (!authLoading && isAuthenticated) router.replace("/");
-  }, [authLoading, isAuthenticated, router]);
+    if (!authLoading && isAuthenticated) router.replace(safeReturnTo(returnTo));
+  }, [authLoading, isAuthenticated, router, returnTo]);
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [email, setEmail] = useState("");
@@ -67,7 +70,8 @@ function LoginPageContent() {
     try {
       await login(email, password);
       toast.success("Welcome back!");
-      router.push("/");
+      // safeReturnTo already exists for the OAuth path; the password path ignored it.
+      router.push(safeReturnTo(returnTo));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed";
       setError(msg);
