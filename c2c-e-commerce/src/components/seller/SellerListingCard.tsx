@@ -18,7 +18,8 @@ export type SellerListingCardProps = {
   updating?: boolean;
   /** Show the destructive delete control (admins only). */
   canDelete?: boolean;
-  onOpen: () => void;
+  /** Where the card goes when opened — the listing's edit page. */
+  href: string;
   onToggleStatus: () => void;
   onDelete: () => void;
 };
@@ -36,7 +37,7 @@ export default function SellerListingCard({
   formatConverted,
   updating = false,
   canDelete = false,
-  onOpen,
+  href,
   onToggleStatus,
   onDelete,
 }: SellerListingCardProps) {
@@ -55,7 +56,7 @@ export default function SellerListingCard({
       title={listing.title}
       badge={listing.status}
       description={description}
-      onClick={onOpen}
+      href={href}
       // The seller dashboard shows removed (and, once drafts are visible here, draft)
       // listings, whose images 404 through next/image's cookie-less optimizer fetch —
       // see Card's `unoptimized` doc. The bytes are already sharp-produced WebP capped

@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -7,7 +8,14 @@ export type CardProps = {
   title: string;
   description?: string;
   footer?: React.ReactNode;
-  onClick?: () => void;
+  /**
+   * Where the card goes when opened. Renders the title as a link.
+   *
+   * Was an `onClick` that did a `router.push`, on a div with `role="button"` — which
+   * flattened the heading and the footer buttons into the card's accessible name, and
+   * lost middle-click and open-in-new-tab.
+   */
+  href?: string;
   className?: string;
   badge?: string;
   /**
@@ -32,31 +40,17 @@ export default function Card({
   title,
   description,
   footer,
-  onClick,
+  href,
   className = "",
   badge,
   unoptimized = false,
 }: CardProps) {
-  const isClickable = typeof onClick === "function";
-  
   return (
     <div
-      role={isClickable ? "button" : undefined}
-      tabIndex={isClickable ? 0 : undefined}
-      onClick={onClick}
-      onKeyDown={
-        isClickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") onClick();
-            }
-          : undefined
-      }
       className={[
-        "group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm",
+        "group relative flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm",
         "transition-shadow duration-200",
-        isClickable
-          ? "cursor-pointer hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
-          : "",
+        href ? "hover:shadow-md" : "",
         className,
       ]
         .filter(Boolean)
@@ -100,7 +94,18 @@ export default function Card({
 
       {/* Body */}
       <div className="flex flex-1 flex-col gap-1 p-4">
-        <h3 className="line-clamp-2 font-semibold text-zinc-900">{title}</h3>
+        <h3 className="line-clamp-2 font-semibold text-zinc-900">
+          {href ? (
+            <Link
+              href={href}
+              className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            >
+              {title}
+            </Link>
+          ) : (
+            title
+          )}
+        </h3>
         {description && (
           <p className="line-clamp-3 flex-1 text-sm text-zinc-500">
             {description}
@@ -108,13 +113,9 @@ export default function Card({
         )}
       </div>
 
-      {/* Footer slot – stop propagation so interactive elements don't trigger card onClick */}
+      {/* Footer slot */}
       {footer && (
-        <div
-          className="border-t border-zinc-100 px-4 py-3"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
+        <div className="relative z-10 border-t border-zinc-100 px-4 py-3">
           {footer}
         </div>
       )}
