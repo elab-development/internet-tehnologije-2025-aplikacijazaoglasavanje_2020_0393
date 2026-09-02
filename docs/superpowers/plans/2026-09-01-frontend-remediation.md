@@ -2424,8 +2424,11 @@ In the catch block, when `draftId` is set, extend the message rather than replac
 
 ```tsx
       const msg = /* existing message derivation */;
+      // `draftId` here is the value from THIS render's closure. `setDraftId(listingId)`
+      // earlier in the same call does not update it, so reading `draftId` would be null
+      // on exactly the failing submit that needs the message. Mirror it locally.
       setSubmitError(
-        draftId
+        currentDraftId
           ? `${msg} Your listing was saved as a draft — press Create listing again to finish it, or delete it from your dashboard.`
           : msg,
       );
@@ -2496,7 +2499,8 @@ Expected: PASS.
 - [ ] **Step 12: Deliberate break ×2**
 
 (a) Delete the `file.size > MAX_IMAGE_BYTES` branch in `rejectionFor`.
-Run: `npm test -- --project component src/components/listings/ImageUploader.component.test.tsx -t "larger than 5 MB"` → FAIL. Restore.
+Run: `npm test -- --project component src/components/listings/ImageUploader.component.test.tsx -t "over 5 MB"` → FAIL. Restore.
+(Note: `-t` matches the test TITLE. "larger than 5 MB" appears only inside the assertion, so filtering on it silently runs zero tests and looks like a pass.)
 
 (b) Change `draftId ?? (await api.post…)` back to always posting.
 Run: `npm test -- --project component src/components/listings/ListingForm.component.test.tsx -t "reuses the same draft"` → FAIL. Restore.
@@ -3762,7 +3766,35 @@ export default function FormErrorSummary({ errors }: { errors: FieldError[] }) {
     if (problems.length > 0) return;
 ```
 
-Each `InputField` needs a matching `id` so the summary's links land. `InputField` uses `useId()` internally, so add an explicit `id` prop pass-through if one does not exist, or give each field a stable wrapper id to anchor to. Note in your report which you chose.
+Each `InputField` needs a matching `id` so the summary's links land.
+
+**While you are in that file, fix its prop list the way Task 2 fixed `Button`'s.**
+`InputFieldProps` is a closed hand-written list that forwards no arbitrary attributes,
+which is the same defect M14 named on `Button` — the review caught it on one component
+and missed it on the other. Task 13 already had to bolt on an `inputMode` passthrough for
+exactly this reason, and this task needs an `id` one; a third task would pay the same tax.
+Apply the identical remedy:
+
+```tsx
+export type InputFieldProps = Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange"
+> & {
+  label: string;
+  type?: "text" | "email" | "password" | "number" | "tel" | "search";
+  value: string | number;
+  onChange: React.ChangeEventHandler<HTMLInputElement>;
+  error?: string;
+};
+```
+
+Spread the rest onto the `<input>` **first**, so the component's own `id`, `type`,
+`value`, `onChange`, `aria-invalid` and `aria-describedby` still win — the same ordering
+rule Task 2 established, and for the same reason. `InputField`'s `useId()` label/error
+wiring must keep working; a caller-supplied `id` should override the generated one.
+Then delete the now-redundant hand-listed props, including the `inputMode` passthrough
+Task 13 added. Report which props you removed and confirm `npx tsc --noEmit` is clean
+across all callers.
 
 This supersedes the `priceError` state added in Task 13 — fold it into `problems` rather than keeping both.
 
