@@ -30,7 +30,11 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
 
   if (!displayImageId) {
     return (
-      <div className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none">
+      // Decorative placeholder glyph, not content — contrast-exempt.
+      <div
+        className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none"
+        aria-hidden="true"
+      >
         🖼️
       </div>
     );

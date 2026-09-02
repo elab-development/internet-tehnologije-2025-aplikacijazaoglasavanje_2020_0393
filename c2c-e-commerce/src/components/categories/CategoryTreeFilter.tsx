@@ -52,7 +52,7 @@ function Branch({
                   type="button"
                   aria-expanded={isExpanded}
                   aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.name}`}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-600"
                   onClick={() => onToggle(node.id)}
                 >
                   {isExpanded ? (

@@ -20,6 +20,7 @@ export default function EmptyState({
 }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center gap-4 py-20 text-center">
+      {/* Decorative icon tile, not content — contrast-exempt. */}
       <span
         className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400"
         aria-hidden="true"

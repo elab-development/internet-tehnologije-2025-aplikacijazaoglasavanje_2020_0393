@@ -91,7 +91,7 @@ export default function DescriptionAssistant({
             htmlFor="ai-keywords"
             className="mb-1 block text-sm font-medium text-zinc-700"
           >
-            Keywords <span className="text-zinc-400">(optional)</span>
+            Keywords <span className="text-zinc-500">(optional)</span>
           </label>
           <input
             id="ai-keywords"

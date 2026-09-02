@@ -360,7 +360,7 @@ export default function ListingsPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center py-20 text-zinc-400">
+        <div className="text-center py-20 text-zinc-500">
           Loading listings...
         </div>
       }

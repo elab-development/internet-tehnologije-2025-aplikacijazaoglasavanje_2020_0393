@@ -15,7 +15,7 @@ export default function Footer() {
           C2C Market
         </Link>
 
-        <p className="text-xs text-zinc-400">
+        <p className="text-xs text-zinc-500">
           © {year} C2C Market. All rights reserved.
         </p>
 

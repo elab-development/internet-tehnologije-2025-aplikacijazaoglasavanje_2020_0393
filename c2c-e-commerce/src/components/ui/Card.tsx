@@ -69,9 +69,11 @@ export default function Card({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
+            {/* Decorative placeholder-image glyph, not content — contrast-exempt. */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               className="h-14 w-14 text-zinc-300"
+              aria-hidden="true"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
