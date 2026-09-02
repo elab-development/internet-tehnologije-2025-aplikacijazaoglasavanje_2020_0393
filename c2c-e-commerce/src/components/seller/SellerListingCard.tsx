@@ -86,10 +86,7 @@ export default function SellerListingCard({
                   isActive ? <RiEyeOffLine size={16} /> : <RiEyeLine size={16} />
                 }
                 loading={updating}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleStatus();
-                }}
+                onClick={onToggleStatus}
               >
                 {isActive ? "Disable" : "Activate"}
               </Button>
@@ -99,10 +96,7 @@ export default function SellerListingCard({
               <button
                 type="button"
                 aria-label="Delete listing"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete();
-                }}
+                onClick={onDelete}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
               >
                 <RiDeleteBin2Line size={15} />
