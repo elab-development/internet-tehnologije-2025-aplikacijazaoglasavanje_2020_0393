@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
 import { Button, ErrorAlert, InputField, Modal } from "@/components/ui";
@@ -33,6 +33,15 @@ export default function ReviewForm({ orderId, onSubmitted }: ReviewFormProps) {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const starRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  // Roving tabindex means only the checked star is in the tab order, so the arrow-key
+  // handler below has to move focus itself as it moves the selection — otherwise Tab would
+  // land on a star that is no longer reachable by arrow keys.
+  function selectRating(value: number) {
+    setRating(value);
+    starRefs.current[value - 1]?.focus();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,17 +76,41 @@ export default function ReviewForm({ orderId, onSubmitted }: ReviewFormProps) {
           {error && <ErrorAlert message={error} />}
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-700">Star rating</p>
-            <div className="flex items-center gap-1">
+            <span id="star-rating-label" className="block text-sm font-medium text-zinc-700">
+              Star rating
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="star-rating-label"
+              className="flex items-center gap-1"
+            >
               {[1, 2, 3, 4, 5].map((value) => (
                 <button
                   key={value}
+                  ref={(el) => {
+                    starRefs.current[value - 1] = el;
+                  }}
                   type="button"
-                  onClick={() => setRating(value)}
+                  role="radio"
+                  aria-checked={value === rating}
+                  // Only the selected control stays in the tab order; arrow keys move
+                  // within the group, which is the radio pattern users expect.
+                  tabIndex={value === rating ? 0 : -1}
+                  onClick={() => selectRating(value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                      event.preventDefault();
+                      selectRating(value === 5 ? 1 : value + 1);
+                    }
+                    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      selectRating(value === 1 ? 5 : value - 1);
+                    }
+                  }}
                   className="text-2xl leading-none text-amber-500"
-                  aria-label={`Set rating to ${value}`}
+                  aria-label={`${value} ${value === 1 ? "star" : "stars"}`}
                 >
-                  {value <= rating ? "★" : "☆"}
+                  <span aria-hidden="true">{value <= rating ? "★" : "☆"}</span>
                 </button>
               ))}
             </div>

@@ -39,7 +39,7 @@ describe("ReviewForm", () => {
     render(<ReviewForm orderId={12} onSubmitted={onSubmitted} />);
     await open(user);
 
-    await user.click(screen.getByLabelText("Set rating to 4"));
+    await user.click(screen.getByRole("radio", { name: "4 stars" }));
     await user.type(screen.getByLabelText("Comment"), "Shipped fast.");
     await user.click(screen.getByRole("button", { name: "Submit review" }));
 
@@ -102,5 +102,62 @@ describe("ReviewForm", () => {
     expect(post).toHaveBeenCalledTimes(1);
 
     release({ id: 1 });
+  });
+});
+
+describe("H9 — the rating input exposes its value", () => {
+  function renderReviewForm() {
+    return render(<ReviewForm orderId={1} onSubmitted={vi.fn()} />);
+  }
+
+  async function openTheDialog() {
+    const user = userEvent.setup();
+    await open(user);
+    return user;
+  }
+
+  it("is a named radio group", async () => {
+    renderReviewForm();
+    await openTheDialog();
+    expect(screen.getByRole("radiogroup", { name: /star rating/i })).toBeInTheDocument();
+  });
+
+  it("reports which rating is selected", async () => {
+    renderReviewForm();
+    await openTheDialog();
+
+    // The form opens pre-filled at 5, previously conveyed only by a glyph swap.
+    expect(screen.getByRole("radio", { name: "5 stars" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "3 stars" })).not.toBeChecked();
+  });
+
+  it("moves the selection when a rating is chosen", async () => {
+    renderReviewForm();
+    const user = await openTheDialog();
+
+    await user.click(screen.getByRole("radio", { name: "3 stars" }));
+
+    expect(screen.getByRole("radio", { name: "3 stars" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "5 stars" })).not.toBeChecked();
+  });
+
+  it("names one star in the singular", async () => {
+    renderReviewForm();
+    await openTheDialog();
+    expect(screen.getByRole("radio", { name: "1 star" })).toBeInTheDocument();
+  });
+
+  it("moves focus along with the selection on arrow-key navigation", async () => {
+    renderReviewForm();
+    const user = await openTheDialog();
+
+    screen.getByRole("radio", { name: "5 stars" }).focus();
+    await user.keyboard("{ArrowLeft}");
+
+    const fourStars = screen.getByRole("radio", { name: "4 stars" });
+    expect(fourStars).toBeChecked();
+    expect(fourStars).toHaveFocus();
+    expect(fourStars).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "5 stars" })).toHaveAttribute("tabindex", "-1");
   });
 });
