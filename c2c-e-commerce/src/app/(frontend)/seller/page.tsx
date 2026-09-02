@@ -119,7 +119,7 @@ function SellerDashboardContent() {
 
 export default function SellerDashboardPage() {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute allowedRoles={["seller", "admin"]}>
       <SellerDashboardContent />
     </ProtectedRoute>
   );

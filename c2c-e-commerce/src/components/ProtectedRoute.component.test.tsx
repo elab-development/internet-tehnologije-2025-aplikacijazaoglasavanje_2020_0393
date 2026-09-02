@@ -114,3 +114,84 @@ describe("M5 — carries the attempted path into the login redirect", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 });
+
+describe("H11 — ProtectedRoute is the client-side gate", () => {
+  it("renders nothing to an anonymous visitor while the redirect is in flight", () => {
+    mockAuth({ isAuthenticated: false, loading: false });
+    render(
+      <ProtectedRoute>
+        <p>secret</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.queryByText("secret")).toBeNull();
+  });
+
+  it("shows the fallback while the session is still being checked", () => {
+    mockAuth({ isAuthenticated: false, loading: true });
+    render(
+      <ProtectedRoute>
+        <p>secret</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.queryByText("secret")).toBeNull();
+    expect(screen.getByText(/checking authentication/i)).toBeInTheDocument();
+  });
+
+  it("renders the content to an authenticated user", () => {
+    mockAuth({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 1, email: "buyer@example.test", name: "Bea", role: "buyer", phoneNumber: null },
+    });
+    render(
+      <ProtectedRoute>
+        <p>secret</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText("secret")).toBeInTheDocument();
+  });
+
+  it("keeps a buyer out of a seller-only route", () => {
+    mockAuth({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 1, email: "buyer@example.test", name: "Bea", role: "buyer", phoneNumber: null },
+    });
+    render(
+      <ProtectedRoute allowedRoles={["seller"]}>
+        <p>seller form</p>
+      </ProtectedRoute>,
+    );
+    // The API's RBAC tests prove the endpoint refuses. This is the UI half.
+    expect(screen.queryByText("seller form")).toBeNull();
+    expect(replaceSpy).toHaveBeenCalledWith("/");
+  });
+
+  it("lets a seller into a seller-only route", () => {
+    mockAuth({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 2, email: "seller@example.test", name: "Sami", role: "seller", phoneNumber: null },
+    });
+    render(
+      <ProtectedRoute allowedRoles={["seller"]}>
+        <p>seller form</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText("seller form")).toBeInTheDocument();
+  });
+
+  it("lets an unrestricted route through for any role", () => {
+    mockAuth({
+      isAuthenticated: true,
+      loading: false,
+      user: { id: 1, email: "buyer@example.test", name: "Bea", role: "buyer", phoneNumber: null },
+    });
+    render(
+      <ProtectedRoute>
+        <p>anyone</p>
+      </ProtectedRoute>,
+    );
+    expect(screen.getByText("anyone")).toBeInTheDocument();
+  });
+});

@@ -10,9 +10,10 @@
  */
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SellerDashboardPage from "./page";
+import type { AuthUser } from "@/context/AuthContext";
 
 const nav = vi.hoisted(() => ({
   push: vi.fn(),
@@ -32,11 +33,25 @@ const SELLER = {
   phoneNumber: null,
 };
 
+const BUYER = {
+  id: 8,
+  email: "buyer@example.test",
+  name: "Bea Buyer",
+  role: "buyer" as const,
+  phoneNumber: null,
+};
+
+const auth = vi.hoisted(() => ({
+  user: null as AuthUser | null,
+  isAuthenticated: true,
+  loading: false,
+}));
+
 vi.mock("@/context/AuthContext", () => ({
   useAuth: () => ({
-    user: SELLER,
-    isAuthenticated: true,
-    loading: false,
+    user: auth.user,
+    isAuthenticated: auth.isAuthenticated,
+    loading: auth.loading,
     login: vi.fn(),
     logout: vi.fn(),
   }),
@@ -68,6 +83,14 @@ function renderSellerDashboard() {
   return render(<SellerDashboardPage />);
 }
 
+beforeEach(() => {
+  auth.user = SELLER;
+  auth.isAuthenticated = true;
+  auth.loading = false;
+  nav.push.mockClear();
+  nav.replace.mockClear();
+});
+
 describe("H10 — the dashboard does not claim to be a tab widget", () => {
   it("offers plain buttons, not tabs", async () => {
     renderSellerDashboard();
@@ -93,5 +116,22 @@ describe("H10 — the dashboard does not claim to be a tab widget", () => {
     await user.click(listings);
     expect(listings).toHaveAttribute("aria-current", "true");
     expect(orders).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("L17 — /seller is seller-only", () => {
+  it("does not show a buyer the dashboard", () => {
+    auth.user = BUYER;
+    renderSellerDashboard();
+    expect(screen.queryByRole("heading", { name: /seller dashboard/i })).toBeNull();
+    expect(nav.replace).toHaveBeenCalledWith("/");
+  });
+
+  it("still shows a seller the dashboard", async () => {
+    renderSellerDashboard();
+    expect(
+      await screen.findByRole("heading", { name: /seller dashboard/i }),
+    ).toBeInTheDocument();
+    expect(nav.replace).not.toHaveBeenCalled();
   });
 });
