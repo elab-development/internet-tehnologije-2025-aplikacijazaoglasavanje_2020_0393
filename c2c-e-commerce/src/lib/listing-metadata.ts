@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import { db } from "@/db";
 import { listings, users } from "@/db/schema";
@@ -58,4 +58,34 @@ export async function sellerForMetadata(id: number): Promise<{ name: string } | 
     .limit(1);
 
   return row ?? null;
+}
+
+/**
+ * Listings the sitemap should advertise.
+ *
+ * `active` only — deliberately narrower than `listingForMetadata`'s rule (spec D9).
+ * `listingForMetadata` uses `isPubliclyVisible`, which also lets `reserved` and `sold`
+ * through, because a shared link to a completed sale should still preview correctly.
+ * The sitemap has a different job: it tells a crawler what to advertise as available.
+ * A reserved or sold listing is readable if you have the link, but it is not for sale,
+ * so pointing search traffic at it produces a bad result page. Do not fold this back
+ * into `isPubliclyVisible` — the two rules answer different questions and are meant to
+ * diverge.
+ *
+ * Seller profiles are deliberately excluded from the sitemap despite being public: they
+ * are thin pages (a name and a review feed), and adding one entry per seller roughly
+ * doubles the query surface here for little indexing value.
+ *
+ * Capped because a Next.js sitemap holds at most 50,000 URLs. If the active catalogue
+ * ever approaches that, split it with `generateSitemaps` rather than raising this cap.
+ */
+export async function activeListingsForSitemap(
+  limit = 10_000,
+): Promise<Array<{ id: number; updatedAt: Date }>> {
+  return db
+    .select({ id: listings.id, updatedAt: listings.updatedAt })
+    .from(listings)
+    .where(eq(listings.status, "active"))
+    .orderBy(desc(listings.updatedAt))
+    .limit(limit);
 }
