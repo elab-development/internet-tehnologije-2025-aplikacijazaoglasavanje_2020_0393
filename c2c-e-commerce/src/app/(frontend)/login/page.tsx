@@ -6,6 +6,7 @@ import Link from "next/link";
 import toast from "react-hot-toast";
 import { RiStoreLine, RiLoginBoxLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
+import AuthPageShell from "@/components/auth/AuthPageShell";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
 import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
@@ -91,82 +92,72 @@ function LoginPageContent() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Card */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-          {/* Logo */}
-          <div className="mb-8 flex flex-col items-center gap-2 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              <RiStoreLine size={28} aria-hidden="true" />
-            </span>
-            <h1 className="text-2xl font-bold text-zinc-900">Welcome back</h1>
-            <p className="text-sm text-zinc-500">Sign in to your C2C Market account</p>
-          </div>
+    <AuthPageShell
+      icon={<RiStoreLine size={28} aria-hidden="true" />}
+      title="Welcome back"
+      subtitle="Sign in to your C2C Market account"
+      footer={
+        <p className="mt-6 text-center text-sm text-zinc-500">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+          >
+            Create one
+          </Link>
+        </p>
+      }
+    >
+      {/* Global error banner */}
+      {error && <ErrorAlert message={error} className="mb-5" />}
+      {!error && oauthError && <ErrorAlert message={oauthError} className="mb-5" />}
 
-          {/* Global error banner */}
-          {error && <ErrorAlert message={error} className="mb-5" />}
-          {!error && oauthError && <ErrorAlert message={oauthError} className="mb-5" />}
-
-          {fieldErrorList.length > 0 && (
-            <div className="mb-5">
-              <FormErrorSummary errors={fieldErrorList} />
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-            <InputField
-              id="email"
-              label="Email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-              autoComplete="email"
-            />
-
-            <InputField
-              id="password"
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-              autoComplete="current-password"
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              fullWidth
-              loading={submitting}
-              icon={<RiLoginBoxLine size={18} />}
-              className="mt-2"
-            >
-              Sign in
-            </Button>
-          </form>
-
-          <OAuthButtons returnTo={returnTo} />
-
-          {/* Footer link */}
-          <p className="mt-6 text-center text-sm text-zinc-500">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              Create one
-            </Link>
-          </p>
+      {fieldErrorList.length > 0 && (
+        <div className="mb-5">
+          <FormErrorSummary errors={fieldErrorList} />
         </div>
-      </div>
-    </div>
+      )}
+
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <InputField
+          id="email"
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          required
+          autoComplete="email"
+        />
+
+        <InputField
+          id="password"
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          required
+          autoComplete="current-password"
+        />
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          fullWidth
+          loading={submitting}
+          icon={<RiLoginBoxLine size={18} />}
+          className="mt-2"
+        >
+          Sign in
+        </Button>
+      </form>
+
+      <OAuthButtons returnTo={returnTo} />
+    </AuthPageShell>
   );
 }
 

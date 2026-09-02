@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState, type FormEvent } from "react";
 import toast from "react-hot-toast";
 
+import AuthPageShell from "@/components/auth/AuthPageShell";
 import Button from "@/components/ui/Button";
 import ErrorAlert from "@/components/ui/ErrorAlert";
 import InputField from "@/components/ui/InputField";
@@ -64,55 +65,46 @@ function LinkAccountPageContent() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-          <div className="mb-6 flex flex-col items-center gap-2 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              <RiLinksLine size={28} aria-hidden="true" />
-            </span>
-            <h1 className="text-2xl font-bold text-zinc-900">Link your account</h1>
-            {/* Says plainly why they are here rather than signed in. */}
-            <p className="text-sm text-zinc-500">
-              An account with this email already exists. Enter its password to connect
-              it to {providerLabel}.
-            </p>
-          </div>
+    <AuthPageShell
+      icon={<RiLinksLine size={28} aria-hidden="true" />}
+      title="Link your account"
+      // Says plainly why they are here rather than signed in.
+      subtitle={`An account with this email already exists. Enter its password to connect it to ${providerLabel}.`}
+      headerClassName="mb-6"
+      footer={
+        <button
+          type="button"
+          onClick={() => router.push("/login")}
+          className="mt-6 w-full text-center text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+        >
+          Cancel and sign in with a password instead
+        </button>
+      }
+    >
+      {error && <ErrorAlert message={error} className="mb-5" />}
 
-          {error && <ErrorAlert message={error} className="mb-5" />}
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <InputField
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+        />
 
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-            <InputField
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              fullWidth
-              loading={submitting}
-            >
-              Link account
-            </Button>
-          </form>
-
-          <button
-            type="button"
-            onClick={() => router.push("/login")}
-            className="mt-6 w-full text-center text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
-          >
-            Cancel and sign in with a password instead
-          </button>
-        </div>
-      </div>
-    </div>
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          fullWidth
+          loading={submitting}
+        >
+          Link account
+        </Button>
+      </form>
+    </AuthPageShell>
   );
 }
 
