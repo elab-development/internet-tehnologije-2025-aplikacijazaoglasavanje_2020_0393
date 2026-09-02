@@ -3,7 +3,6 @@
 import { Suspense, useState, useEffect, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { Metadata } from "next";
 import toast from "react-hot-toast";
 import { RiStoreLine, RiLoginBoxLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
@@ -14,10 +13,6 @@ import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
 import { oauthErrorMessage } from "@/lib/oauth/error-messages";
 import { safeReturnTo } from "@/lib/oauth/return-to";
-
-// Note: metadata export is ignored in client components — title is set in
-// the nearest server layout. Keep it here as documentation intent.
-export const _metadata: Pick<Metadata, "title"> = { title: "Login" };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 

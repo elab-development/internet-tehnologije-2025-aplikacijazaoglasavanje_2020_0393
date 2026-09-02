@@ -2,7 +2,6 @@
 
 import { Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Metadata } from "next";
 import { RiSearchLine } from "@remixicon/react";
 import {
   Button,
@@ -19,10 +18,6 @@ import MatchQuality from "@/components/listings/MatchQuality";
 import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
 import { formatPrice } from "@/lib/format";
 import type { Category, ListingsResponse } from "@/types/api";
-
-export const _metadata: Pick<Metadata, "title"> = {
-  title: "Listings",
-};
 
 type SortOption = "newest" | "price_asc" | "price_desc";
 
