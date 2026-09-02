@@ -1,13 +1,31 @@
 "use client";
 
 import { useId } from "react";
-import type { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+/**
+ * The slice of `useCurrencyConversion()`'s return value this component actually
+ * renders. Declared as its own interface rather than `ReturnType<typeof
+ * useCurrencyConversion>` (L10) — the hook's return also carries `convertFromUsd`
+ * and `formatConverted`, which this component never touches, and coupling the prop
+ * to the hook's whole shape meant any unrelated addition to the hook's return type
+ * was a breaking change for this component's contract too.
+ *
+ * `useCurrencyConversion()`'s return value still satisfies this structurally, so no
+ * caller changes.
+ */
+export type CurrencyControl = {
+  selectedCurrency: string;
+  setSelectedCurrency: (currency: string) => void;
+  loadingRates: boolean;
+  ratesError: string | null;
+  availableCurrencies: readonly string[];
+};
+
 export type CurrencySelectProps = {
-  /** The return value of `useCurrencyConversion()` from the calling page. */
-  conversion: ReturnType<typeof useCurrencyConversion>;
+  /** The relevant slice of `useCurrencyConversion()` from the calling page. */
+  conversion: CurrencyControl;
   label?: string;
   /** Extra classes for the wrapper, e.g. `sm:w-48`. */
   className?: string;

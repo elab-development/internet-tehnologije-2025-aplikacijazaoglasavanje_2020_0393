@@ -337,6 +337,26 @@ describe("C3 — results are announced", () => {
   });
 });
 
+describe("L9 — sort is validated, not cast", () => {
+  it("falls back to the default sort for an unknown value in the URL", async () => {
+    // Previously cast, so the dropdown read "Newest" while the query asked for
+    // "oldest" — a sort the server doesn't recognise either.
+    nav.params = new URLSearchParams("sort=oldest");
+    renderPage();
+
+    expect(await screen.findByLabelText(/sort/i)).toHaveValue("newest");
+    await waitFor(() => expect(lastQuery()).toContain("sort=newest"));
+  });
+
+  it("keeps a recognised sort value from the URL", async () => {
+    nav.params = new URLSearchParams("sort=price_asc");
+    renderPage();
+
+    expect(await screen.findByLabelText(/sort/i)).toHaveValue("price_asc");
+    await waitFor(() => expect(lastQuery()).toContain("sort=price_asc"));
+  });
+});
+
 describe("H8 — the browse page has a heading hierarchy", () => {
   it("has exactly one h1", async () => {
     renderPage();

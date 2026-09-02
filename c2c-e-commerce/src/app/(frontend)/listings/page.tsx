@@ -19,7 +19,19 @@ import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
 import { formatPrice } from "@/lib/format";
 import type { Category, ListingsResponse } from "@/types/api";
 
-type SortOption = "newest" | "price_asc" | "price_desc";
+const SORT_OPTIONS = ["newest", "price_asc", "price_desc"] as const;
+type SortOption = (typeof SORT_OPTIONS)[number];
+
+/**
+ * Cast, previously: `?sort=oldest` produced a dropdown reading "Newest" (the
+ * `useState` initializer's default) over results the server sorted by whatever the
+ * raw, unvalidated query string actually said (L9).
+ */
+function parseSort(raw: string | null): SortOption {
+  return (SORT_OPTIONS as readonly string[]).includes(raw ?? "")
+    ? (raw as SortOption)
+    : "newest";
+}
 
 function ListingsPageContent() {
   const router = useRouter();
@@ -43,8 +55,8 @@ function ListingsPageContent() {
   const [smartSearch, setSmartSearch] = useState(
     searchParams.get("mode") === "hybrid",
   );
-  const [sort, setSort] = useState<SortOption>(
-    (searchParams.get("sort") as SortOption) ?? "newest",
+  const [sort, setSort] = useState<SortOption>(() =>
+    parseSort(searchParams.get("sort")),
   );
 
   const { data: categoryData } = useFetch<Category[]>("/api/categories");
@@ -230,7 +242,7 @@ function ListingsPageContent() {
               id="sort-filter"
               value={sort}
               onChange={(event) => {
-                setSort(event.target.value as SortOption);
+                setSort(parseSort(event.target.value));
                 setPage(1);
               }}
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"

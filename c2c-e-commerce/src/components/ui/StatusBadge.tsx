@@ -59,49 +59,83 @@ const listingStatusLabels: Record<ListingStatus, string> = {
   removed: "Removed",
 };
 
-const FALLBACK_CLASSES = "bg-zinc-100 text-zinc-500";
+/**
+ * Visually neutral — deliberately not one of the map colours above, which would
+ * imply a real (and wrong) meaning for a status this frontend has not been taught.
+ */
+const UNKNOWN_CLASSES = "bg-zinc-100 text-zinc-500";
+const UNKNOWN_LABEL = "Unknown status";
 
 const sizeClasses = {
   sm: "px-2.5 py-1",
   md: "px-3 py-1",
 } as const;
 
+type Size = keyof typeof sizeClasses;
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type StatusBadgeProps = {
-  status: string;
-  /** Which colour map to read. Defaults to order statuses. */
-  kind?: "order" | "listing";
-  /**
-   * Show the descriptive order wording ("Awaiting seller approval") instead of
-   * the raw status. Order statuses only.
-   */
-  descriptive?: boolean;
-  size?: keyof typeof sizeClasses;
-  className?: string;
-};
+/**
+ * Discriminated on `kind`: `status` is only ever a value the chosen map can index,
+ * so `status="sold"` (a listing status) can no longer be passed to an order badge —
+ * previously `status` was a bare `string`, cast into whichever map `kind` picked,
+ * and a mismatch like that rendered grey with no error anywhere (L8).
+ *
+ * `kind` defaults to `"order"` for the many callers that never set it; a listing
+ * badge must say so explicitly.
+ */
+export type StatusBadgeProps =
+  | {
+      kind?: "order";
+      status: OrderStatus;
+      /**
+       * Show the descriptive order wording ("Awaiting seller approval") instead of
+       * the raw status. Order statuses only.
+       */
+      descriptive?: boolean;
+      size?: Size;
+      className?: string;
+    }
+  | {
+      kind: "listing";
+      status: ListingStatus;
+      descriptive?: boolean;
+      size?: Size;
+      className?: string;
+    };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 /** Coloured pill for an order or listing status. */
-export default function StatusBadge({
-  status,
-  kind = "order",
-  descriptive = false,
-  size = "sm",
-  className = "",
-}: StatusBadgeProps) {
-  const classes =
-    kind === "listing"
-      ? listingStatusClasses[status as ListingStatus]
-      : orderStatusClasses[status as OrderStatus];
+export default function StatusBadge(props: StatusBadgeProps) {
+  const { size = "sm", className = "", descriptive = false } = props;
 
-  const label =
-    kind === "order"
-      ? descriptive
-        ? (orderStatusLabels[status as OrderStatus] ?? status)
-        : (orderStatusShortLabels[status as OrderStatus] ?? status)
-      : (listingStatusLabels[status as ListingStatus] ?? status);
+  // The maps above are `Record<Status, string>`, so a status the compiler knows
+  // about can never miss — that case is a compile error now, not this fallback.
+  // What survives is real drift: the API adding a status this frontend has not
+  // been taught yet, which arrives as a value outside the typed union at runtime
+  // even though nothing here can express that possibility statically.
+  let classes: string | undefined;
+  let label: string | undefined;
+
+  if (props.kind === "listing") {
+    classes = listingStatusClasses[props.status];
+    label = listingStatusLabels[props.status];
+  } else {
+    classes = orderStatusClasses[props.status];
+    label = descriptive
+      ? orderStatusLabels[props.status]
+      : orderStatusShortLabels[props.status];
+  }
+
+  if (label === undefined) {
+    // Drift between the API's enum and this component's map. Rendering the raw slug
+    // put database vocabulary in front of users; this is at least honest, and the
+    // console error is what makes the drift findable.
+    console.error(
+      `StatusBadge: no label for ${props.kind ?? "order"} status "${props.status}"`,
+    );
+  }
 
   return (
     <span
@@ -109,13 +143,13 @@ export default function StatusBadge({
         "rounded-full text-xs font-semibold",
         sizeClasses[size],
         descriptive ? "" : "capitalize",
-        classes ?? FALLBACK_CLASSES,
+        classes ?? UNKNOWN_CLASSES,
         className,
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {label}
+      {label ?? UNKNOWN_LABEL}
     </span>
   );
 }

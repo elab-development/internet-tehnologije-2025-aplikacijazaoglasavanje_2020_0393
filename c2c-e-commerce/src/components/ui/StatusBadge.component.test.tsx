@@ -76,4 +76,19 @@ describe("StatusBadge", () => {
     );
     expect(labels.size).toBe(LISTING_STATUSES.length);
   });
+
+  it("L8 — a listing status is not accepted as an order status", () => {
+    // @ts-expect-error "sold" is a listing status; kind="order" must reject it.
+    render(<StatusBadge status="sold" kind="order" />);
+  });
+
+  it("renders 'Unknown status' instead of a raw slug the map doesn't know", () => {
+    // The union makes this case unreachable through normal typing — real drift
+    // between the API's enum and this component's map is the only way to hit it,
+    // so the test has to force its way past the type system to simulate that.
+    render(<StatusBadge status={"awaiting_pickup" as never} kind="order" />);
+
+    expect(screen.getByText("Unknown status")).toBeInTheDocument();
+    expect(screen.queryByText("awaiting_pickup")).not.toBeInTheDocument();
+  });
 });
