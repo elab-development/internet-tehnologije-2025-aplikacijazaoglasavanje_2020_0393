@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -13,13 +13,33 @@ import {
   RiAddCircleLine,
   RiDashboardLine,
   RiCodeLine,
+  RiSettings4Line,
 } from "@remixicon/react";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth, type AuthUser } from "@/context/AuthContext";
 import { Button } from "@/components/ui";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const NAV_LINKS = [
+type Role = AuthUser["role"];
+
+type NavLink = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  /** Omitted means every visitor sees the link — the page it points at is what
+   *  gates access, not the nav. Present restricts the link to these roles. */
+  roles?: Role[];
+};
+
+/**
+ * Every link the nav can show, desktop and mobile alike (L5). `roles` replaces
+ * what used to be four hand-written `isSeller &&` conditionals — two for the
+ * desktop bar, two for the mobile drawer, one per link, all identical.
+ *
+ * `/settings` is new here (M9): it is the only way to reach the linked-accounts
+ * screen, and before this it had no link anywhere in the UI.
+ */
+const NAV_LINKS: NavLink[] = [
   { href: "/listings", label: "Listings", icon: <RiStoreLine size={18} aria-hidden="true" /> },
   {
     href: "/orders",
@@ -27,7 +47,85 @@ const NAV_LINKS = [
     icon: <RiShoppingBagLine size={18} aria-hidden="true" />,
   },
   { href: "/api-docs", label: "API Docs", icon: <RiCodeLine size={18} aria-hidden="true" /> },
+  {
+    href: "/seller",
+    label: "Seller Dashboard",
+    icon: <RiDashboardLine size={18} aria-hidden="true" />,
+    roles: ["seller", "admin"],
+  },
+  {
+    href: "/listings/new",
+    label: "Sell Item",
+    icon: <RiAddCircleLine size={18} aria-hidden="true" />,
+    roles: ["seller", "admin"],
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: <RiSettings4Line size={18} aria-hidden="true" />,
+  },
 ];
+
+type NavLinksProps = {
+  links: NavLink[];
+  pathname: string;
+  userRole?: Role;
+  /**
+   * The desktop bar and the mobile drawer render the same links with different
+   * markup and spacing: desktop is a `<ul>` of chips, mobile is a flat column of
+   * full-width rows. That is a real visual difference, not an accident, so it
+   * stays a parameter rather than being forced to agree.
+   */
+  variant: "desktop" | "mobile";
+};
+
+/** One nav link list, parameterised by variant, standing in for what used to be
+ *  written out separately for desktop and mobile (L5). */
+function NavLinks({ links, pathname, userRole, variant }: NavLinksProps) {
+  const visible = links.filter(
+    (link) => !link.roles || (userRole && link.roles.includes(userRole))
+  );
+
+  const renderLink = ({ href, label, icon }: NavLink) => {
+    // Prefix match, so a link stays highlighted on its own subpages (e.g. a
+    // listing detail page under /listings). Applied uniformly to every link,
+    // including the role-gated ones — the old hand-written seller blocks used
+    // an exact match instead, but /seller and /listings/new have no subroutes,
+    // so that inconsistency never changed what rendered.
+    const active = pathname === href || pathname.startsWith(href + "/");
+    const className =
+      variant === "desktop"
+        ? [
+            "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            active
+              ? "bg-indigo-50 text-indigo-700"
+              : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
+          ].join(" ")
+        : [
+            "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+            active ? "bg-indigo-50 text-indigo-700" : "text-zinc-700 hover:bg-zinc-100",
+          ].join(" ");
+
+    return (
+      <Link key={href} href={href} className={className}>
+        {icon}
+        {label}
+      </Link>
+    );
+  };
+
+  if (variant === "desktop") {
+    return (
+      <ul className="hidden items-center gap-1 sm:flex">
+        {visible.map((link) => (
+          <li key={link.href}>{renderLink(link)}</li>
+        ))}
+      </ul>
+    );
+  }
+
+  return <>{visible.map(renderLink)}</>;
+}
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -60,8 +158,6 @@ export default function Navbar() {
     router.push("/");
   }
 
-  const isSeller = user?.role === "seller" || user?.role === "admin";
-
   return (
     <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/95 backdrop-blur-sm">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6">
@@ -76,59 +172,7 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop nav links */}
-        <ul className="hidden items-center gap-1 sm:flex">
-          {NAV_LINKS.map(({ href, label, icon }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <li key={href}>
-                <Link
-                  href={href}
-                  className={[
-                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                    active
-                      ? "bg-indigo-50 text-indigo-700"
-                      : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                  ].join(" ")}
-                >
-                  {icon}
-                  {label}
-                </Link>
-              </li>
-            );
-          })}
-          {isSeller && (
-            <li>
-              <Link
-                href="/seller"
-                className={[
-                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  pathname === "/seller"
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                ].join(" ")}
-              >
-                <RiDashboardLine size={18} aria-hidden="true" />
-                Seller Dashboard
-              </Link>
-            </li>
-          )}
-          {isSeller && (
-            <li>
-              <Link
-                href="/listings/new"
-                className={[
-                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                  pathname === "/listings/new"
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900",
-                ].join(" ")}
-              >
-                <RiAddCircleLine size={18} aria-hidden="true" />
-                Sell Item
-              </Link>
-            </li>
-          )}
-        </ul>
+        <NavLinks links={NAV_LINKS} pathname={pathname} userRole={user?.role} variant="desktop" />
 
         {/* Right section: auth + hamburger */}
         <div className="flex items-center gap-2">
@@ -192,52 +236,7 @@ export default function Navbar() {
       {/* ─── Mobile drawer ────────────────────────────────────────────────── */}
       {mobileOpen && (
         <div className="sm:hidden border-t border-zinc-200 bg-white px-4 pb-5 pt-3 space-y-1">
-          {NAV_LINKS.map(({ href, label, icon }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={[
-                  "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-indigo-50 text-indigo-700"
-                    : "text-zinc-700 hover:bg-zinc-100",
-                ].join(" ")}
-              >
-                {icon}
-                {label}
-              </Link>
-            );
-          })}
-          {isSeller && (
-            <Link
-              href="/seller"
-              className={[
-                "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                pathname === "/seller"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-zinc-700 hover:bg-zinc-100",
-              ].join(" ")}
-            >
-              <RiDashboardLine size={18} aria-hidden="true" />
-              Seller Dashboard
-            </Link>
-          )}
-          {isSeller && (
-            <Link
-              href="/listings/new"
-              className={[
-                "flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                pathname === "/listings/new"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-zinc-700 hover:bg-zinc-100",
-              ].join(" ")}
-            >
-              <RiAddCircleLine size={18} aria-hidden="true" />
-              Sell Item
-            </Link>
-          )}
+          <NavLinks links={NAV_LINKS} pathname={pathname} userRole={user?.role} variant="mobile" />
 
           <div className="border-t border-zinc-100 pt-3 mt-3 space-y-1">
             {loading ? (
