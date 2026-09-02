@@ -17,6 +17,7 @@ import {
 } from "@remixicon/react";
 import { useAuth, type AuthUser } from "@/context/AuthContext";
 import { Button } from "@/components/ui";
+import { avatarUrl as buildAvatarUrl } from "@/lib/format";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -135,9 +136,7 @@ export default function Navbar() {
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const avatarUrl = user
-    ? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(user.name)}`
-    : "";
+  const avatarUrl = user ? buildAvatarUrl(user.id) : "";
 
   // Close mobile menu on route change
   useEffect(() => {

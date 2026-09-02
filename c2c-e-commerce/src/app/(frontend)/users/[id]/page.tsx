@@ -7,7 +7,7 @@ import SellerReviewFeed from "@/components/reviews/SellerReviewFeed";
 import StarRating from "@/components/reviews/StarRating";
 import { ErrorAlert, Skeleton } from "@/components/ui";
 import { useFetch } from "@/hooks/useFetch";
-import { formatPrice } from "@/lib/format";
+import { avatarUrl, formatPrice } from "@/lib/format";
 import type { ListingsResponse, SellerReviewsResponse } from "@/types/api";
 
 /**
@@ -54,10 +54,7 @@ export default function SellerProfilePage() {
       <section className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={
-            seller.avatarUrl ??
-            `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(seller.name)}`
-          }
+          src={seller.avatarUrl ?? avatarUrl(sellerId)}
           alt=""
           className="h-16 w-16 rounded-full border border-zinc-200 bg-zinc-50"
         />

@@ -266,6 +266,24 @@ describe("C2C-AI-8 — AC6: the empty state", () => {
   });
 });
 
+describe("L20 — the pager is hidden rather than stranded below the empty state", () => {
+  it("renders no pager when there is one page of (zero) results", () => {
+    fetchState.listings = page([]);
+    render(<ListingsPage />);
+
+    expect(screen.queryByRole("button", { name: /next/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+    expect(screen.queryByText(/page \d+ of \d+/i)).toBeNull();
+  });
+
+  it("still renders the pager once there is more than one page", () => {
+    fetchState.listings = { ...page([listing(1, "Aluminium mountain bike")]), totalPages: 2 };
+    render(<ListingsPage />);
+
+    expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
+  });
+});
+
 describe("C2C-AI-8 — AC7: layout", () => {
   it("AC7: the toggle sits in the filter grid rather than overflowing it", () => {
     // jsdom has no layout engine. This asserts the mechanism — the control participates in

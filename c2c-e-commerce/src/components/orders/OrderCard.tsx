@@ -4,7 +4,7 @@ import Image from "next/image";
 
 import OrderActions from "@/components/orders/OrderActions";
 import { StatusBadge } from "@/components/ui";
-import { formatPrice } from "@/lib/format";
+import { formatDate, formatPrice } from "@/lib/format";
 import type { OrderStatus } from "@/lib/order-lifecycle";
 import type { SellerOrder } from "@/types/api";
 
@@ -34,7 +34,7 @@ export default function OrderCard({
         <div>
           <h3 className="text-sm font-semibold text-zinc-900">Order #{order.id}</h3>
           <p className="text-xs text-zinc-500">
-            {new Date(order.createdAt).toLocaleString()} · Buyer:{" "}
+            {formatDate(order.createdAt)} · Buyer:{" "}
             <span className="font-medium text-zinc-700">{order.buyerName}</span>{" "}
             ({order.buyerEmail})
           </p>

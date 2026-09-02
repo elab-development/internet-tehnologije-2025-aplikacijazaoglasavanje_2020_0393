@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import StarRating from "./StarRating";
+import { avatarUrl as buildAvatarUrl } from "@/lib/format";
 import { ratingAverage } from "@/lib/reviews";
 
 export type SellerCardProps = {
@@ -44,10 +45,7 @@ export default function SellerCard({
       <Link href={`/users/${sellerId}`} className="flex items-center gap-3 group">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={
-            avatarUrl ??
-            `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(displayName)}`
-          }
+          src={avatarUrl ?? buildAvatarUrl(sellerId)}
           alt=""
           className="h-10 w-10 rounded-full border border-zinc-200 bg-zinc-50"
         />

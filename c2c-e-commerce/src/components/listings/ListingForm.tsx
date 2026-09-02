@@ -112,6 +112,13 @@ export default function ListingForm(props: ListingFormProps) {
   // the DELETE itself waits for the confirmation dialog below.
   const [photoPendingRemoval, setPhotoPendingRemoval] = useState<number | null>(null);
 
+  // What the form looked like before the seller touched it: blank in create mode, or
+  // whatever the fetched listing prefilled in edit mode (set alongside it below). isDirty
+  // compares the live fields against this rather than against "" / [], so an edit-mode
+  // form that has only just finished loading its own prefilled values does not read as
+  // dirty before the seller has changed anything.
+  const [initialValues, setInitialValues] = useState({ title: "", description: "", price: "" });
+
   const announce = useAnnounce();
 
   const { data: categoryData } = useFetch<Category[]>("/api/categories");
@@ -128,13 +135,40 @@ export default function ListingForm(props: ListingFormProps) {
   // Prefill once the listing being edited arrives.
   useEffect(() => {
     if (!listing) return;
+    const listingPrice = String(Number(listing.price));
     setTitle(listing.title);
     setDescription(listing.description);
-    setPrice(String(Number(listing.price)));
+    setPrice(listingPrice);
     setExistingImages(listing.images ?? []);
     setCategoryId(listing.categoryId ?? null);
     setStatus(listing.status);
+    setInitialValues({
+      title: listing.title,
+      description: listing.description,
+      price: listingPrice,
+    });
   }, [listing]);
+
+  // isDirty is any of title / description / price / files differing from their initial
+  // values (L22): title, description and price against the baseline set above, files
+  // against the empty array every mode starts with, since a staged upload never has an
+  // "initial" value to compare against.
+  const isDirty =
+    title !== initialValues.title ||
+    description !== initialValues.description ||
+    price !== initialValues.price ||
+    files.length > 0;
+
+  // A browser-navigation guard only: `beforeunload` fires on a tab close, reload or typed
+  // URL, but not on an in-app route change via `router.push` — the App Router does not run
+  // navigation through it. Catching those too would need a route-change interception
+  // (e.g. a confirmation on `router.push`), which is out of scope here.
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   async function confirmRemoveExisting() {
     const imageId = photoPendingRemoval;

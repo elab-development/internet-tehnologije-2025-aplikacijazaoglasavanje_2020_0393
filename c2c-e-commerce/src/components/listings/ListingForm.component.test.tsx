@@ -503,3 +503,37 @@ describe("M10 — a blank submit shows one error summary", () => {
     expect(document.getElementById(describedBy!)).toHaveTextContent("Enter a price like 19.99");
   });
 });
+
+describe("L22 — unsaved-changes guard", () => {
+  it("does not block navigation away from an untouched form", () => {
+    renderCreateForm();
+
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it("blocks navigation away once a field has been edited", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+    await user.type(screen.getByLabelText(/^title/i), "Mountain bike");
+
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it("stops blocking once the dirty field is reverted", async () => {
+    const user = userEvent.setup();
+    renderCreateForm();
+    await user.type(screen.getByLabelText(/^title/i), "Mountain bike");
+    await user.clear(screen.getByLabelText(/^title/i));
+
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(false);
+  });
+});

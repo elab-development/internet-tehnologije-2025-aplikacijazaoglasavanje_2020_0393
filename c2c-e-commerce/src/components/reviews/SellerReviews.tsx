@@ -1,6 +1,10 @@
 "use client";
 
+import { RiStarLine } from "@remixicon/react";
+
 import StarRating from "./StarRating";
+import { EmptyState } from "@/components/ui";
+import { formatDate } from "@/lib/format";
 import type { SellerReview } from "@/types/api";
 
 export type SellerReviewsProps = {
@@ -17,7 +21,13 @@ export type SellerReviewsProps = {
  */
 export default function SellerReviews({ reviews }: SellerReviewsProps) {
   if (reviews.length === 0) {
-    return <p className="text-sm text-zinc-500">No reviews yet.</p>;
+    return (
+      <EmptyState
+        icon={<RiStarLine size={32} />}
+        title="No reviews yet"
+        description="Once a buyer reviews an order with this seller, it will show up here."
+      />
+    );
   }
 
   return (
@@ -30,9 +40,7 @@ export default function SellerReviews({ reviews }: SellerReviewsProps) {
                 <p className="text-sm font-medium text-zinc-900">
                   {review.reviewerName ?? `Buyer #${review.reviewerId}`}
                 </p>
-                <p className="text-xs text-zinc-500">
-                  {new Date(review.createdAt).toLocaleDateString()}
-                </p>
+                <p className="text-xs text-zinc-500">{formatDate(review.createdAt)}</p>
               </div>
               <StarRating value={review.rating} size="sm" />
             </div>

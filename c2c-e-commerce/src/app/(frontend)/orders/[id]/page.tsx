@@ -18,7 +18,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
-import { formatPrice } from "@/lib/format";
+import { formatDate, formatPrice } from "@/lib/format";
 import type { OrderActor, OrderStatus } from "@/lib/order-lifecycle";
 import type { Order, OrderDetail } from "@/types/api";
 
@@ -126,7 +126,7 @@ function OrderDetailPageContent() {
         </p>
         <p>
           <span className="font-medium text-zinc-900">Placed:</span>{" "}
-          {new Date(order.createdAt).toLocaleString()}
+          {formatDate(order.createdAt)}
         </p>
         <p>
           <span className="font-medium text-zinc-900">Price:</span> {formatPrice(order.price)}{" "}
@@ -135,7 +135,7 @@ function OrderDetailPageContent() {
         {order.status === "pending" && (
           <p>
             <span className="font-medium text-zinc-900">Reservation expires:</span>{" "}
-            {new Date(order.expiresAt).toLocaleString()}
+            {formatDate(order.expiresAt)}
           </p>
         )}
       </div>

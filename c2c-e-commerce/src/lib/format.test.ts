@@ -8,7 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { formatPrice } from "./format";
+import { avatarUrl, formatDate, formatPrice } from "./format";
 
 describe("formatPrice", () => {
   it("renders exactly what the seven agreeing sites rendered before", () => {
@@ -38,5 +38,25 @@ describe("formatPrice", () => {
   it("renders a non-finite value as a visible placeholder, never as $NaN", () => {
     expect(formatPrice(Number.NaN)).toBe("$—");
     expect(formatPrice("not a price")).toBe("$—");
+  });
+});
+
+describe("formatDate", () => {
+  it("L18 — formats a date one way", () => {
+    expect(formatDate("2026-09-01T10:30:00Z")).toBe(
+      formatDate(new Date("2026-09-01T10:30:00Z")),
+    );
+    expect(formatDate("2026-09-01T10:30:00Z")).toMatch(/2026/);
+  });
+});
+
+describe("avatarUrl", () => {
+  it("L19 — is stable and unique per user id", () => {
+    expect(avatarUrl(42)).toBe(avatarUrl(42));
+    expect(avatarUrl(42)).not.toBe(avatarUrl(7));
+  });
+
+  it("seeds the generated avatar on the user id", () => {
+    expect(avatarUrl(42)).toContain("seed=42");
   });
 });

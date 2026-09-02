@@ -14,7 +14,7 @@ import {
 } from "@/components/ui";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
 import { useFetch } from "@/hooks/useFetch";
-import { formatPrice } from "@/lib/format";
+import { formatDate, formatPrice } from "@/lib/format";
 import type { OrdersResponse } from "@/types/api";
 
 function OrdersPageContent() {
@@ -66,7 +66,7 @@ function OrdersPageContent() {
             <Card
               key={order.id}
               title={`Order #${order.id}`}
-              description={`Placed on ${new Date(order.createdAt).toLocaleString()}`}
+              description={`Placed on ${formatDate(order.createdAt)}`}
               footer={
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">

@@ -46,7 +46,12 @@ describe("SellerReviews", () => {
 
   it("shows an empty state rather than a bare heading", () => {
     render(<SellerReviews reviews={[]} />);
-    expect(screen.getByText("No reviews yet.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /no reviews yet/i })).toBeInTheDocument();
     expect(screen.queryAllByRole("article")).toHaveLength(0);
+  });
+
+  it("L16 — shows an empty state when a seller has no reviews", async () => {
+    render(<SellerReviews reviews={[]} />);
+    expect(await screen.findByText(/no reviews yet/i)).toBeInTheDocument();
   });
 });

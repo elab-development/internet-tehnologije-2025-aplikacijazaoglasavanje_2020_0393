@@ -340,25 +340,31 @@ function ListingsPageContent() {
         </section>
       )}
 
-      <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4">
-        <Button
-          variant="secondary"
-          onClick={() => setPage((current) => Math.max(1, current - 1))}
-          disabled={page <= 1}
-        >
-          Previous
-        </Button>
-        <span className="text-sm text-zinc-600">
-          Page {page} of {totalPages}
-        </span>
-        <Button
-          variant="secondary"
-          onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-          disabled={page >= totalPages}
-        >
-          Next
-        </Button>
-      </div>
+      {/* Hidden rather than left below the empty state (L20): with zero results and one
+          page there is nowhere for these controls to take you, and rendering them below
+          `EmptyState`'s centered placeholder pushed them off-screen on a page someone
+          reached by paging forward into an empty result. */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4">
+          <Button
+            variant="secondary"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={page <= 1}
+          >
+            Previous
+          </Button>
+          <span className="text-sm text-zinc-600">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="secondary"
+            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            disabled={page >= totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
