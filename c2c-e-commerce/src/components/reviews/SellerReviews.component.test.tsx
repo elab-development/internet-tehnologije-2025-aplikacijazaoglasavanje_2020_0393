@@ -8,6 +8,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import SellerReviews from "./SellerReviews";
+import { formatDate } from "@/lib/format";
 import type { SellerReview } from "@/types/api";
 
 const review = (overrides: Partial<SellerReview> = {}): SellerReview => ({
@@ -53,5 +54,17 @@ describe("SellerReviews", () => {
   it("L16 — shows an empty state when a seller has no reviews", async () => {
     render(<SellerReviews reviews={[]} />);
     expect(await screen.findByText(/no reviews yet/i)).toBeInTheDocument();
+  });
+
+  it("L18 fix round 1 — renders the review date without a time, unlike the transactional sites", () => {
+    const createdAt = "2026-08-01T10:00:00.000Z";
+    render(<SellerReviews reviews={[review({ createdAt })]} />);
+
+    const dateOnly = formatDate(createdAt, { dateOnly: true });
+    expect(screen.getByText(dateOnly)).toBeInTheDocument();
+    expect(dateOnly).not.toContain(":");
+    // Would only pass by coincidence if the date-only and date+time forms happened to
+    // render identically for this value -- assert they genuinely differ here.
+    expect(dateOnly).not.toBe(formatDate(createdAt));
   });
 });

@@ -41,6 +41,9 @@ function ListingsPageContent() {
     const raw = Number(searchParams.get("page") ?? "1");
     return Number.isFinite(raw) && raw > 0 ? raw : 1;
   });
+  // Remembers which `data` payload the stale-page clamp below has already reacted to, so
+  // it fires once per fetch rather than looping.
+  const [clampedFor, setClampedFor] = useState<ListingsResponse | null>(null);
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
   const [categoryId, setCategoryId] = useState<number | null>(() => {
     const raw = searchParams.get("categoryId");
@@ -122,6 +125,22 @@ function ListingsPageContent() {
   // is worse than showing slightly old rows and saying so (AI-8 AC5).
   const listings = data?.data ?? [];
   const totalPages = Math.max(1, data?.totalPages || 1);
+
+  // `page` is seeded from the URL, so a deep link to ?page=4 can outlive the result set it
+  // was valid for. Adjusted here during render rather than in a `useEffect` — an effect
+  // that reads `page` to decide whether to call `setPage` is exactly the "setState
+  // synchronously within an effect" pattern the `react-hooks/set-state-in-effect` lint rule
+  // flags, because it is state derived from other state rather than a sync with an
+  // external system (https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes).
+  // `clampedFor` guards against looping: it remembers which `data` payload this has already
+  // reacted to, so it fires once per fetch rather than on every render. Every in-app filter
+  // control already calls setPage(1) itself, so this only fires for a stale link or
+  // bookmark — but without it the pager is hidden (L20) and there is no way back to page 1
+  // except clearing the search.
+  if (!loading && data && data !== clampedFor && page > totalPages) {
+    setClampedFor(data);
+    setPage(1);
+  }
 
   // Filters apply as they change; there is nothing to submit. This exists so pressing
   // Enter in the search field does not reload the page.

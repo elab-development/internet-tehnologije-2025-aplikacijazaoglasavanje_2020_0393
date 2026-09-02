@@ -25,13 +25,18 @@ export function formatPrice(value: number | string): string {
  * Renders a timestamp for display (L18).
  *
  * Four call sites already rendered `new Date(...).toLocaleString()` (date and time);
- * one rendered `.toLocaleDateString()` (date only). This reproduces the majority format
- * rather than the minority one, so adopting it changes the single outlier — the review
- * timestamp in `SellerReviews` — rather than the four sites that already agreed.
+ * one rendered `.toLocaleDateString()` (date only). The rule this landed on is not "most
+ * call sites win" — it is *kind of field*: the four agreeing sites are all transactional
+ * (an order placed, a reservation expiring), where the minute genuinely matters. The one
+ * outlier, a review's timestamp in `SellerReviews`, is a low-precision human event — the
+ * exact second it was posted is noise, and the bare date was the better display before
+ * this ever got consolidated. So the default stays date+time (unchanged for the four
+ * transactional sites); `{ dateOnly: true }` is the opt-in for the one human-event site,
+ * so it keeps its original display while still sharing this one function.
  */
-export function formatDate(value: string | Date): string {
+export function formatDate(value: string | Date, options?: { dateOnly?: boolean }): string {
   const date = typeof value === "string" ? new Date(value) : value;
-  return date.toLocaleString();
+  return options?.dateOnly ? date.toLocaleDateString() : date.toLocaleString();
 }
 
 /**

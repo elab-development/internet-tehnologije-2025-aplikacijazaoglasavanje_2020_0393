@@ -40,7 +40,9 @@ export default function SellerReviews({ reviews }: SellerReviewsProps) {
                 <p className="text-sm font-medium text-zinc-900">
                   {review.reviewerName ?? `Buyer #${review.reviewerId}`}
                 </p>
-                <p className="text-xs text-zinc-500">{formatDate(review.createdAt)}</p>
+                <p className="text-xs text-zinc-500">
+                  {formatDate(review.createdAt, { dateOnly: true })}
+                </p>
               </div>
               <StarRating value={review.rating} size="sm" />
             </div>

@@ -282,6 +282,21 @@ describe("L20 — the pager is hidden rather than stranded below the empty state
 
     expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
   });
+
+  it("L20 fix round 1 — a stale ?page= deep link clamps back to page 1 instead of stranding the user", async () => {
+    // A bookmark or shared link to page 4, now that the result set is down to one page.
+    // With the pager hidden (L20) and no clamp, this used to have no way back except
+    // "Clear filters" -- which would also wipe the search term still in the URL.
+    nav.params = new URLSearchParams("page=4&search=xyz");
+    fetchState.listings = { ...page([listing(1, "Aluminium mountain bike")]), totalPages: 1 };
+
+    renderPage();
+
+    await waitFor(() => expect(lastQuery()).toContain("page=1"));
+    expect(await screen.findByText("Aluminium mountain bike")).toBeInTheDocument();
+    // The search term survives the clamp -- only `page` was stale, not the whole filter set.
+    expect(lastQuery()).toContain("search=xyz");
+  });
 });
 
 describe("C2C-AI-8 — AC7: layout", () => {

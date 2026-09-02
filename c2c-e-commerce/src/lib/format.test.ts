@@ -48,6 +48,28 @@ describe("formatDate", () => {
     );
     expect(formatDate("2026-09-01T10:30:00Z")).toMatch(/2026/);
   });
+
+  it("L18 fix round 1 — defaults to date+time, matching toLocaleString", () => {
+    const value = "2026-09-01T10:30:00Z";
+    expect(formatDate(value)).toBe(new Date(value).toLocaleString());
+    // A transactional timestamp (order placed, reservation expires) carries a time
+    // component -- that is the point of the four sites this default matches.
+    expect(formatDate(value)).toContain(":");
+  });
+
+  it("L18 fix round 1 — dateOnly renders just the date, matching toLocaleDateString", () => {
+    const value = "2026-09-01T10:30:00Z";
+    expect(formatDate(value, { dateOnly: true })).toBe(new Date(value).toLocaleDateString());
+    // A review is a low-precision human event -- no time component, and shorter than
+    // the default form.
+    expect(formatDate(value, { dateOnly: true })).not.toContain(":");
+    expect(formatDate(value, { dateOnly: true }).length).toBeLessThan(formatDate(value).length);
+  });
+
+  it("L18 fix round 1 — accepts a Date the same way in both forms", () => {
+    const value = new Date("2026-09-01T10:30:00Z");
+    expect(formatDate(value, { dateOnly: true })).toBe(formatDate(value.toISOString(), { dateOnly: true }));
+  });
 });
 
 describe("avatarUrl", () => {
