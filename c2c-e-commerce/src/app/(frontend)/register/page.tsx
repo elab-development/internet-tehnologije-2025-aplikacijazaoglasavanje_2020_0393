@@ -11,6 +11,7 @@ import ErrorAlert from "@/components/ui/ErrorAlert";
 import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
 import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
+import { looksLikeEmail } from "@/lib/validation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,8 +70,7 @@ export default function RegisterPage() {
     const errs: FieldErrors = {};
     if (!name.trim()) errs.name = "Name is required";
     if (!email.trim()) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      errs.email = "Enter a valid email address";
+    else if (!looksLikeEmail(email)) errs.email = "Enter a valid email address";
     if (!password) errs.password = "Password is required";
     else if (password.length < 8)
       errs.password = "Password must be at least 8 characters";

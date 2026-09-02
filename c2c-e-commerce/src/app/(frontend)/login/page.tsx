@@ -13,6 +13,7 @@ import InputField from "@/components/ui/InputField";
 import OAuthButtons from "@/components/auth/OAuthButtons";
 import { oauthErrorMessage } from "@/lib/oauth/error-messages";
 import { safeReturnTo } from "@/lib/oauth/return-to";
+import { looksLikeEmail } from "@/lib/validation";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -55,8 +56,7 @@ function LoginPageContent() {
   function validate(): boolean {
     const errs: typeof fieldErrors = {};
     if (!email.trim()) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      errs.email = "Enter a valid email address";
+    else if (!looksLikeEmail(email)) errs.email = "Enter a valid email address";
     if (!password) errs.password = "Password is required";
 
     const list: FieldError[] = [];

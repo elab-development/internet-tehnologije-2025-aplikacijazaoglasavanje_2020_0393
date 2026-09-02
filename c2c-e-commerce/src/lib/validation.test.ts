@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { ORDER_STATUSES } from "@/lib/order-lifecycle";
 import {
   formatZodError,
+  looksLikeEmail,
   parseBody,
   parseRequest,
   RegisterBodySchema,
@@ -582,5 +583,17 @@ describe("priceField", () => {
   it("rejects a number carrying more precision than money has", () => {
     expect(parse(0.1 + 0.2).success).toBe(false); // 0.30000000000000004
     expect(parse(19.999).success).toBe(false);
+  });
+});
+
+// ─── looksLikeEmail ─────────────────────────────────────────────────────────────
+
+describe("looksLikeEmail", () => {
+  it.each(["a@b.co", "first.last@example.com"])("accepts %s", (value) => {
+    expect(looksLikeEmail(value)).toBe(true);
+  });
+
+  it.each(["", "no-at-sign", "a@b", "a b@c.com", "a@b .com"])("rejects %s", (value) => {
+    expect(looksLikeEmail(value)).toBe(false);
   });
 });

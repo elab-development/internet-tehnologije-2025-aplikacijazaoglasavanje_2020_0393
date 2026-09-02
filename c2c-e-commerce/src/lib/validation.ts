@@ -168,6 +168,18 @@ function validateDecimalString(raw: string, ctx: z.RefinementCtx): string {
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
 
+/**
+ * The one client-side "is this an email" check.
+ *
+ * There were four definitions: this file, the API's Zod schema, and a byte-identical
+ * regex copy-pasted into two auth pages (login and register; link-account never
+ * validated an email at all). Four definitions of one rule is three chances for
+ * them to drift apart.
+ */
+export function looksLikeEmail(value: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export const RegisterBodySchema = z.object({
   // Normalised on the way in: the column is lowercase (migration 0019), so storing
   // whatever casing the caller typed would let `A@x.com` and `a@x.com` become two
