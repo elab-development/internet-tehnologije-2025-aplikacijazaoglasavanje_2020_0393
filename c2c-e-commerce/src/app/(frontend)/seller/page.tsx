@@ -13,9 +13,17 @@ import type { SellerOrdersResponse } from "@/types/api";
 
 type Tab = "listings" | "orders";
 
-// ─── Tab button ───────────────────────────────────────────────────────────────
+// ─── View button ──────────────────────────────────────────────────────────────
 
-function TabButton({
+/**
+ * A view switch, deliberately not an ARIA tab.
+ *
+ * The tabs pattern was declared here without tabpanels, aria-controls, roving tabindex
+ * or arrow-key navigation, so a screen reader user was told they were in a tab widget
+ * and then found the arrow keys did nothing. Two view switches do not need the pattern;
+ * they need to be honest about what they are.
+ */
+function ViewButton({
   active,
   onClick,
   children,
@@ -27,8 +35,7 @@ function TabButton({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-current={active ? "true" : undefined}
       onClick={onClick}
       className={[
         "px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px",
@@ -76,22 +83,22 @@ function SellerDashboardContent() {
         <CurrencySelect conversion={conversion} className="sm:w-48" />
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-zinc-200" role="tablist">
-        <TabButton active={tab === "orders"} onClick={() => setTab("orders")}>
+      {/* View switch */}
+      <div className="flex gap-1 border-b border-zinc-200">
+        <ViewButton active={tab === "orders"} onClick={() => setTab("orders")}>
           Incoming Orders
           {pendingCount > 0 && (
             <span className="ml-2 inline-flex items-center justify-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
               {pendingCount}
             </span>
           )}
-        </TabButton>
-        <TabButton
+        </ViewButton>
+        <ViewButton
           active={tab === "listings"}
           onClick={() => setTab("listings")}
         >
           My Listings
-        </TabButton>
+        </ViewButton>
       </div>
 
       {tab === "orders" && (
