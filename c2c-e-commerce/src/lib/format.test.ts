@@ -78,7 +78,9 @@ describe("avatarUrl", () => {
     expect(avatarUrl(42)).not.toBe(avatarUrl(7));
   });
 
-  it("seeds the generated avatar on the user id", () => {
-    expect(avatarUrl(42)).toContain("seed=42");
+  it("does not use the 'initials' style, whose glyphs are derived from the seed", () => {
+    // A numeric seed fed to `initials` renders literal digits, not a person's
+    // initials -- meaningful-looking but meaningless. Any other dicebear style is fine.
+    expect(avatarUrl(42)).not.toContain("/initials/");
   });
 });

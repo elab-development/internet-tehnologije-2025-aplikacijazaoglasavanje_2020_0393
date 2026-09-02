@@ -40,15 +40,22 @@ export function formatDate(value: string | Date, options?: { dateOnly?: boolean 
 }
 
 /**
- * A stable, per-user placeholder avatar (L19).
+ * A stable, per-user placeholder avatar (L19, fix round 2).
  *
  * Three call sites each generated a dicebear "initials" avatar seeded on a *name* —
  * `user.name`, `seller.name`, `displayName` (itself a `name ?? "Seller #id"` fallback).
  * Two different strings for the same person (their own name in the navbar vs. a
  * "Seller #id" fallback elsewhere when the name was missing) produced two different
  * avatars for one user. The id is what is actually stable and unique per user, so it is
- * the seed here.
+ * the seed here — that part of the round-1 fix was right.
+ *
+ * What round 1 got wrong: it kept the dicebear `initials` *style*, which draws its
+ * glyphs from the seed itself. Seeded on a numeric id, that style renders literal
+ * digits ("42") instead of a person's initials — consistent, but meaningless. `thumbs`
+ * (a stylized face/avatar mark) is a style whose output is meant to look arbitrary and
+ * whose input can safely be an opaque id, so a numeric seed is no longer a defect. This
+ * keeps the one-argument, id-only signature so all three call sites are unaffected.
  */
 export function avatarUrl(userId: number): string {
-  return `https://api.dicebear.com/9.x/initials/svg?seed=${userId}`;
+  return `https://api.dicebear.com/9.x/thumbs/svg?seed=${userId}`;
 }

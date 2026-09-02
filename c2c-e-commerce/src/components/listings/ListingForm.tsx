@@ -252,7 +252,15 @@ export default function ListingForm(props: ListingFormProps) {
         // leaves a draft the seller can finish or delete from their dashboard — no
         // staging area, and no orphaned uploads. `draftId` carries the id across a
         // retry, so a second submit reuses the same draft instead of creating another
-        // one and re-uploading photos that already succeeded.
+        // one.
+        //
+        // Known gap: `uploadFiles` below always iterates `files` from index 0, so a
+        // retry re-uploads every photo, including ones that already succeeded on the
+        // failed attempt — it does not track which uploads landed. Enough duplicate
+        // photos can push the listing past the server's MAX_IMAGES_PER_LISTING, at
+        // which point the retry fails permanently and the seller cannot finish this
+        // draft from the form. Fixing that means tracking successful uploads across
+        // retries, which is a real behaviour change and out of scope here.
         const listingId =
           draftId ??
           (
