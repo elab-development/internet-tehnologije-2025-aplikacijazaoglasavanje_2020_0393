@@ -4,48 +4,30 @@ import { forwardRef, useId } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type InputFieldProps = {
+// M14 applied to InputField: a closed hand-written prop list forwarded no arbitrary
+// attributes. Task 13 had to bolt on an `inputMode` passthrough for exactly this reason,
+// and this task needed an `id` one — so the list is now everything native, minus the
+// three the component fully owns.
+export type InputFieldProps = Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  "type" | "value" | "onChange"
+> & {
   label: string;
   type?: "text" | "email" | "password" | "number" | "tel" | "search";
-  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
-  placeholder?: string;
   value: string | number;
   onChange: React.ChangeEventHandler<HTMLInputElement>;
   error?: string;
-  required?: boolean;
-  disabled?: boolean;
-  name?: string;
-  autoComplete?: string;
-  className?: string;
-  min?: number;
-  max?: number;
-  step?: number;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
   function InputField(
-    {
-      label,
-      type = "text",
-      inputMode,
-      placeholder,
-      value,
-      onChange,
-      error,
-      required = false,
-      disabled = false,
-      name,
-      autoComplete,
-      className = "",
-      min,
-      max,
-      step,
-    },
+    { label, type = "text", value, onChange, error, className = "", id: idProp, ...rest },
     ref
   ) {
-    const id = useId();
+    const generatedId = useId();
+    const id = idProp ?? generatedId;
 
     return (
       <div className={`flex flex-col gap-1 ${className}`}>
@@ -54,7 +36,7 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
           className="text-sm font-medium text-zinc-700"
         >
           {label}
-          {required && (
+          {rest.required && (
             <span className="ml-0.5 text-red-500" aria-hidden="true">
               *
             </span>
@@ -62,20 +44,12 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
         </label>
 
         <input
+          {...rest}
           ref={ref}
           id={id}
-          name={name}
           type={type}
-          inputMode={inputMode}
           value={value}
           onChange={onChange}
-          placeholder={placeholder}
-          required={required}
-          disabled={disabled}
-          autoComplete={autoComplete}
-          min={min}
-          max={max}
-          step={step}
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
           className={[
