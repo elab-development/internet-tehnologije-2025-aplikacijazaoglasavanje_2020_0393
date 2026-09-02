@@ -334,3 +334,18 @@ describe("C3 — results are announced", () => {
     );
   });
 });
+
+describe("H8 — the browse page has a heading hierarchy", () => {
+  it("has exactly one h1", async () => {
+    renderPage();
+    const h1s = await screen.findAllByRole("heading", { level: 1 });
+    expect(h1s).toHaveLength(1);
+    expect(h1s[0]).toHaveTextContent(/browse listings/i);
+  });
+
+  it("names both landmark regions", async () => {
+    renderPage();
+    expect(await screen.findByRole("region", { name: /filters/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: /results/i })).toBeInTheDocument();
+  });
+});

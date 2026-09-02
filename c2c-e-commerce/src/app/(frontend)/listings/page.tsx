@@ -134,7 +134,15 @@ function ListingsPageContent() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+      <h1 className="text-2xl font-bold text-zinc-900">Browse listings</h1>
+
+      <section
+        aria-labelledby="filters-heading"
+        className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+      >
+        <h2 id="filters-heading" className="sr-only">
+          Filters
+        </h2>
         <form
           onSubmit={handleFiltersSubmit}
           className="grid gap-4 md:grid-cols-2 lg:grid-cols-6"
@@ -288,7 +296,13 @@ function ListingsPageContent() {
           />
         )
       ) : (
-        <section className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <section
+          aria-labelledby="results-heading"
+          className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+        >
+          <h2 id="results-heading" className="sr-only">
+            Results
+          </h2>
           {listings.map((listing) => (
             <Card
               key={listing.id}
