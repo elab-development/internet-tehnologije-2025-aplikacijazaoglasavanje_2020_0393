@@ -9,6 +9,18 @@ import { siteUrl } from "@/lib/site-url";
  * that require auth) is deliberately omitted — see `robots.ts` for the matching
  * disallow list.
  */
+/**
+ * Rendered per request, not at build time.
+ *
+ * Next prerenders `sitemap.ts` by default, but this one reads the listings table, and
+ * the Docker builder stage has no database to read -- the build died on
+ * `Error occurred prerendering page "/sitemap.xml" ... ECONNREFUSED`. Request-time
+ * rendering is also the correct semantics: a sitemap frozen at build time goes stale
+ * the moment a seller publishes a listing, and `siteUrl()` resolves from the runtime
+ * environment rather than baking whatever origin the build machine happened to have.
+ */
+export const dynamic = "force-dynamic";
+
 const PUBLIC_ROUTES = ["", "/listings", "/login", "/register", "/api-docs"];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {

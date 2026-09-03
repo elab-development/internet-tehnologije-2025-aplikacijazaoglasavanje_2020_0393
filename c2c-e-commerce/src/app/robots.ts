@@ -18,6 +18,14 @@ import { siteUrl } from "@/lib/site-url";
  *   - `/orders/layout.tsx` and `/orders/[id]/layout.tsx` -> `/orders` (prefix covers both)
  *   - `/seller/layout.tsx`
  */
+/**
+ * Rendered per request, for the same reason as `sitemap.ts`: `siteUrl()` reads the
+ * runtime environment, and a prerendered robots.txt would advertise whatever origin
+ * the build container had -- `http://localhost:3000` when the build environment does
+ * not carry `OAUTH_REDIRECT_BASE_URL`.
+ */
+export const dynamic = "force-dynamic";
+
 const DISALLOW = [
   "/api/",
   "/orders",
