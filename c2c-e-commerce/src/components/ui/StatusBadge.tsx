@@ -4,22 +4,39 @@ import type { ListingStatus, OrderStatus } from "@/types/api";
 // Declared once at module level: these used to live in three separate maps, one
 // of which was rebuilt inside a `.map()` callback on every render.
 
-const orderStatusClasses: Record<OrderStatus, string> = {
-  pending: "bg-amber-100 text-amber-700",
-  confirmed: "bg-green-100 text-green-700",
-  shipped: "bg-indigo-100 text-indigo-700",
-  completed: "bg-emerald-100 text-emerald-700",
-  cancelled: "bg-red-100 text-red-700",
-  declined: "bg-red-100 text-red-700",
-  expired: "bg-zinc-100 text-zinc-500",
+/**
+ * State gets its own three colours — go, wait, stop — plus solid and outline ink.
+ * None of them is one of the five category hues, and that is deliberate: a status
+ * chip and a category label sit next to each other on a card, and a chip borrowing
+ * a category colour would read as a second category.
+ */
+type Tone = "go" | "wait" | "stop" | "solid" | "outline" | "muted";
+
+const toneClasses: Record<Tone, string> = {
+  go: "bg-go-tint text-go-ink ring-1 ring-inset ring-go-rule",
+  wait: "bg-wait-tint text-wait-ink ring-1 ring-inset ring-wait-rule",
+  stop: "bg-stop-tint text-stop-ink ring-1 ring-inset ring-stop-rule",
+  solid: "bg-ink text-white",
+  outline: "text-ink ring-[1.5px] ring-inset ring-ink",
+  muted: "bg-inset text-ink-3 ring-1 ring-inset ring-rule",
 };
 
-const listingStatusClasses: Record<ListingStatus, string> = {
-  draft: "bg-zinc-100 text-zinc-500",
-  active: "bg-emerald-100 text-emerald-700",
-  reserved: "bg-amber-100 text-amber-700",
-  sold: "bg-blue-100 text-blue-700",
-  removed: "bg-zinc-100 text-zinc-500",
+const orderStatusTones: Record<OrderStatus, Tone> = {
+  pending: "wait",
+  confirmed: "go",
+  shipped: "solid",
+  completed: "go",
+  cancelled: "stop",
+  declined: "stop",
+  expired: "muted",
+};
+
+const listingStatusTones: Record<ListingStatus, Tone> = {
+  draft: "muted",
+  active: "go",
+  reserved: "wait",
+  sold: "outline",
+  removed: "muted",
 };
 
 /** Buyer-facing wording for an order status. */
@@ -60,15 +77,15 @@ const listingStatusLabels: Record<ListingStatus, string> = {
 };
 
 /**
- * Visually neutral — deliberately not one of the map colours above, which would
+ * Visually neutral — deliberately not one of the tones above, which would
  * imply a real (and wrong) meaning for a status this frontend has not been taught.
  */
-const UNKNOWN_CLASSES = "bg-zinc-100 text-zinc-500";
+const UNKNOWN_TONE: Tone = "muted";
 const UNKNOWN_LABEL = "Unknown status";
 
 const sizeClasses = {
-  sm: "px-2.5 py-1",
-  md: "px-3 py-1",
+  sm: "px-2 py-1",
+  md: "px-2.5 py-1",
 } as const;
 
 type Size = keyof typeof sizeClasses;
@@ -89,7 +106,7 @@ export type StatusBadgeProps =
       kind?: "order";
       status: OrderStatus;
       /**
-       * Show the descriptive order wording ("Awaiting seller approval") instead of
+       * Show the descriptive order wording ("Awaiting seller confirmation") instead of
        * the raw status. Order statuses only.
        */
       descriptive?: boolean;
@@ -106,7 +123,7 @@ export type StatusBadgeProps =
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-/** Coloured pill for an order or listing status. */
+/** Square status chip with a leading block, for an order or a listing. */
 export default function StatusBadge(props: StatusBadgeProps) {
   const { size = "sm", className = "", descriptive = false } = props;
 
@@ -115,14 +132,14 @@ export default function StatusBadge(props: StatusBadgeProps) {
   // What survives is real drift: the API adding a status this frontend has not
   // been taught yet, which arrives as a value outside the typed union at runtime
   // even though nothing here can express that possibility statically.
-  let classes: string | undefined;
+  let tone: Tone | undefined;
   let label: string | undefined;
 
   if (props.kind === "listing") {
-    classes = listingStatusClasses[props.status];
+    tone = listingStatusTones[props.status];
     label = listingStatusLabels[props.status];
   } else {
-    classes = orderStatusClasses[props.status];
+    tone = orderStatusTones[props.status];
     label = descriptive
       ? orderStatusLabels[props.status]
       : orderStatusShortLabels[props.status];
@@ -140,15 +157,15 @@ export default function StatusBadge(props: StatusBadgeProps) {
   return (
     <span
       className={[
-        "rounded-full text-xs font-semibold",
+        "inline-flex items-center gap-[7px] rounded-none text-[10px] font-bold uppercase leading-relaxed tracking-[0.1em] whitespace-nowrap",
         sizeClasses[size],
-        descriptive ? "" : "capitalize",
-        classes ?? UNKNOWN_CLASSES,
+        toneClasses[tone ?? UNKNOWN_TONE],
         className,
       ]
         .filter(Boolean)
         .join(" ")}
     >
+      <span className="h-[7px] w-[7px] shrink-0 bg-current" aria-hidden="true" />
       {label ?? UNKNOWN_LABEL}
     </span>
   );

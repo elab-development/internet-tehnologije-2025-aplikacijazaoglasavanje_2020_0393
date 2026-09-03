@@ -27,17 +27,17 @@ function OrderDetailSkeleton() {
     <div className="space-y-6" aria-hidden="true">
       <div className="flex items-center justify-between">
         <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-6 w-20 rounded-full" />
+        <Skeleton className="h-6 w-20 rounded-none" />
       </div>
-      <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
+      <div className="rounded-none border border-rule bg-white p-4 space-y-3">
         <Skeleton className="h-4 w-1/2" />
         <Skeleton className="h-4 w-1/3" />
         <Skeleton className="h-4 w-2/5" />
       </div>
       {/* One row of controls, not a list of lines: an order is one listing now. */}
       <div className="flex gap-2">
-        <Skeleton className="h-8 w-32 rounded-lg" />
-        <Skeleton className="h-8 w-32 rounded-lg" />
+        <Skeleton className="h-8 w-32 rounded-none" />
+        <Skeleton className="h-8 w-32 rounded-none" />
       </div>
     </div>
   );
@@ -113,28 +113,28 @@ function OrderDetailPageContent() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-zinc-900">Order #{order.id}</h1>
+        <h1 className="text-2xl font-bold text-ink">Order #{order.id}</h1>
         <StatusBadge status={order.status} descriptive size="md" />
       </div>
 
-      <div className="grid gap-2 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+      <div className="grid gap-2 rounded-none border border-rule bg-white p-4 text-sm text-ink-2">
         <p>
-          <span className="font-medium text-zinc-900">Listing:</span>{" "}
-          <Link href={`/listings/${order.listingId}`} className="text-indigo-700 hover:underline">
+          <span className="font-medium text-ink">Listing:</span>{" "}
+          <Link href={`/listings/${order.listingId}`} className="text-black hover:underline">
             {order.listingTitle}
           </Link>
         </p>
         <p>
-          <span className="font-medium text-zinc-900">Placed:</span>{" "}
+          <span className="font-medium text-ink">Placed:</span>{" "}
           {formatDate(order.createdAt)}
         </p>
         <p>
-          <span className="font-medium text-zinc-900">Price:</span> {formatPrice(order.price)}{" "}
-          <span className="text-zinc-500">({formatConverted(Number(order.price))})</span>
+          <span className="font-medium text-ink">Price:</span> {formatPrice(order.price)}{" "}
+          <span className="text-ink-3">({formatConverted(Number(order.price))})</span>
         </p>
         {order.status === "pending" && (
           <p>
-            <span className="font-medium text-zinc-900">Reservation expires:</span>{" "}
+            <span className="font-medium text-ink">Reservation expires:</span>{" "}
             {formatDate(order.expiresAt)}
           </p>
         )}

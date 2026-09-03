@@ -60,8 +60,8 @@ export default function CurrencySelect({
   } = conversion;
 
   return (
-    <div className={["flex flex-col gap-1", className].filter(Boolean).join(" ")}>
-      <label className="text-sm font-medium text-zinc-700" htmlFor={id}>
+    <div className={["flex flex-col gap-2", className].filter(Boolean).join(" ")}>
+      <label className="eyebrow text-ink-2" htmlFor={id}>
         {label}
       </label>
 
@@ -69,7 +69,7 @@ export default function CurrencySelect({
         id={id}
         value={selectedCurrency}
         onChange={(event) => setSelectedCurrency(event.target.value)}
-        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+        className="border-[1.5px] border-rule-strong bg-surface px-3.5 py-3 text-sm text-ink transition-colors focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus:outline-none"
         disabled={loadingRates}
         aria-describedby={ratesError ? `${id}-error` : undefined}
       >
@@ -81,7 +81,7 @@ export default function CurrencySelect({
       </select>
 
       {ratesError && (
-        <p id={`${id}-error`} className="text-xs text-red-500">
+        <p id={`${id}-error`} className="text-xs text-stop">
           {ratesError}
         </p>
       )}

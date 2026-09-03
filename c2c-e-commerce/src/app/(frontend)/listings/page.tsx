@@ -16,11 +16,22 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useAnnounce } from "@/components/ui/Announcer";
 import MatchQuality from "@/components/listings/MatchQuality";
 import CategoryTreeFilter from "@/components/categories/CategoryTreeFilter";
-import { formatPrice } from "@/lib/format";
+import {
+  makeHueResolver,
+  TEXT_CLASS,
+} from "@/components/categories/categoryHue";
+import { formatDate, formatPrice } from "@/lib/format";
 import type { Category, ListingsResponse } from "@/types/api";
 
 const SORT_OPTIONS = ["newest", "price_asc", "price_desc"] as const;
 type SortOption = (typeof SORT_OPTIONS)[number];
+
+/** What the results header says the grid is ordered by. */
+const SORT_LABELS: Record<SortOption, string> = {
+  newest: "newest first",
+  price_asc: "price, low to high",
+  price_desc: "price, high to low",
+};
 
 /**
  * Cast, previously: `?sort=oldest` produced a dropdown reading "Newest" (the
@@ -69,6 +80,11 @@ function ListingsPageContent() {
     () => new Map(categories.map((category) => [category.id, category.name])),
     [categories],
   );
+
+  // Which of the five hues each listing's category rolls up to. Built once per
+  // category list rather than per card — a grid of twelve otherwise walked the
+  // whole taxonomy twelve times.
+  const hueOf = useMemo(() => makeHueResolver(categories), [categories]);
 
   // Semantic mode embeds the query, so a request per keystroke is a model call per
   // keystroke. 400 ms of quiet before anything goes out.
@@ -160,19 +176,33 @@ function ListingsPageContent() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-zinc-900">Browse listings</h1>
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b-[1.5px] border-ink pb-3">
+        <div className="flex items-baseline gap-4">
+          <h1 className="text-4xl">Browse listings</h1>
+          {!loading && data && (
+            <span className="text-sm text-ink-3">
+              {data.total} {data.total === 1 ? "listing" : "listings"}
+            </span>
+          )}
+        </div>
+        <span className="eyebrow text-ink-3">Sorted by {SORT_LABELS[sort]}</span>
+      </div>
 
       <section
         aria-labelledby="filters-heading"
-        className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+        className="rounded-none border border-rule bg-white p-4 shadow-none"
       >
         <h2 id="filters-heading" className="sr-only">
           Filters
         </h2>
+        {/* Two regions, not one six-column grid. The category tree is six rows tall
+            and every other control is one row, so a single grid stretched row 1 to the
+            tree's height and left a block of dead space under the search field. */}
         <form
           onSubmit={handleFiltersSubmit}
-          className="grid gap-4 md:grid-cols-2 lg:grid-cols-6"
+          className="grid gap-6 lg:grid-cols-[1fr_260px]"
         >
+          <div className="grid content-start gap-4 sm:grid-cols-2 lg:grid-cols-6">
           <InputField
             label="Search"
             type="search"
@@ -197,7 +227,7 @@ function ListingsPageContent() {
             data-testid="smart-search-control"
             className="flex min-w-0 items-end lg:col-span-2"
           >
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-zinc-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
               <input
                 type="checkbox"
                 checked={smartSearch}
@@ -205,23 +235,11 @@ function ListingsPageContent() {
                   setSmartSearch(event.target.checked);
                   setPage(1);
                 }}
-                className="h-4 w-4 rounded border-zinc-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded-none border-rule-strong text-ink focus:ring-ink"
               />
               <span className="font-medium">Smart search</span>
-              <span className="text-zinc-500">— find by meaning</span>
+              <span className="text-ink-3">— find by meaning</span>
             </label>
-          </div>
-
-          <div className="flex flex-col gap-1 lg:col-span-2">
-            <span className="text-sm font-medium text-zinc-700">Category</span>
-            <CategoryTreeFilter
-              categories={categories}
-              value={categoryId}
-              onChange={(id) => {
-                setCategoryId(id);
-                setPage(1);
-              }}
-            />
           </div>
 
           <InputField
@@ -250,11 +268,8 @@ function ListingsPageContent() {
             step={0.01}
           />
 
-          <div className="flex flex-col gap-1">
-            <label
-              className="text-sm font-medium text-zinc-700"
-              htmlFor="sort-filter"
-            >
+          <div className="flex flex-col gap-2">
+            <label className="eyebrow text-ink-2" htmlFor="sort-filter">
               Sort
             </label>
             <select
@@ -264,7 +279,7 @@ function ListingsPageContent() {
                 setSort(parseSort(event.target.value));
                 setPage(1);
               }}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+              className="border-[1.5px] border-rule-strong bg-surface px-3.5 py-3 text-sm text-ink transition-colors focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus:outline-none"
             >
               <option value="newest">Newest</option>
               <option value="price_asc">Price: Low to High</option>
@@ -272,10 +287,23 @@ function ListingsPageContent() {
             </select>
           </div>
 
-          <div className="flex items-end gap-2 md:col-span-2 lg:col-span-6">
-            <Button type="button" variant="secondary" onClick={clearFilters}>
-              Clear
-            </Button>
+            <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-6">
+              <Button type="button" variant="secondary" onClick={clearFilters}>
+                Clear
+              </Button>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 lg:border-l lg:border-rule lg:pl-6">
+            <span className="eyebrow text-ink-2">Category</span>
+            <CategoryTreeFilter
+              categories={categories}
+              value={categoryId}
+              onChange={(id) => {
+                setCategoryId(id);
+                setPage(1);
+              }}
+            />
           </div>
         </form>
       </section>
@@ -333,16 +361,30 @@ function ListingsPageContent() {
             <Card
               key={listing.id}
               title={listing.title}
-              description={formatPrice(listing.price)}
+              // The description, not the price. The price used to be printed here
+              // and again in the footer, which left the card with no room for the
+              // one thing only the seller can tell you about the item.
+              description={listing.description ?? undefined}
               image={listing.coverImageId ? `/api/images/${listing.coverImageId}` : null}
-              badge={
-                listing.categoryId
-                  ? (categoryMap.get(listing.categoryId) ?? "Uncategorized")
-                  : "Uncategorized"
+              hue={hueOf(listing.categoryId)}
+              href={`/listings/${listing.id}`}
+              eyebrow={
+                <>
+                  <span
+                    className={`text-[10.5px] font-bold uppercase tracking-[0.12em] ${TEXT_CLASS[hueOf(listing.categoryId)]}`}
+                  >
+                    {listing.categoryId
+                      ? (categoryMap.get(listing.categoryId) ?? "Uncategorized")
+                      : "Uncategorized"}
+                  </span>
+                  <span className="text-[11px] text-ink-3">
+                    {formatDate(listing.createdAt, { dateOnly: true })}
+                  </span>
+                </>
               }
               footer={
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-zinc-900">
+                  <span className="figure text-xl text-ink">
                     {formatPrice(listing.price)}
                   </span>
                   <MatchQuality similarity={listing.similarity} />
@@ -364,7 +406,7 @@ function ListingsPageContent() {
           `EmptyState`'s centered placeholder pushed them off-screen on a page someone
           reached by paging forward into an empty result. */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4">
+        <div className="flex items-center justify-between rounded-none border border-rule bg-white p-4">
           <Button
             variant="secondary"
             onClick={() => setPage((current) => Math.max(1, current - 1))}
@@ -372,7 +414,7 @@ function ListingsPageContent() {
           >
             Previous
           </Button>
-          <span className="text-sm text-zinc-600">
+          <span className="text-sm text-ink-2">
             Page {page} of {totalPages}
           </span>
           <Button
@@ -392,7 +434,7 @@ export default function ListingsPage() {
   return (
     <Suspense
       fallback={
-        <div className="text-center py-20 text-zinc-500">
+        <div className="text-center py-20 text-ink-3">
           Loading listings...
         </div>
       }

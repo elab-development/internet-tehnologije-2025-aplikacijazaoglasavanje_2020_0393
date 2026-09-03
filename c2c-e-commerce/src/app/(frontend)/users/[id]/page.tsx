@@ -51,21 +51,21 @@ export default function SellerProfilePage() {
 
   return (
     <div className="space-y-8">
-      <section className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <section className="flex items-center gap-4 rounded-none border border-rule bg-white p-6 shadow-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={seller.avatarUrl ?? avatarUrl(sellerId)}
           alt=""
-          className="h-16 w-16 rounded-full border border-zinc-200 bg-zinc-50"
+          className="h-16 w-16 rounded-none border border-rule bg-inset"
         />
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">{seller.name}</h1>
+          <h1 className="text-2xl font-bold text-ink">{seller.name}</h1>
           <StarRating value={seller.averageRating} count={seller.reviewCount} />
         </div>
       </section>
 
       <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-zinc-900">
+        <h2 className="text-xl font-semibold text-ink">
           Reviews {seller.reviewCount > 0 && `(${seller.reviewCount})`}
         </h2>
         <SellerReviewFeed
@@ -78,13 +78,13 @@ export default function SellerProfilePage() {
 
       {listings.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-xl font-semibold text-zinc-900">Also selling</h2>
+          <h2 className="text-xl font-semibold text-ink">Also selling</h2>
           <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
             {listings.map((listing) => (
               <li key={listing.id}>
                 <Link
                   href={`/listings/${listing.id}`}
-                  className="block overflow-hidden rounded-lg border border-zinc-200 transition hover:border-zinc-400 hover:shadow-sm"
+                  className="block overflow-hidden rounded-none border border-rule transition hover:border-ink-3 hover:shadow-none"
                 >
                   {listing.coverImageId ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -94,13 +94,13 @@ export default function SellerProfilePage() {
                       className="h-24 w-full object-cover"
                     />
                   ) : (
-                    <div className="h-24 w-full bg-zinc-100" />
+                    <div className="h-24 w-full bg-inset" />
                   )}
                   <div className="p-2">
-                    <p className="line-clamp-2 text-sm font-medium text-zinc-900">
+                    <p className="line-clamp-2 text-sm font-medium text-ink">
                       {listing.title}
                     </p>
-                    <p className="mt-1 text-sm text-zinc-600">
+                    <p className="mt-1 text-sm text-ink-2">
                       {formatPrice(listing.price)}
                     </p>
                   </div>

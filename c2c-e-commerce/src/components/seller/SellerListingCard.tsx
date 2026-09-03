@@ -66,10 +66,10 @@ export default function SellerListingCard({
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-2 text-sm">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-zinc-900">
+              <span className="font-semibold text-ink">
                 {formatPrice(listing.price)}
               </span>
-              <span className="text-zinc-500">
+              <span className="text-ink-3">
                 ({formatConverted(Number(listing.price))})
               </span>
             </div>
@@ -97,7 +97,7 @@ export default function SellerListingCard({
                 type="button"
                 aria-label="Delete listing"
                 onClick={onDelete}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition-colors hover:bg-red-100 hover:border-red-300"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-stop-rule bg-stop-tint text-stop transition-colors hover:bg-stop-tint hover:border-stop-rule"
               >
                 <RiDeleteBin2Line size={15} aria-hidden="true" />
               </button>

@@ -38,7 +38,7 @@ export default function RecommendedForYou(): React.ReactElement | null {
     <section className="w-full" aria-labelledby="recommendations-heading">
       <h2
         id="recommendations-heading"
-        className="mb-4 text-xl font-semibold text-zinc-900"
+        className="mb-4 text-xl font-semibold text-ink"
       >
         {personalised ? "Recommended for you" : "Popular right now"}
       </h2>
@@ -48,7 +48,7 @@ export default function RecommendedForYou(): React.ReactElement | null {
           <li key={listing.id}>
             <Link
               href={`/listings/${listing.id}`}
-              className="block overflow-hidden rounded-lg border border-zinc-200 text-left transition hover:border-zinc-400 hover:shadow-sm"
+              className="block overflow-hidden rounded-none border border-rule text-left transition hover:border-ink-3 hover:shadow-none"
             >
               {listing.coverImageId ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -58,14 +58,14 @@ export default function RecommendedForYou(): React.ReactElement | null {
                   className="h-24 w-full object-cover"
                 />
               ) : (
-                <div className="h-24 w-full bg-zinc-100" />
+                <div className="h-24 w-full bg-inset" />
               )}
 
               <div className="p-2">
-                <p className="line-clamp-2 text-sm font-medium text-zinc-900">
+                <p className="line-clamp-2 text-sm font-medium text-ink">
                   {listing.title}
                 </p>
-                <p className="mt-1 text-sm text-zinc-600">{formatPrice(listing.price)}</p>
+                <p className="mt-1 text-sm text-ink-2">{formatPrice(listing.price)}</p>
               </div>
             </Link>
           </li>

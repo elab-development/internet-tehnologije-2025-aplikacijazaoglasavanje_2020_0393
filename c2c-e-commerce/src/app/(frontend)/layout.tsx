@@ -25,7 +25,7 @@ export default function FrontendLayout({
               on every page load. Visible only when focused. */}
           <a
             href="#main-content"
-            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:shadow-lg focus:ring-2 focus:ring-indigo-500"
+            className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-none focus:bg-white focus:px-4 focus:py-2 focus:shadow-none focus:ring-2 focus:ring-ink"
           >
             Skip to main content
           </a>

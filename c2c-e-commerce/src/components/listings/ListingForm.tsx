@@ -28,7 +28,7 @@ export type ListingFormProps =
 const listingStatuses: ListingStatus[] = ["active", "sold", "removed"];
 
 const selectClasses =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
+  "rounded-none border border-rule-strong px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-ink/20";
 
 /**
  * Parses what a person typed into a price.
@@ -50,12 +50,12 @@ export function parsePriceInput(raw: string): number | null {
 function ListingFormSkeleton() {
   return (
     <div className="mx-auto w-full max-w-2xl space-y-4" aria-hidden="true">
-      <div className="h-8 w-40 skeleton-shimmer rounded-lg" />
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm space-y-4">
+      <div className="h-8 w-40 skeleton-shimmer rounded-none" />
+      <div className="rounded-none border border-rule bg-white p-6 shadow-none space-y-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="space-y-1.5">
-            <div className="h-4 w-20 skeleton-shimmer rounded" />
-            <div className="h-10 w-full skeleton-shimmer rounded-lg" />
+            <div className="h-4 w-20 skeleton-shimmer rounded-none" />
+            <div className="h-10 w-full skeleton-shimmer rounded-none" />
           </div>
         ))}
       </div>
@@ -310,8 +310,8 @@ export default function ListingForm(props: ListingFormProps) {
   const problemFor = (field: string) => fieldProblems.find((p) => p.field === field)?.message;
 
   return (
-    <div className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-      <h1 className="mb-6 text-2xl font-bold text-zinc-900">
+    <div className="mx-auto w-full max-w-2xl rounded-none border border-rule bg-white p-6 shadow-none">
+      <h1 className="mb-6 text-2xl font-bold text-ink">
         {isEdit ? "Edit listing" : "Create listing"}
       </h1>
 
@@ -348,7 +348,7 @@ export default function ListingForm(props: ListingFormProps) {
         <div className="space-y-1.5">
           <label
             htmlFor="listing-description"
-            className="block text-sm font-medium text-zinc-700"
+            className="block text-sm font-medium text-ink-2"
           >
             Description
           </label>
@@ -363,17 +363,17 @@ export default function ListingForm(props: ListingFormProps) {
             aria-describedby={
               problemFor("listing-description") ? "listing-description-error" : undefined
             }
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-none border border-rule-strong px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-ink/20"
           />
 
           {problemFor("listing-description") && (
-            <p id="listing-description-error" role="alert" className="text-xs text-red-500">
+            <p id="listing-description-error" role="alert" className="text-xs text-stop">
               {problemFor("listing-description")}
             </p>
           )}
 
           {aiAssisted && (
-            <p className="text-xs text-zinc-500">
+            <p className="text-xs text-ink-3">
               Drafted with AI — review it before publishing. It is your listing.
             </p>
           )}
@@ -417,7 +417,7 @@ export default function ListingForm(props: ListingFormProps) {
         {isEdit && (
           <div className="flex flex-col gap-1">
             <label
-              className="text-sm font-medium text-zinc-700"
+              className="text-sm font-medium text-ink-2"
               htmlFor="listing-status"
             >
               Status
@@ -458,7 +458,7 @@ export default function ListingForm(props: ListingFormProps) {
 
       {photoPendingRemoval !== null && (
         <Modal isOpen onClose={() => setPhotoPendingRemoval(null)} title="Remove this photo?">
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-ink-2">
             The photo is deleted straight away. Cancelling the form afterwards will not
             bring it back.
           </p>

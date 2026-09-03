@@ -14,10 +14,10 @@ export type CategoryTreeFilterProps = {
 
 function itemClasses(selected: boolean): string {
   return [
-    "w-full rounded-lg px-2 py-1 text-left text-sm transition-colors",
+    "w-full rounded-none px-2 py-1 text-left text-sm transition-colors",
     selected
-      ? "bg-indigo-50 font-medium text-indigo-700"
-      : "text-zinc-700 hover:bg-zinc-100",
+      ? "bg-inset font-medium text-black"
+      : "text-ink-2 hover:bg-inset",
   ].join(" ");
 }
 
@@ -52,7 +52,7 @@ function Branch({
                   type="button"
                   aria-expanded={isExpanded}
                   aria-label={`${isExpanded ? "Collapse" : "Expand"} ${node.name}`}
-                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-zinc-500 hover:bg-zinc-100 hover:text-zinc-600"
+                  className="flex h-5 w-5 shrink-0 items-center justify-center rounded-none text-ink-3 hover:bg-inset hover:text-ink-2"
                   onClick={() => onToggle(node.id)}
                 >
                   {isExpanded ? (
@@ -76,7 +76,7 @@ function Branch({
               </button>
             </div>
             {hasChildren && isExpanded && (
-              <div className="ml-3 border-l border-zinc-200 pl-2">
+              <div className="ml-3 border-l border-rule pl-2">
                 <Branch
                   nodes={node.children}
                   value={value}

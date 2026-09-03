@@ -97,11 +97,11 @@ function LoginPageContent() {
       title="Welcome back"
       subtitle="Sign in to your C2C Market account"
       footer={
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-sm text-ink-3">
           Don&apos;t have an account?{" "}
           <Link
             href="/register"
-            className="font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+            className="font-medium text-ink hover:text-black hover:underline"
           >
             Create one
           </Link>
@@ -170,16 +170,16 @@ export default function LoginPage() {
       fallback={
         <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
           <div className="w-full max-w-md animate-pulse">
-            <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+            <div className="rounded-none border border-rule bg-white p-8 shadow-none">
               <div className="mb-8 flex flex-col items-center gap-2 text-center">
-                <span className="h-12 w-12 rounded-xl bg-zinc-100" />
-                <span className="h-6 w-40 rounded bg-zinc-100" />
-                <span className="h-4 w-56 rounded bg-zinc-100" />
+                <span className="h-12 w-12 rounded-none bg-inset" />
+                <span className="h-6 w-40 rounded-none bg-inset" />
+                <span className="h-4 w-56 rounded-none bg-inset" />
               </div>
               <div className="flex flex-col gap-4">
-                <span className="h-10 w-full rounded-lg bg-zinc-100" />
-                <span className="h-10 w-full rounded-lg bg-zinc-100" />
-                <span className="mt-2 h-10 w-full rounded-lg bg-zinc-100" />
+                <span className="h-10 w-full rounded-none bg-inset" />
+                <span className="h-10 w-full rounded-none bg-inset" />
+                <span className="mt-2 h-10 w-full rounded-none bg-inset" />
               </div>
             </div>
           </div>

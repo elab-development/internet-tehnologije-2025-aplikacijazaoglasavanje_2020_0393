@@ -104,7 +104,7 @@ export default function OrderActions({
           onClose={() => setPending(null)}
           title={confirmation.title}
         >
-          <p className="text-sm text-zinc-600">{confirmation.body}</p>
+          <p className="text-sm text-ink-2">{confirmation.body}</p>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setPending(null)}>
               Keep order

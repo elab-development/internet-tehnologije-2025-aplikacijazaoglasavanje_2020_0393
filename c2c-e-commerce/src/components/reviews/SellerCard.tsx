@@ -35,10 +35,10 @@ export default function SellerCard({
 
   return (
     <section
-      className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+      className="rounded-none border border-rule bg-white p-4 shadow-none"
       aria-labelledby="seller-card-heading"
     >
-      <h2 id="seller-card-heading" className="mb-3 text-sm font-semibold text-zinc-500">
+      <h2 id="seller-card-heading" className="mb-3 text-sm font-semibold text-ink-3">
         Sold by
       </h2>
 
@@ -47,10 +47,10 @@ export default function SellerCard({
         <img
           src={avatarUrl ?? buildAvatarUrl(sellerId)}
           alt=""
-          className="h-10 w-10 rounded-full border border-zinc-200 bg-zinc-50"
+          className="h-10 w-10 rounded-none border border-rule bg-inset"
         />
         <div>
-          <p className="font-medium text-zinc-900 group-hover:underline">{displayName}</p>
+          <p className="font-medium text-ink group-hover:underline">{displayName}</p>
           <StarRating
             value={ratingAverage({ reviewCount, ratingSum })}
             count={reviewCount}

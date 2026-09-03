@@ -23,10 +23,11 @@ describe("ListingGallery", () => {
   it("renders the placeholder when there are no images", () => {
     render(<ListingGallery images={[]} title="Vintage Denim Jacket" />);
 
-    // The emoji alone conveyed "no photo" to sighted users only — Task 20 fix round 1
-    // gave the placeholder a real accessible name instead, so it is announced too.
+    // The glyph alone conveyed "no photo" to sighted users only — Task 20 fix round 1
+    // gave the placeholder a real accessible name instead, so it is announced too. The
+    // drawn icon inside it is aria-hidden, so the name is the whole of what is exposed.
     const placeholder = screen.getByRole("img", { name: "No photo available" });
-    expect(placeholder).toHaveTextContent("🖼️");
+    expect(placeholder.querySelector("svg")).toBeInTheDocument();
     // Still no actual <img> element — that's what the "one image" case below covers.
     expect(placeholder.tagName).not.toBe("IMG");
   });
@@ -38,7 +39,9 @@ describe("ListingGallery", () => {
     expect(large).toHaveAttribute("src", "/api/images/1");
 
     // No placeholder, and no thumbnail buttons — a single photo is not a "gallery".
-    expect(screen.queryByText("🖼️")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("img", { name: "No photo available" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 

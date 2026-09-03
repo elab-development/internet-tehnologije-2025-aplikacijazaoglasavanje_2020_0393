@@ -34,9 +34,9 @@ export default function CategoryBreadcrumb({
   // can render links for yet.
   if (chain.length === 0) {
     if (fallbackName) {
-      return <span className="text-sm text-zinc-700">{fallbackName}</span>;
+      return <span className="text-sm text-ink-2">{fallbackName}</span>;
     }
-    return <span className="text-sm text-zinc-500">Uncategorized</span>;
+    return <span className="text-sm text-ink-3">Uncategorized</span>;
   }
 
   return (
@@ -48,13 +48,13 @@ export default function CategoryBreadcrumb({
           <li key={category.id} className="flex items-center gap-1">
             {index > 0 && (
               // Decorative separator glyph, not content — contrast-exempt.
-              <span className="text-zinc-300" aria-hidden="true">
+              <span className="text-rule-strong" aria-hidden="true">
                 ›
               </span>
             )}
             <Link
               href={`/listings?categoryId=${category.id}`}
-              className="text-indigo-600 hover:underline"
+              className="text-ink hover:underline"
             >
               {category.name}
             </Link>

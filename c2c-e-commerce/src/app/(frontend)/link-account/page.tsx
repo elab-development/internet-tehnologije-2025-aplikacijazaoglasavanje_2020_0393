@@ -75,7 +75,7 @@ function LinkAccountPageContent() {
         <button
           type="button"
           onClick={() => router.push("/login")}
-          className="mt-6 w-full text-center text-sm font-medium text-zinc-500 hover:text-zinc-700 hover:underline"
+          className="mt-6 w-full text-center text-sm font-medium text-ink-3 hover:text-ink-2 hover:underline"
         >
           Cancel and sign in with a password instead
         </button>
@@ -117,15 +117,15 @@ export default function LinkAccountPage() {
       fallback={
         <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
           <div className="w-full max-w-md animate-pulse">
-            <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+            <div className="rounded-none border border-rule bg-white p-8 shadow-none">
               <div className="mb-6 flex flex-col items-center gap-2 text-center">
-                <span className="h-12 w-12 rounded-xl bg-zinc-100" />
-                <span className="h-6 w-48 rounded bg-zinc-100" />
-                <span className="h-4 w-64 rounded bg-zinc-100" />
+                <span className="h-12 w-12 rounded-none bg-inset" />
+                <span className="h-6 w-48 rounded-none bg-inset" />
+                <span className="h-4 w-64 rounded-none bg-inset" />
               </div>
               <div className="flex flex-col gap-4">
-                <span className="h-10 w-full rounded-lg bg-zinc-100" />
-                <span className="mt-2 h-10 w-full rounded-lg bg-zinc-100" />
+                <span className="h-10 w-full rounded-none bg-inset" />
+                <span className="mt-2 h-10 w-full rounded-none bg-inset" />
               </div>
             </div>
           </div>

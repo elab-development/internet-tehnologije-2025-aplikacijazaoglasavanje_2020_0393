@@ -1,16 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Public_Sans } from "next/font/google";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Display face. Used for headings, prices and anything that has to carry across a
+// page — its slightly odd proportions are the point, so it is never set as body copy.
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
   subsets: ["latin"],
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+// Interface face. A signage-lineage grotesque: plain, workmanlike, and legible at
+// the 11px the eyebrows and column heads run at.
+const publicSans = Public_Sans({
+  variable: "--font-public-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 // Top-level metadata — (frontend)/layout.tsx refines title per-page
@@ -30,7 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-zinc-50 text-zinc-900`}
+        className={`${bricolage.variable} ${publicSans.variable} antialiased bg-paper text-ink`}
       >
         {children}
         <Toaster
@@ -38,16 +44,17 @@ export default function RootLayout({
           toastOptions={{
             duration: 4000,
             style: {
-              borderRadius: "10px",
-              background: "#1f2937",
-              color: "#f9fafb",
+              borderRadius: "0px",
+              background: "#141414",
+              color: "#ffffff",
               fontSize: "0.875rem",
+              fontWeight: 500,
             },
             success: {
-              iconTheme: { primary: "#34d399", secondary: "#1f2937" },
+              iconTheme: { primary: "#12813f", secondary: "#ffffff" },
             },
             error: {
-              iconTheme: { primary: "#f87171", secondary: "#1f2937" },
+              iconTheme: { primary: "#c4231c", secondary: "#ffffff" },
             },
           }}
         />

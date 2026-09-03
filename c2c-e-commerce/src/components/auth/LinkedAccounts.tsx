@@ -62,9 +62,9 @@ export default function LinkedAccounts() {
   }
 
   return (
-    <section className="rounded-2xl border border-zinc-200 bg-white p-6">
-      <h2 className="text-lg font-semibold text-zinc-900">Linked accounts</h2>
-      <p className="mt-1 text-sm text-zinc-500">
+    <section className="rounded-none border border-rule bg-white p-6">
+      <h2 className="text-lg font-semibold text-ink">Linked accounts</h2>
+      <p className="mt-1 text-sm text-ink-3">
         Sign in with these providers instead of your password.
       </p>
 
@@ -83,18 +83,18 @@ export default function LinkedAccounts() {
             <li
               key={provider}
               data-testid={`provider-${provider}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 px-4 py-3"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-none border border-rule px-4 py-3"
             >
-              <span className="flex items-center gap-2 text-sm font-medium text-zinc-800">
+              <span className="flex items-center gap-2 text-sm font-medium text-ink">
                 <Icon size={18} aria-hidden="true" />
                 {label}
-                <span className="text-xs font-normal text-zinc-500">
+                <span className="text-xs font-normal text-ink-3">
                   {linked ? "Connected" : "Not connected"}
                 </span>
               </span>
 
               {isLastCredential && (
-                <span className="w-full text-xs text-amber-700">
+                <span className="w-full text-xs text-wait-ink">
                   This is your only way to sign in. Set a password before disconnecting it.
                 </span>
               )}
@@ -107,7 +107,7 @@ export default function LinkedAccounts() {
                     ? disconnect(provider)
                     : window.location.assign(`/api/auth/oauth/${provider}`)
                 }
-                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 transition hover:bg-zinc-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-none border border-rule-strong px-3 py-1.5 text-sm font-medium text-ink-2 transition hover:bg-inset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-go focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {/* The provider is in the label, not just the row: "Disconnect" alone
                     is ambiguous when announced out of context. */}

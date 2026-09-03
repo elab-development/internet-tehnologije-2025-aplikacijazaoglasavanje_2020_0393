@@ -36,7 +36,7 @@ export default function SimilarListings({
     <section className="mt-12" aria-labelledby="similar-listings-heading">
       <h2
         id="similar-listings-heading"
-        className="mb-4 text-xl font-semibold text-gray-900"
+        className="mb-4 border-b-[1.5px] border-ink pb-3 text-3xl text-ink"
       >
         Similar listings
       </h2>
@@ -46,7 +46,7 @@ export default function SimilarListings({
           <li key={listing.id}>
             <Link
               href={`/listings/${listing.id}`}
-              className="block overflow-hidden rounded-lg border border-gray-200 transition hover:border-gray-400 hover:shadow-sm"
+              className="block overflow-hidden rounded-none border border-rule transition hover:border-ink-3 hover:shadow-none"
             >
               {listing.coverImageId ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -56,14 +56,16 @@ export default function SimilarListings({
                   className="h-24 w-full object-cover"
                 />
               ) : (
-                <div className="h-24 w-full bg-gray-100" />
+                <div className="h-24 w-full bg-inset" />
               )}
 
-              <div className="p-2">
-                <p className="line-clamp-2 text-sm font-medium text-gray-900">
+              <div className="flex flex-col gap-1.5 p-3">
+                <p className="line-clamp-2 text-sm font-semibold text-ink">
                   {listing.title}
                 </p>
-                <p className="mt-1 text-sm text-gray-600">{formatPrice(listing.price)}</p>
+                <p className="figure text-base text-ink">
+                  {formatPrice(listing.price)}
+                </p>
               </div>
             </Link>
           </li>

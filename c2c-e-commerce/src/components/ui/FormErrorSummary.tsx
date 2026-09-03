@@ -43,12 +43,12 @@ export default function FormErrorSummary({ errors }: { errors: FieldError[] }) {
       ref={ref}
       role="alert"
       tabIndex={-1}
-      className="rounded-lg border border-red-200 bg-red-50 p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+      className="rounded-none border border-stop-rule bg-stop-tint p-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-stop"
     >
-      <p className="text-sm font-medium text-red-800">
+      <p className="text-sm font-medium text-stop-ink">
         {errors.length} {errors.length === 1 ? "field needs" : "fields need"} attention
       </p>
-      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-red-700">
+      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm text-stop-ink">
         {errors.map((error) => (
           <li key={error.field}>
             <a href={`#${error.field}`} className="underline">

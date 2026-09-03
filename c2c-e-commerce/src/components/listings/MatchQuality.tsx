@@ -29,10 +29,10 @@ export default function MatchQuality({
 
   const tone =
     score >= STRONG
-      ? "bg-emerald-50 text-emerald-700"
+      ? "bg-go-tint text-go-ink"
       : score >= PARTIAL
-        ? "bg-amber-50 text-amber-700"
-        : "bg-zinc-100 text-zinc-600";
+        ? "bg-wait-tint text-wait-ink"
+        : "bg-inset text-ink-2";
 
   return (
     <span
@@ -44,7 +44,7 @@ export default function MatchQuality({
       // not announced a second time.
       role="img"
       aria-label={`${percent}% match — ${label}`}
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${tone}`}
+      className={`inline-flex items-center rounded-none px-2 py-0.5 text-xs font-medium ${tone}`}
     >
       <span aria-hidden="true">{label}</span>
     </span>

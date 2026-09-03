@@ -10,10 +10,16 @@ import { describe, expect, it } from "vitest";
 
 import StarRating from "./StarRating";
 
-/** The glyphs of the five `[data-star]` nodes, in order, e.g. "★★★★☆". */
+/**
+ * The fill of the five `[data-star]` nodes, in order, e.g. "★★★★☆".
+ *
+ * The stars are SVG now, so there is no glyph to read back — `data-filled` carries
+ * what the ★/☆ difference used to, and this renders it into the same readable
+ * string the assertions below were already written against.
+ */
 function starGlyphs(container: HTMLElement): string {
   return Array.from(container.querySelectorAll("[data-star]"))
-    .map((node) => node.textContent)
+    .map((node) => (node.getAttribute("data-filled") === "true" ? "★" : "☆"))
     .join("");
 }
 

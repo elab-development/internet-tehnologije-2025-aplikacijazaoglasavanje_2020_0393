@@ -30,14 +30,11 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
     const id = idProp ?? generatedId;
 
     return (
-      <div className={`flex flex-col gap-1 ${className}`}>
-        <label
-          htmlFor={id}
-          className="text-sm font-medium text-zinc-700"
-        >
+      <div className={`flex flex-col gap-2 ${className}`}>
+        <label htmlFor={id} className="eyebrow text-ink-2">
           {label}
           {rest.required && (
-            <span className="ml-0.5 text-red-500" aria-hidden="true">
+            <span className="ml-0.5 text-stop" aria-hidden="true">
               *
             </span>
           )}
@@ -53,23 +50,25 @@ const InputField = forwardRef<HTMLInputElement, InputFieldProps>(
           aria-invalid={!!error}
           aria-describedby={error ? `${id}-error` : undefined}
           className={[
-            "rounded-lg border px-3 py-2 text-sm text-zinc-900 outline-none",
-            "placeholder:text-zinc-500",
-            "transition-colors duration-150",
-            "focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20",
+            "border-[1.5px] bg-surface px-3.5 py-3 text-sm text-ink",
+            "placeholder:text-ink-3",
+            "transition-colors duration-100",
+            // A hard inset ring rather than a soft halo: this palette has no
+            // shadows, and a blurred focus glow would be its only soft edge.
             error
-              ? "border-red-400 focus:border-red-500 focus:ring-red-400/20"
-              : "border-zinc-300",
+              ? "border-stop focus:border-stop focus:shadow-[inset_0_0_0_1px_var(--stop)]"
+              : "border-rule-strong focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)]",
+            "focus:outline-none",
             // Disabled control text — WCAG 1.4.3 exempts disabled elements from the
             // contrast requirement, contrast-exempt.
-            "disabled:cursor-not-allowed disabled:bg-zinc-50 disabled:text-zinc-400",
+            "disabled:cursor-not-allowed disabled:bg-inset disabled:text-ink-3",
           ]
             .filter(Boolean)
             .join(" ")}
         />
 
         {error && (
-          <p id={`${id}-error`} role="alert" className="text-xs text-red-500">
+          <p id={`${id}-error`} role="alert" className="text-xs font-medium text-stop-ink">
             {error}
           </p>
         )}

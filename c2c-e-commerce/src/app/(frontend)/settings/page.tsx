@@ -18,9 +18,9 @@ export default function SettingsPage() {
     <ProtectedRoute>
       <div className="mx-auto w-full max-w-2xl px-4 py-10">
         <header className="mb-8">
-          <h1 className="text-2xl font-bold text-zinc-900">Account settings</h1>
+          <h1 className="text-2xl font-bold text-ink">Account settings</h1>
           {user && (
-            <p className="mt-1 text-sm text-zinc-500">
+            <p className="mt-1 text-sm text-ink-3">
               Signed in as {user.email}
             </p>
           )}

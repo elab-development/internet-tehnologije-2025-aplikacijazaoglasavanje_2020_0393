@@ -22,13 +22,17 @@ export type AuthPageShellProps = {
 };
 
 /**
- * The card shell shared by /login, /register and /link-account (L6).
+ * The centred column shared by /login, /register and /link-account (L6).
  *
- * All three copy-pasted the same centered, bordered card with an icon badge, a title,
- * a subtitle and a footer slot, and only ever changed the icon, the copy, the form in
- * the middle and two spacing classes. Those four became props; everything else
- * (the card's border/radius/shadow, the badge's size and color) is common and lives
+ * All three copy-pasted the same centered card with an icon badge, a title, a
+ * subtitle and a footer slot, and only ever changed the icon, the copy, the form in
+ * the middle and two spacing classes. Those four became props; everything else lives
  * here once.
+ *
+ * The title block sits outside the panel rather than inside it: the panel is the
+ * form, and a heading inside a bordered box reads as a section of a page rather
+ * than the page itself. The brand mark is deliberately absent — the header bar
+ * three rems above already carries it.
  */
 export default function AuthPageShell({
   icon,
@@ -42,27 +46,30 @@ export default function AuthPageShell({
   return (
     <div
       className={[
-        "flex min-h-[calc(100vh-10rem)] items-center justify-center px-4",
+        "flex min-h-[calc(100vh-14rem)] items-center justify-center px-4",
         wrapperClassName,
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <div className="w-full max-w-md">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-          <div
-            className={[
-              "flex flex-col items-center gap-2 text-center",
-              headerClassName ?? "mb-8",
-            ].join(" ")}
+        <div
+          className={[
+            "flex flex-col items-center gap-3 text-center",
+            headerClassName ?? "mb-7",
+          ].join(" ")}
+        >
+          <span
+            className="flex h-11 w-11 items-center justify-center bg-ink text-white"
+            aria-hidden="true"
           >
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              {icon}
-            </span>
-            <h1 className="text-2xl font-bold text-zinc-900">{title}</h1>
-            <p className="text-sm text-zinc-500">{subtitle}</p>
-          </div>
+            {icon}
+          </span>
+          <h1 className="text-4xl">{title}</h1>
+          <p className="max-w-[42ch] text-sm text-ink-2">{subtitle}</p>
+        </div>
 
+        <div className="border-[1.5px] border-ink bg-surface p-8">
           {children}
 
           {footer}

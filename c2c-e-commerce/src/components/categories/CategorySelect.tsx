@@ -6,7 +6,7 @@ import type { Category } from "@/types/api";
 const LEVEL_LABELS = ["Category", "Subcategory", "Sub-subcategory"];
 
 const selectClasses =
-  "rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20";
+  "rounded-none border border-rule-strong px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-ink/20";
 
 export type CategorySelectProps = {
   categories: Category[];
@@ -61,7 +61,7 @@ export default function CategorySelect({
 
         return (
           <div key={id} className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-zinc-700" htmlFor={id}>
+            <label className="text-sm font-medium text-ink-2" htmlFor={id}>
               {LEVEL_LABELS[depth]}
             </label>
             <select
@@ -85,7 +85,7 @@ export default function CategorySelect({
         );
       })}
       {needsDeeperPick && (
-        <p className="text-sm text-amber-600">
+        <p className="text-sm text-wait">
           Pick a subcategory to finish filing this listing.
         </p>
       )}

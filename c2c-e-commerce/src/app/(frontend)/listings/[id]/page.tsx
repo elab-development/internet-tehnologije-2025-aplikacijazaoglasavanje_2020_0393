@@ -1,9 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import CategoryBreadcrumb from "@/components/categories/CategoryBreadcrumb";
+import {
+  makeHueResolver,
+  TOP_SPINE_CLASS,
+} from "@/components/categories/categoryHue";
 import CurrencySelect from "@/components/CurrencySelect";
 import ListingGallery from "@/components/listings/ListingGallery";
 import SimilarListings from "@/components/listings/SimilarListings";
@@ -63,6 +67,13 @@ export default function ListingDetailPage() {
   // A `reserved` or `sold` listing is publicly readable, because the buyer's own order
   // page links to it. Offering a stranger a Buy button on one only produces a 409.
   const isForSale = listing?.status === "active";
+
+  // Which of the five hues this listing's category rolls up to — the same colour it
+  // carries on its card in the grid.
+  const hue = useMemo(
+    () => makeHueResolver(categoryData ?? [])(listing?.categoryId ?? null),
+    [categoryData, listing?.categoryId],
+  );
 
   async function handleBuyNow() {
     if (!hasValidId || !listing) return;
@@ -132,8 +143,20 @@ export default function ListingDetailPage() {
   return (
     <div className="space-y-8">
       {orderSuccessId && (
-        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span className="shrink-0 text-base">✅</span>
+        <div className="flex items-start gap-3 border border-l-[6px] border-go-rule border-l-go bg-go-tint px-4 py-3 text-sm text-go-ink">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="mt-0.5 h-[18px] w-[18px] shrink-0"
+            aria-hidden="true"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m5 12.5 4.5 4.5L19 7" />
+          </svg>
           <div className="flex flex-col gap-1">
             <p className="font-semibold">Order placed successfully!</p>
             <p>
@@ -146,39 +169,54 @@ export default function ListingDetailPage() {
 
       {actionError && <ErrorAlert message={actionError} />}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4">
+      {/* Two columns rather than one stacked block: the price used to sit in a
+          14px line between the description and the currency picker, which made the
+          one number a buyer is actually here for smaller than the prose above it. */}
+      <section className="grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+        <div className="flex flex-col gap-5">
           <ListingGallery images={listing.images} title={listing.title} />
           <CategoryBreadcrumb
             categories={categoryData ?? []}
             categoryId={listing.categoryId}
             fallbackName={listing.categoryName}
           />
-          <h1 className="text-2xl font-bold text-zinc-900">{listing.title}</h1>
-          <p className="text-zinc-600">{listing.description}</p>
+          <h1 className="text-4xl sm:text-5xl">{listing.title}</h1>
+          <p className="max-w-[68ch] text-base text-ink-2">{listing.description}</p>
+        </div>
 
-          <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
-            <p>
-              <span className="font-medium text-zinc-900">Price:</span>{" "}
+        <aside
+          className={[
+            "flex flex-col gap-5 border-[1.5px] border-t-[6px] border-ink bg-surface p-6",
+            "lg:sticky lg:top-28",
+            TOP_SPINE_CLASS[hue],
+          ].join(" ")}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="eyebrow text-ink-3">Asking price</span>
+            <span className="figure text-5xl leading-none">
               {formatPrice(listing.price)}
-            </p>
-            <p>
-              <span className="font-medium text-zinc-900">Converted:</span>{" "}
-              {formatConverted(Number(listing.price))}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <CurrencySelect conversion={conversion} />
+            <p className="text-sm text-ink-3">
+              ≈ {formatConverted(Number(listing.price))} at today&rsquo;s rate
             </p>
           </div>
 
-          <CurrencySelect conversion={conversion} className="sm:max-w-xs" />
-
-          <div className="flex flex-wrap items-center gap-2 pt-2">
+          <div className="flex flex-col gap-3">
             {isForSale && !isStale ? (
-              <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
+              <Button fullWidth onClick={() => setIsBuyModalOpen(true)}>
+                Buy Now
+              </Button>
             ) : (
               <StatusBadge status={listing.status} kind="listing" size="md" />
             )}
             {isStale && (
               <Button
                 variant="secondary"
+                fullWidth
                 onClick={() => {
                   setIsStale(false);
                   setActionError(null);
@@ -191,13 +229,14 @@ export default function ListingDetailPage() {
             {orderSuccessId && (
               <Button
                 variant="secondary"
+                fullWidth
                 onClick={() => router.push(`/orders/${orderSuccessId}`)}
               >
                 View order
               </Button>
             )}
           </div>
-        </div>
+        </aside>
       </section>
 
       <SellerCard
@@ -218,11 +257,11 @@ export default function ListingDetailPage() {
         title="Confirm order"
       >
         <div className="space-y-4">
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-ink-2">
             Confirm purchase of{" "}
-            <span className="font-medium text-zinc-900">{listing.title}</span>{" "}
+            <span className="font-medium text-ink">{listing.title}</span>{" "}
             for
-            <span className="font-medium text-zinc-900">
+            <span className="font-medium text-ink">
               {" "}
               {formatPrice(listing.price)}
             </span>

@@ -89,9 +89,9 @@ export default function DescriptionAssistant({
         <div className="min-w-0 flex-1 basis-48">
           <label
             htmlFor="ai-keywords"
-            className="mb-1 block text-sm font-medium text-zinc-700"
+            className="mb-1 block text-sm font-medium text-ink-2"
           >
-            Keywords <span className="text-zinc-500">(optional)</span>
+            Keywords <span className="text-ink-3">(optional)</span>
           </label>
           <input
             id="ai-keywords"
@@ -99,7 +99,7 @@ export default function DescriptionAssistant({
             value={keywords}
             onChange={(event) => setKeywords(event.target.value)}
             placeholder="26 inch, aluminium"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-none border border-rule-strong px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-ink/20"
           />
         </div>
 
@@ -114,8 +114,24 @@ export default function DescriptionAssistant({
               ? `Enter a title of at least ${MIN_TITLE_LENGTH} characters first`
               : "Draft a description from the title and keywords"
           }
+          icon={
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.6}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 3.5 13.6 9 19 10.6 13.6 12.2 12 17.7 10.4 12.2 5 10.6 10.4 9Z" />
+              <path d="M18.5 15.5 19.2 18l2.3.7-2.3.7-.7 2.3-.7-2.3-2.3-.7 2.3-.7Z" />
+            </svg>
+          }
         >
-          ✨ Generate with AI
+          Generate with AI
         </Button>
       </div>
 
@@ -127,7 +143,7 @@ export default function DescriptionAssistant({
         title="Replace the description?"
       >
         <div className="space-y-4">
-          <p className="text-sm text-zinc-600">
+          <p className="text-sm text-ink-2">
             You have already written a description. Generating a new one will replace it.
           </p>
           <div className="flex justify-end gap-2">

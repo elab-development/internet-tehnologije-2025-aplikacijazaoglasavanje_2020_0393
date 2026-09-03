@@ -30,15 +30,31 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
 
   if (!displayImageId) {
     return (
-      // This emoji is the only indication the listing has no photo — not decorative, so
-      // it gets a real accessible name (as StarRating.tsx does for its glyphs) instead of
-      // aria-hidden, and a shade that clears 4.5:1.
+      // This is the only indication the listing has no photo — not decorative, so it
+      // gets a real accessible name instead of aria-hidden. Drawn rather than set as
+      // an emoji: the glyph rendered in whatever style the platform font chose, which
+      // was the one icon in the interface that was not on the 24 grid.
       <div
-        className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-500 text-5xl select-none"
+        className="flex h-48 max-h-80 w-full select-none items-center justify-center border border-rule bg-inset text-ink-3"
         role="img"
         aria-label="No photo available"
       >
-        🖼️
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          className="h-12 w-12 opacity-60"
+          aria-hidden="true"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <rect x="3" y="4.5" width="18" height="15" />
+          <path d="m3 16 4.2-4.2a1.6 1.6 0 0 1 2.3 0L14 16" />
+          <path d="m13.5 14 1.7-1.7a1.6 1.6 0 0 1 2.3 0L21 15.5" />
+          <circle cx="8.4" cy="9" r="1.2" />
+        </svg>
       </div>
     );
   }
@@ -49,7 +65,7 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
       <img
         src={`/api/images/${displayImageId}`}
         alt={title}
-        className="w-full rounded-xl object-cover max-h-80 border border-zinc-100 bg-zinc-50"
+        className="w-full rounded-none object-cover max-h-80 border border-rule bg-inset"
       />
       {images.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -63,8 +79,8 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
               // (delete the first of three and the remaining two would announce "2" and "3").
               aria-label={`Show photo ${index + 1}`}
               aria-current={image.id === displayImageId}
-              className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 ${
-                image.id === displayImageId ? "border-indigo-500" : "border-zinc-100"
+              className={`h-16 w-16 shrink-0 overflow-hidden rounded-none border-2 ${
+                image.id === displayImageId ? "border-ink" : "border-rule"
               }`}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}

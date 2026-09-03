@@ -23,7 +23,7 @@ type ProtectedRouteProps = {
 
 function DefaultFallback() {
   return (
-    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-zinc-500">
+    <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-ink-3">
       <RiLockLine size={40} aria-hidden="true" />
       <p className="text-sm">Checking authentication…</p>
     </div>

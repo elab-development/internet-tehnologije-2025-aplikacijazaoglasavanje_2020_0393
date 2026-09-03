@@ -81,14 +81,14 @@ export default function SellerOrdersTab({
       ) : (
         <>
           {truncated && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-3">
               Showing the {orders.length} most recent of {data?.total}.
             </p>
           )}
 
           {pendingOrders.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-zinc-900">
+              <h2 className="text-lg font-semibold text-ink">
                 Pending Approval ({pendingOrders.length})
               </h2>
               <div className="grid gap-4">
@@ -107,7 +107,7 @@ export default function SellerOrdersTab({
 
           {processedOrders.length > 0 && (
             <section className="space-y-3">
-              <h2 className="text-lg font-semibold text-zinc-900">
+              <h2 className="text-lg font-semibold text-ink">
                 Other Orders ({processedOrders.length})
               </h2>
               <div className="grid gap-4">

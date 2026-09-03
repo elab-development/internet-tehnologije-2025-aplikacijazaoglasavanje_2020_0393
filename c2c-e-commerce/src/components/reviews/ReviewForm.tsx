@@ -76,7 +76,7 @@ export default function ReviewForm({ orderId, onSubmitted }: ReviewFormProps) {
           {error && <ErrorAlert message={error} />}
 
           <div className="space-y-2">
-            <span id="star-rating-label" className="block text-sm font-medium text-zinc-700">
+            <span id="star-rating-label" className="block text-sm font-medium text-ink-2">
               Star rating
             </span>
             <div
@@ -107,10 +107,25 @@ export default function ReviewForm({ orderId, onSubmitted }: ReviewFormProps) {
                       selectRating(value === 1 ? 5 : value - 1);
                     }
                   }}
-                  className="text-2xl leading-none text-amber-500"
+                  className={[
+                    "flex h-11 w-11 items-center justify-center leading-none",
+                    value <= rating ? "text-ink" : "text-rule-strong",
+                  ].join(" ")}
                   aria-label={`${value} ${value === 1 ? "star" : "stars"}`}
                 >
-                  <span aria-hidden="true">{value <= rating ? "★" : "☆"}</span>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width={26}
+                    height={26}
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                    fill={value <= rating ? "currentColor" : "none"}
+                    stroke={value <= rating ? "none" : "currentColor"}
+                    strokeWidth={1.5}
+                    strokeLinejoin="round"
+                  >
+                    <path d="m12 3.4 2.7 5.7 6.2.9-4.5 4.3 1.1 6.2-5.5-2.9-5.5 2.9 1.1-6.2-4.5-4.3 6.2-.9Z" />
+                  </svg>
                 </button>
               ))}
             </div>

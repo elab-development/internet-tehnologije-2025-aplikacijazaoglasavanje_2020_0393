@@ -34,19 +34,19 @@ export default function SellerReviews({ reviews }: SellerReviewsProps) {
     <ul className="space-y-3">
       {reviews.map((review) => (
         <li key={review.id}>
-          <article className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+          <article className="rounded-none border border-rule bg-white p-4 shadow-none">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-medium text-zinc-900">
+                <p className="text-sm font-medium text-ink">
                   {review.reviewerName ?? `Buyer #${review.reviewerId}`}
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-ink-3">
                   {formatDate(review.createdAt, { dateOnly: true })}
                 </p>
               </div>
               <StarRating value={review.rating} size="sm" />
             </div>
-            <p className="text-sm text-zinc-600">{review.comment || "No comment."}</p>
+            <p className="text-sm text-ink-2">{review.comment || "No comment."}</p>
           </article>
         </li>
       ))}

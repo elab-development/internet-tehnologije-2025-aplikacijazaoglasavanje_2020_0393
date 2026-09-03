@@ -89,7 +89,7 @@ export default function ImageUploader({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-zinc-700" htmlFor="listing-photos">
+      <label className="text-sm font-medium text-ink-2" htmlFor="listing-photos">
         Photos
       </label>
 
@@ -100,15 +100,15 @@ export default function ImageUploader({
         multiple
         disabled={disabled}
         onChange={handleSelect}
-        className="text-sm text-zinc-600 file:mr-3 file:rounded-lg file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-indigo-700"
+        className="text-sm text-ink-2 file:mr-3 file:rounded-none file:border-0 file:bg-inset file:px-3 file:py-2 file:text-sm file:font-medium file:text-black"
       />
 
-      <p className="text-xs text-zinc-500">
+      <p className="text-xs text-ink-3">
         JPEG, PNG or WebP. Up to {MAX_IMAGES} photos, 5 MB each. The first is the cover.
       </p>
 
       {problems.length > 0 && (
-        <ul className="text-xs text-red-600">
+        <ul className="text-xs text-stop">
           {problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
@@ -125,14 +125,14 @@ export default function ImageUploader({
                 // L27: `Listing photo ${image.id}` told a blind user "Listing photo
                 // 4162" — a database id conveys nothing. Position among the set does.
                 alt={`Listing photo ${index + 1} of ${existing.length}`}
-                className="h-20 w-20 rounded-lg border border-zinc-200 object-cover"
+                className="h-20 w-20 rounded-none border border-rule object-cover"
               />
               <button
                 type="button"
                 aria-label={`Remove image ${image.id}`}
                 onClick={() => onRemoveExisting(image.id)}
                 disabled={disabled}
-                className="absolute -right-1 -top-1 rounded-full bg-zinc-900/80 px-1.5 text-xs text-white"
+                className="absolute -right-1 -top-1 rounded-none bg-ink/80 px-1.5 text-xs text-white"
               >
                 ×
               </button>
@@ -145,14 +145,14 @@ export default function ImageUploader({
               <img
                 src={url}
                 alt={file.name}
-                className="h-20 w-20 rounded-lg border border-zinc-200 object-cover"
+                className="h-20 w-20 rounded-none border border-rule object-cover"
               />
               <button
                 type="button"
                 aria-label={`Remove ${file.name}`}
                 onClick={() => onFilesChange(files.filter((f) => f !== file))}
                 disabled={disabled}
-                className="absolute -right-1 -top-1 rounded-full bg-zinc-900/80 px-1.5 text-xs text-white"
+                className="absolute -right-1 -top-1 rounded-none bg-ink/80 px-1.5 text-xs text-white"
               >
                 ×
               </button>

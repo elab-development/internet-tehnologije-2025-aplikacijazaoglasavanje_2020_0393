@@ -101,7 +101,7 @@ export default function RegisterPage() {
         role,
         ...(phoneNumber.trim() ? { phoneNumber: phoneNumber.trim() } : {}),
       });
-      toast.success("Account created! Welcome to C2C Market 🎉");
+      toast.success("Account created. Welcome to C2C Market.");
       router.push("/");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Registration failed";
@@ -120,11 +120,11 @@ export default function RegisterPage() {
       subtitle="Join C2C Market and start buying or selling"
       wrapperClassName="py-10"
       footer={
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-sm text-ink-3">
           Already have an account?{" "}
           <Link
             href="/login"
-            className="font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+            className="font-medium text-ink hover:text-black hover:underline"
           >
             Sign in
           </Link>
@@ -187,10 +187,10 @@ export default function RegisterPage() {
         />
 
         {/* Role selector */}
-        <div className="flex flex-col gap-1">
-          <span id="role-label" className="text-sm font-medium text-zinc-700">
+        <div className="flex flex-col gap-2">
+          <span id="role-label" className="eyebrow text-ink-2">
             I want to&hellip;
-            <span className="ml-0.5 text-red-500" aria-hidden="true">*</span>
+            <span className="ml-0.5 text-stop" aria-hidden="true">*</span>
           </span>
           <div
             role="radiogroup"
@@ -221,15 +221,39 @@ export default function RegisterPage() {
                   }
                 }}
                 className={[
-                  "rounded-lg border px-3 py-2 text-sm font-medium capitalize transition-colors",
+                  "flex items-center justify-center gap-2 border-[1.5px] px-3 py-3 text-sm font-bold uppercase tracking-[0.06em] transition-colors",
                   role === r
-                    ? "border-indigo-600 bg-indigo-50 text-indigo-700"
-                    : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-400",
+                    ? "border-ink bg-ink text-white"
+                    : "border-rule-strong bg-white text-ink-2 hover:border-ink",
                 ].join(" ")}
               >
-                {/* The emoji is decoration; unhidden it made the accessible name
-                    "shopping bags Buy". */}
-                <span aria-hidden="true">{r === "buyer" ? "🛍" : "🏪"}</span>{" "}
+                {/* Decoration next to a labelled control; unhidden it made the
+                    accessible name "shopping bags Buy". */}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width={16}
+                  height={16}
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  {r === "buyer" ? (
+                    <>
+                      <path d="M5 7.5h14L18 20H6Z" />
+                      <path d="M9 9.5v-3a3 3 0 0 1 6 0v3" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M4 9.5 5.5 4.5h13L20 9.5" />
+                      <path d="M4 9.5a2.4 2.4 0 0 0 4 1.6 2.4 2.4 0 0 0 4 0 2.4 2.4 0 0 0 4 0 2.4 2.4 0 0 0 4-1.6" />
+                      <path d="M5.5 11.8V20h13v-8.2" />
+                    </>
+                  )}
+                </svg>
                 {r === "buyer" ? "Buy" : "Sell"}
               </button>
             ))}

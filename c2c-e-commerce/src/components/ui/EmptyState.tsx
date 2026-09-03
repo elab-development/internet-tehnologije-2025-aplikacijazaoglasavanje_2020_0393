@@ -1,7 +1,7 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type EmptyStateProps = {
-  /** Rendered inside the rounded icon tile — usually a Remix icon. */
+  /** Rendered inside the icon tile — usually a Remix icon. */
   icon: React.ReactNode;
   title: string;
   description?: string;
@@ -19,18 +19,18 @@ export default function EmptyState({
   action,
 }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center gap-4 py-20 text-center">
+    <div className="flex flex-col items-center gap-4 border border-rule bg-surface px-6 py-20 text-center">
       {/* Decorative icon tile, not content — contrast-exempt. */}
       <span
-        className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-100 text-zinc-400"
+        className="flex h-16 w-16 items-center justify-center bg-inset text-ink-3"
         aria-hidden="true"
       >
         {icon}
       </span>
       {/* Section-placeholder heading: semantic <h2>, not a styled paragraph. */}
-      <h2 className="text-lg font-semibold text-zinc-700">{title}</h2>
+      <h2 className="text-2xl text-ink">{title}</h2>
       {description && (
-        <p className="text-sm text-zinc-500 max-w-xs">{description}</p>
+        <p className="max-w-xs text-sm text-ink-2">{description}</p>
       )}
       {action}
     </div>

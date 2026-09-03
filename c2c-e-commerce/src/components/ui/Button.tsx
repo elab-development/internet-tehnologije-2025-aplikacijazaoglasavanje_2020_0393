@@ -29,21 +29,27 @@ export type ButtonProps = Omit<
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+/**
+ * Flat fills, square corners, no shadow. `primary` is ink at rest and black on
+ * hover — the category hues are reserved for saying what something *is*, so an
+ * action never borrows one to say what it *does*.
+ *
+ * `ghost` is the quiet variant: underlined text rather than a filled or outlined
+ * box, so a page never shows three things that look equally like the main action.
+ */
 const variantClasses: Record<Variant, string> = {
-  primary:
-    "bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800 focus-visible:ring-indigo-500",
+  primary: "border-ink bg-ink text-white hover:border-black hover:bg-black",
   secondary:
-    "bg-white text-indigo-600 border border-indigo-600 hover:bg-indigo-50 active:bg-indigo-100 focus-visible:ring-indigo-500",
-  danger:
-    "bg-red-600 text-white hover:bg-red-700 active:bg-red-800 focus-visible:ring-red-500",
+    "border-ink bg-transparent text-ink hover:bg-ink hover:text-white",
+  danger: "border-stop bg-transparent text-stop hover:bg-stop hover:text-white",
   ghost:
-    "bg-transparent text-zinc-700 hover:bg-zinc-100 active:bg-zinc-200 focus-visible:ring-zinc-400",
+    "border-transparent bg-transparent text-ink-2 underline decoration-1 underline-offset-[3px] hover:text-ink hover:decoration-2",
 };
 
 const sizeClasses: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-sm gap-1.5",
-  md: "px-4 py-2 text-sm gap-2",
-  lg: "px-5 py-2.5 text-base gap-2",
+  sm: "px-4 py-2 text-[11.5px] gap-2",
+  md: "px-6 py-3 text-[13px] gap-2.5",
+  lg: "px-7 py-4 text-sm gap-2.5",
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -72,10 +78,13 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
       type={type}
       disabled={isDisabled}
       className={[
-        "inline-flex items-center justify-center rounded-lg font-medium",
-        "transition-colors duration-150",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2",
-        "disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center rounded-none border-[1.5px]",
+        "font-bold uppercase tracking-[0.06em]",
+        "transition-colors duration-100",
+        // No `outline-none` here: the square focus ring in globals.css is the one
+        // the whole interface uses, and a button opting out of it was the only
+        // control that needed its own ring classes.
+        "disabled:cursor-not-allowed disabled:opacity-35",
         variantClasses[variant],
         sizeClasses[size],
         fullWidth ? "w-full" : "",
@@ -85,6 +94,8 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
         .join(" ")}
     >
       {loading ? (
+        // The one round thing in the interface, and only because a square spinner
+        // does not read as spinning.
         <span
           className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
           aria-hidden="true"

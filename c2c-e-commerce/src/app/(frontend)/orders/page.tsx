@@ -32,7 +32,7 @@ function OrdersPageContent() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <h1 className="text-2xl font-bold text-zinc-900">My Orders</h1>
+        <h1 className="text-2xl font-bold text-ink">My Orders</h1>
         <CurrencySelect conversion={conversion} className="sm:w-48" />
       </div>
 
@@ -58,7 +58,7 @@ function OrdersPageContent() {
       ) : (
         <div className="grid gap-4">
           {truncated && (
-            <p className="text-sm text-zinc-500">
+            <p className="text-sm text-ink-3">
               Showing the {orders.length} most recent of {data?.total}.
             </p>
           )}
@@ -70,10 +70,10 @@ function OrdersPageContent() {
               footer={
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <span className="font-semibold text-zinc-900">
+                    <span className="font-semibold text-ink">
                       {formatPrice(order.price)}
                     </span>
-                    <span className="text-zinc-500">
+                    <span className="text-ink-3">
                       ({formatConverted(Number(order.price))})
                     </span>
                     <StatusBadge status={order.status} descriptive />

@@ -97,7 +97,7 @@ export default function SellerListingsTab({
       {loading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-32 animate-pulse rounded-2xl bg-zinc-100" />
+            <div key={i} className="h-32 animate-pulse rounded-none bg-inset" />
           ))}
         </div>
       ) : listings.length === 0 ? (

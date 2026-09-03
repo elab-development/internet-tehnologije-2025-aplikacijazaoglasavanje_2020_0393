@@ -159,12 +159,15 @@ describe("the price this page renders (Task 3 regression check)", () => {
     mockListing({ status: "active" });
     renderPage();
 
-    const priceLine = (await screen.findByText("Price:")).closest("p");
-    expect(priceLine).not.toBeNull();
-    expect(priceLine).toHaveTextContent("Price: $120.00");
+    // The price is the asking-price panel's figure now, not a "Price: …" line in a
+    // paragraph — but what this test is actually guarding is `formatPrice`, so it
+    // still asserts the exact rendered string rather than the label around it.
+    expect(await screen.findByText("Asking price")).toBeInTheDocument();
+    const price = screen.getByText("$120.00");
+    expect(price.textContent).toBe("$120.00");
     // toHaveTextContent normalises whitespace, so it alone would not catch "$ 120.00".
     // This is the assertion that actually distinguishes the two.
-    expect(priceLine?.textContent).not.toMatch(/\$\s+120/);
+    expect(price.textContent).not.toMatch(/\$\s+120/);
   });
 });
 

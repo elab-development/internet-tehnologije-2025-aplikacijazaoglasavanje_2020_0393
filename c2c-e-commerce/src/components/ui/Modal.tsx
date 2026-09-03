@@ -141,7 +141,7 @@ export default function Modal({
         aria-labelledby={titleId}
         tabIndex={-1}
         className={[
-          "relative z-10 w-full max-w-lg rounded-2xl bg-white shadow-xl",
+          "relative z-10 w-full max-w-lg rounded-none bg-white shadow-none",
           "flex flex-col max-h-[90vh] focus:outline-none",
           className,
         ]
@@ -149,17 +149,17 @@ export default function Modal({
           .join(" ")}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+        <div className="flex items-center justify-between border-b border-rule px-6 py-4">
           <h2
             id={titleId}
-            className="text-lg font-semibold text-zinc-900"
+            className="text-lg font-semibold text-ink"
           >
             {title}
           </h2>
           <button
             onClick={onClose}
             aria-label="Close modal"
-            className="rounded-lg p-1 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="rounded-none p-1 text-ink-3 transition-colors hover:bg-inset hover:text-ink-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ink"
           >
             <RiCloseLine size={20} aria-hidden="true" />
           </button>
