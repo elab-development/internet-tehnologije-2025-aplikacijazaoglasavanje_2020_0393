@@ -24,7 +24,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22, not 20: testcontainers@12 requires >= 22.22, its bundled undici@8
+          # requires >= 22.19, and @testing-library/jest-dom@7 requires >= 22. On
+          # Node 20 npm warns EBADENGINE and installs anyway, then the suite dies at
+          # import on `webidl.util.markAsUncloneable is not a function` -- undici
+          # reaching for a worker_threads export Node 20 does not have.
+          node-version: 22
           cache: npm
           cache-dependency-path: c2c-e-commerce/package-lock.json
 
