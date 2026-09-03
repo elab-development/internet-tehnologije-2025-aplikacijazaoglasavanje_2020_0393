@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: c2c-e-commerce-postgres-dev
     restart: unless-stopped
     environment:
@@ -46,12 +46,30 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-c2c_ecommerce}
       NODE_ENV: development
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      # The AI seams (C2C-AI-1, C2C-AI-2). Compose substitutes ${...} from the root .env
+      # into this file, but nothing reaches the container unless it is named here — and
+      # both factories default to their *real* provider outside NODE_ENV=test, so an
+      # unnamed variable is not a mock, it is a 500 on the first generate.
+      #
+      # `mock` by default so the app comes up on a laptop with no key and no network. Set
+      # LLM_PROVIDER=groq in .env to demo the real model.
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-qwen/qwen3.8-27b}
+      # `local` runs MiniLM in-process. The dev image builds the `deps` stage, which does
+      # not carry the model the Dockerfile bakes for production, so the first boot after a
+      # rebuild downloads ~25 MB. Set EMBEDDING_PROVIDER=mock to skip it while working on
+      # anything that is not semantic search.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-local}
       WATCHPACK_POLLING: "true"
       CHOKIDAR_USEPOLLING: "true"
+      STORAGE_DRIVER: ${STORAGE_DRIVER:-local}
+      STORAGE_DIR: ${STORAGE_DIR:-/app/uploads}
     volumes:
       - ./c2c-e-commerce:/app
       - /app/node_modules
       - /app/.next
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -60,3 +78,4 @@ services:
 
 volumes:
   postgres_data_dev:
+  uploads_data:

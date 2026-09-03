@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import jwt from "jsonwebtoken";
 import {
   hashPassword,
   verifyPassword,
@@ -62,6 +63,10 @@ describe("sanitizeUser", () => {
       name: "John",
       role: "buyer" as const,
       phoneNumber: null,
+      emailVerified: false,
+      avatarUrl: null,
+      reviewCount: 0,
+      ratingSum: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -71,5 +76,31 @@ describe("sanitizeUser", () => {
     expect(safe.id).toBe(1);
     expect(safe.email).toBe("user@example.com");
     expect(safe.name).toBe("John");
+  });
+});
+
+describe("verifyToken payload validation", () => {
+  // Every authorization predicate in the app trusts what this returns. It held only
+  // because signToken is the sole issuer -- an assumption nothing enforced.
+  it.each([
+    ["a missing sub", { email: "a@x.test", role: "buyer" }],
+    ["a non-numeric sub", { sub: "7", email: "a@x.test", role: "buyer" }],
+    ["a missing email", { sub: 7, role: "buyer" }],
+    ["a role outside the enum", { sub: 7, email: "a@x.test", role: "superuser" }],
+    ["a missing role", { sub: 7, email: "a@x.test" }],
+  ])("rejects a token carrying %s", (_label, payload) => {
+    const token = jwt.sign(payload, process.env.JWT_SECRET!, {
+      algorithm: "HS256",
+      expiresIn: "15m",
+    });
+
+    expect(() => verifyToken(token)).toThrow();
+  });
+
+  it("still accepts a well-formed payload", () => {
+    const token = signToken({ sub: 7, email: "a@x.test", role: "seller" });
+    expect(verifyToken(token)).toEqual(
+      expect.objectContaining({ sub: 7, email: "a@x.test", role: "seller" }),
+    );
   });
 });

@@ -13,6 +13,9 @@
 # testing
 /coverage
 
+# local uploads (STORAGE_DRIVER=local default from .env.example)
+/.uploads
+
 # next.js
 /.next/
 /out/
@@ -43,3 +46,5 @@ next-env.d.ts
 
 # env
 .env
+# .env.example carries placeholders only and is meant to be committed.
+!.env.example

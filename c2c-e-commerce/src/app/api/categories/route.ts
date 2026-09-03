@@ -1,8 +1,11 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { categories } from "@/db/schema";
+import { findCategoryById, hasListings } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { MAX_CATEGORY_DEPTH, childPath, depthOfPath } from "@/lib/categories";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateCategorySchema } from "@/lib/validation";
 import { eq } from "drizzle-orm";
 
 // ─── GET /api/categories ──────────────────────────────────────────────────────
@@ -72,6 +75,15 @@ export async function GET() {
  *                 type: string
  *                 nullable: true
  *                 example: Gadgets & devices
+ *               parentId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Parent category. Omit or send null for a root.
+ *                 example: 3
+ *               sortOrder:
+ *                 type: integer
+ *                 description: Curated order among siblings.
+ *                 example: 0
  *     responses:
  *       201:
  *         description: Category created
@@ -115,34 +127,72 @@ export async function POST(request: NextRequest) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, CreateCategorySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, slug, description } = body as Record<string, unknown>;
-
-    if (!name || typeof name !== "string" || !name.trim())
-      return jsonError("name is required", 400);
-    if (!slug || typeof slug !== "string" || !slug.trim())
-      return jsonError("slug is required", 400);
+    const { name, slug, description, parentId, sortOrder } = parsed.data;
 
     // check uniqueness
     const [existing] = await db
       .select()
       .from(categories)
-      .where(eq(categories.slug, slug.trim()))
+      .where(eq(categories.slug, slug))
       .limit(1);
     if (existing) return jsonError("A category with that slug already exists", 409);
 
-    const [created] = await db
-      .insert(categories)
-      .values({
-        name: name.trim(),
-        slug: slug.trim(),
-        description: typeof description === "string" ? description.trim() : null,
-      })
-      .returning();
+    // `parentId` is nullable and optional; both null and undefined mean "a root" on
+    // create, and only an explicit id means otherwise.
+    let parentPath: string | null = null;
+    if (parentId !== undefined && parentId !== null) {
+      const parent = await findCategoryById(parentId);
+      if (!parent) return jsonError("Parent category not found", 400);
 
-    return jsonOk(created, 201);
+      if (parent.depth + 1 > MAX_CATEGORY_DEPTH - 1) {
+        return jsonError(
+          `Categories may be nested at most ${MAX_CATEGORY_DEPTH} levels deep`,
+          400,
+        );
+      }
+
+      // A category with listings filed on it is a leaf by definition (D12). Giving it a
+      // child would strand those listings on a now-non-leaf node.
+      if (await hasListings(parentId)) {
+        return jsonError(
+          "Move this category's listings before giving it subcategories",
+          409,
+        );
+      }
+
+      parentPath = parent.path;
+    }
+
+    // path is NOT NULL and derived from the row's own id, so it cannot be known before
+    // the insert. It is set in a follow-up update inside the same transaction as the
+    // insert: a row with an empty path would be invisible to every descendant query.
+    const created = await db.transaction(async (tx) => {
+      const [inserted] = await tx
+        .insert(categories)
+        .values({
+          name,
+          slug,
+          description: description ?? null,
+          parentId: parentId ?? null,
+          path: "",
+          depth: parentPath === null ? 0 : depthOfPath(parentPath) + 1,
+          sortOrder: sortOrder ?? 0,
+        })
+        .returning();
+
+      const [withPath] = await tx
+        .update(categories)
+        .set({ path: childPath(parentPath, inserted.id) })
+        .where(eq(categories.id, inserted.id))
+        .returning();
+
+      return withPath;
+    });
+
+    return jsonOk(created, 201, { Location: `/api/categories/${created.id}` });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     console.error("[POST /api/categories]", err);

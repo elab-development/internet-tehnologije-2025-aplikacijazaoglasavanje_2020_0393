@@ -5,11 +5,18 @@ on:
     branches: [main, master]
 
 jobs:
+  # Gate the deploy on lint, type check and tests. `needs:` cannot reference a
+  # job in another workflow file, so CI is invoked as a reusable workflow --
+  # `needs: []` previously meant "no dependencies at all", and main shipped even
+  # with the suite red.
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+
   deploy:
     name: Build, Push & Deploy
     runs-on: ubuntu-latest
-    # Only run after CI passes
-    needs: []
+    needs: [ci]
 
     permissions:
       contents: read
@@ -18,6 +25,8 @@ jobs:
     env:
       REGISTRY: ghcr.io
       IMAGE_NAME: ${{ github.repository }}/c2c-e-commerce
+      # Job-level on purpose — see the Railway step below.
+      RAILWAY_DEPLOY_WEBHOOK: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
 
     steps:
       - name: Checkout code
@@ -57,10 +66,12 @@ jobs:
       # Railway supports deploy webhooks — trigger a redeploy after image push.
       # Set RAILWAY_DEPLOY_WEBHOOK secret in GitHub repo settings.
       # To get the webhook URL: Railway Dashboard → Project → Settings → Deploy Webhook
+      # The webhook is declared as job-level env above, not on this step. The
+      # `secrets` context is not available to a step's `if`, and a step's own
+      # env is not reliably applied before its `if` is evaluated -- either would
+      # make this condition always false and skip the deploy silently.
       - name: Trigger Railway deployment
-        if: env.RAILWAY_DEPLOY_WEBHOOK != ''
-        env:
-          RAILWAY_DEPLOY_WEBHOOK: ${{ secrets.RAILWAY_DEPLOY_WEBHOOK }}
+        if: ${{ env.RAILWAY_DEPLOY_WEBHOOK != '' }}
         run: |
           curl -X POST "$RAILWAY_DEPLOY_WEBHOOK" \
             -H "Content-Type: application/json" \

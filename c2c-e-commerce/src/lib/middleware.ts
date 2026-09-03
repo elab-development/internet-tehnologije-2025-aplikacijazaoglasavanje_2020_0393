@@ -1,8 +1,10 @@
 import { NextRequest } from "next/server";
 import { verifyToken, type TokenPayload } from "@/lib/auth";
+import { AUTH_COOKIE } from "@/lib/cookies";
 
 // ─── authenticate ─────────────────────────────────────────────────────────────
-// Extracts and verifies the Bearer JWT from the Authorization header.
+// Verifies the JWT carried either by the Authorization header (API clients,
+// Swagger UI) or by the httpOnly auth cookie (browsers).
 // Returns the decoded TokenPayload on success; throws a typed AuthError otherwise.
 
 export class AuthError extends Error {
@@ -15,14 +17,27 @@ export class AuthError extends Error {
   }
 }
 
-export function authenticate(request: NextRequest): TokenPayload {
+/**
+ * Reads the raw token from the request, preferring an explicit Authorization
+ * header over the cookie: a caller that sets the header is stating which
+ * identity it means to use, even in a browser that also holds a session cookie.
+ */
+function readToken(request: NextRequest): string | null {
   const authHeader = request.headers.get("authorization");
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw new AuthError("Missing or invalid Authorization header");
+  if (authHeader?.startsWith("Bearer ")) {
+    const bearer = authHeader.slice(7).trim(); // strip "Bearer "
+    if (bearer) return bearer;
   }
 
-  const token = authHeader.slice(7); // strip "Bearer "
+  return request.cookies?.get(AUTH_COOKIE)?.value ?? null;
+}
+
+export function authenticate(request: NextRequest): TokenPayload {
+  const token = readToken(request);
+
+  if (!token) {
+    throw new AuthError("Missing authentication token");
+  }
 
   try {
     return verifyToken(token);

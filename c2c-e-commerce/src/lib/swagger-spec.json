@@ -97,9 +97,24 @@
             "nullable": true,
             "example": "Gadgets & devices"
           },
-          "createdAt": {
+          "parentId": {
+            "type": "integer",
+            "nullable": true,
+            "example": null
+          },
+          "path": {
             "type": "string",
-            "format": "date-time"
+            "description": "Dot-separated ancestor ids, including this category.",
+            "example": "1.7.12"
+          },
+          "depth": {
+            "type": "integer",
+            "description": "0 for a root category.",
+            "example": 0
+          },
+          "sortOrder": {
+            "type": "integer",
+            "example": 0
           }
         }
       },
@@ -122,15 +137,18 @@
             "type": "string",
             "example": "999.99"
           },
-          "imageUrl": {
-            "type": "string",
+          "coverImageId": {
+            "type": "integer",
             "nullable": true,
-            "example": "https://images.unsplash.com/photo-abc"
+            "description": "Id of the listing's lowest-sort-order image, if it has one. Fetch the bytes from GET /api/images/{id}.",
+            "example": 12
           },
           "status": {
             "type": "string",
             "enum": [
+              "draft",
               "active",
+              "reserved",
               "sold",
               "removed"
             ],
@@ -155,6 +173,30 @@
           }
         }
       },
+      "ListingImage": {
+        "type": "object",
+        "description": "The client-facing shape of a photo, as returned by the upload endpoint and GET /api/listings/{id}'s `images` array (db/listing-images.ts#toImageSummary). `storageKey`, `listingId`, `contentType` and `byteSize` are deliberately not sent — the row's other columns are server-only. Fetch the bytes from GET /api/images/{id}.",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "example": 12
+          },
+          "sortOrder": {
+            "type": "integer",
+            "example": 0
+          },
+          "width": {
+            "type": "integer",
+            "nullable": true,
+            "example": 800
+          },
+          "height": {
+            "type": "integer",
+            "nullable": true,
+            "example": 600
+          }
+        }
+      },
       "Order": {
         "type": "object",
         "properties": {
@@ -166,22 +208,34 @@
             "type": "integer",
             "example": 3
           },
+          "sellerId": {
+            "type": "integer",
+            "example": 7
+          },
+          "listingId": {
+            "type": "integer",
+            "example": 5
+          },
+          "price": {
+            "type": "string",
+            "example": "999.99"
+          },
           "status": {
             "type": "string",
             "enum": [
               "pending",
-              "approved",
-              "rejected",
-              "paid",
+              "confirmed",
               "shipped",
               "completed",
-              "cancelled"
+              "cancelled",
+              "declined",
+              "expired"
             ],
             "example": "pending"
           },
-          "totalAmount": {
+          "expiresAt": {
             "type": "string",
-            "example": "1299.98"
+            "format": "date-time"
           },
           "createdAt": {
             "type": "string",
@@ -190,31 +244,6 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          }
-        }
-      },
-      "OrderItem": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer",
-            "example": 1
-          },
-          "orderId": {
-            "type": "integer",
-            "example": 1
-          },
-          "listingId": {
-            "type": "integer",
-            "example": 5
-          },
-          "quantity": {
-            "type": "integer",
-            "example": 1
-          },
-          "priceAtPurchase": {
-            "type": "string",
-            "example": "999.99"
           }
         }
       },
@@ -240,15 +269,17 @@
             "type": "integer",
             "example": 3
           },
-          "listingId": {
+          "sellerId": {
             "type": "integer",
-            "example": 5
+            "example": 5,
+            "description": "The user being reviewed"
+          },
+          "orderId": {
+            "type": "integer",
+            "example": 9,
+            "description": "The transaction being reviewed; unique across reviews"
           },
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
             "type": "string",
             "format": "date-time"
           }
@@ -300,7 +331,7 @@
     },
     {
       "name": "Reviews",
-      "description": "Listing reviews & ratings"
+      "description": "Seller reviews & ratings"
     }
   ],
   "paths": {
@@ -376,6 +407,24 @@
               }
             }
           },
+          "429": {
+            "description": "Too many login attempts from this IP, or too many *failed* attempts against this email address. A correct password is never refused with a 429.\n",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -395,7 +444,7 @@
           "Auth"
         ],
         "summary": "Log out the current user",
-        "description": "Validates the JWT and returns a confirmation. The client should discard\nthe token on its side. JWTs are stateless so server-side invalidation\nis a no-op unless a blocklist is implemented.\n",
+        "description": "Validates the JWT and clears the httpOnly `auth_token` cookie, ending\nthe browser session. The JWT is stateless, so a token held outside the\ncookie stays valid until it expires.\n",
         "security": [
           {
             "bearerAuth": []
@@ -403,7 +452,15 @@
         ],
         "responses": {
           "200": {
-            "description": "Logout confirmed",
+            "description": "Logout confirmed and auth cookie cleared",
+            "headers": {
+              "Set-Cookie": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Expires the auth_token cookie"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -412,10 +469,6 @@
                     "message": {
                       "type": "string",
                       "example": "Logged out successfully"
-                    },
-                    "hint": {
-                      "type": "string",
-                      "example": "Discard the token on the client side"
                     },
                     "sub": {
                       "type": "integer",
@@ -489,6 +542,244 @@
           },
           "404": {
             "description": "User not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}/callback": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "OAuth2 callback",
+        "description": "Validates `state` against the signed transaction cookie, exchanges the code, resolves or creates the user, and issues the session cookies. The access token is never placed in the redirect URL: it would land in browser history, server logs and the `Referer` header. The client picks the session up from the cookies.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect into the app on success, or to /login?error=<code>"
+          },
+          "404": {
+            "description": "Unknown or unconfigured provider"
+          },
+          "429": {
+            "description": "Too many attempts from this IP"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/{provider}": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Start an OAuth2 sign-in",
+        "description": "Redirects to the provider's authorization endpoint and stores the transaction (state, PKCE verifier, nonce, returnTo) in a short-lived signed cookie. Google receives a PKCE challenge; GitHub OAuth Apps do not support PKCE and receive `state` only.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "returnTo",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Same-site path to land on after signing in. External origins are ignored."
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the provider"
+          },
+          "404": {
+            "description": "Unknown or unconfigured provider"
+          },
+          "429": {
+            "description": "Too many attempts from this IP"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/link/{provider}": {
+      "delete": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Detach an external identity",
+        "description": "Removes the caller's link to a provider. Refuses when it is the caller's last remaining credential -- an OAuth-only account unlinking its only provider would have no way back in.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Unlinked"
+          },
+          "401": {
+            "description": "Not authenticated"
+          },
+          "404": {
+            "description": "No such link for this user"
+          },
+          "409": {
+            "description": "Would remove the caller's last credential"
+          }
+        }
+      }
+    },
+    "/api/auth/oauth/link": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Attach an external identity to an existing password account",
+        "description": "Completes the collision flow started by the OAuth callback. Requires the signed `link_tx` cookie **and** the existing account's password (decision D9): a provider-supplied email address is not proof of ownership, so the account's own credential is what authorises the link.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Linked and signed in"
+          },
+          "401": {
+            "description": "Missing or invalid link token, or wrong password"
+          },
+          "409": {
+            "description": "The identity is already linked"
+          },
+          "429": {
+            "description": "Too many attempts"
+          }
+        }
+      }
+    },
+    "/api/auth/providers": {
+      "get": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Which OAuth2 providers this deployment offers",
+        "description": "Public. The login page renders a button per entry, so a provider without credentials never shows a button that would 404. Returns only provider names -- no client ids, no redirect URIs.\n",
+        "responses": {
+          "200": {
+            "description": "The configured providers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "providers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "enum": [
+                          "google",
+                          "github"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "tags": [
+          "Auth"
+        ],
+        "summary": "Exchange a refresh token for a new access token",
+        "description": "Reads the httpOnly `refresh_token` cookie, rotates it, and returns a fresh 15-minute access token. Refresh tokens are single-use: presenting one that has already been rotated is treated as theft and revokes every token in its family, forcing a new login.\n",
+        "responses": {
+          "200": {
+            "description": "A new access token, with both session cookies refreshed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "token": {
+                      "type": "string",
+                      "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, unknown, expired, already-used, or concurrently-rotated refresh token. The reason is deliberately not distinguished in the response.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -597,6 +888,24 @@
               }
             }
           },
+          "429": {
+            "description": "Too many registration attempts from this IP, or too many *rejected* attempts against this email address. A registration that would succeed is never refused with a 429.\n",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -611,7 +920,7 @@
       }
     },
     "/api/categories/{id}": {
-      "put": {
+      "patch": {
         "tags": [
           "Categories"
         ],
@@ -880,6 +1189,17 @@
                     "type": "string",
                     "nullable": true,
                     "example": "Gadgets & devices"
+                  },
+                  "parentId": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "Parent category. Omit or send null for a root.",
+                    "example": 3
+                  },
+                  "sortOrder": {
+                    "type": "integer",
+                    "description": "Curated order among siblings.",
+                    "example": 0
                   }
                 }
               }
@@ -950,13 +1270,13 @@
         }
       }
     },
-    "/api/listings/{id}/reviews": {
+    "/api/images/{id}": {
       "get": {
         "tags": [
-          "Reviews"
+          "Listings"
         ],
-        "summary": "List reviews for a listing",
-        "description": "Returns all reviews for a specific listing, including the reviewer name.",
+        "summary": "Fetch a listing photo",
+        "description": "Publicly visible for a published listing — `active`, `reserved` or `sold` — matching when the listings API itself would show the parent listing to an anonymous caller, plus `reserved` and `sold` so a pending or completed purchase's photos keep rendering. A `draft` or `removed` listing's photos are visible only to its owner or an admin. Streams the stored bytes same-origin. Storage keys are random, so a URL never outlives the bytes it names.\n",
         "parameters": [
           {
             "in": "path",
@@ -964,76 +1284,36 @@
             "required": true,
             "schema": {
               "type": "integer"
-            },
-            "description": "Listing ID"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Array of reviews",
+            "description": "The image",
             "content": {
-              "application/json": {
+              "image/webp": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "allOf": [
-                      {
-                        "$ref": "#/components/schemas/Review"
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "reviewerName": {
-                            "type": "string",
-                            "nullable": true,
-                            "example": "Jane Smith"
-                          }
-                        }
-                      }
-                    ]
-                  }
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid listing id",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Invalid image id"
           },
           "404": {
-            "description": "Listing not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Image not found, or not visible to this caller"
           }
         }
-      },
-      "post": {
+      }
+    },
+    "/api/listings/{id}/images/{imageId}": {
+      "delete": {
         "tags": [
-          "Reviews"
+          "Listings"
         ],
-        "summary": "Create a review for a listing",
-        "description": "Adds a review to a listing. Only buyers can review.\nA user can only submit one review per listing.\n",
+        "summary": "Remove a photo from a listing",
         "security": [
           {
             "bearerAuth": []
@@ -1046,106 +1326,125 @@
             "required": true,
             "schema": {
               "type": "integer"
-            },
-            "description": "Listing ID"
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "rating"
-                ],
-                "properties": {
-                  "rating": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "maximum": 5,
-                    "example": 4
-                  },
-                  "comment": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "Great product!"
-                  }
-                }
-              }
+            }
+          },
+          {
+            "in": "path",
+            "name": "imageId",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
           }
-        },
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "403": {
+            "description": "Not the listing's owner"
+          },
+          "404": {
+            "description": "Listing or image not found"
+          }
+        }
+      }
+    },
+    "/api/listings/{id}/images": {
+      "post": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Upload a photo to a listing",
+        "description": "Multipart upload of a single `file`. The type is decided from the file's magic bytes, never its declared Content-Type or filename, and the image is re-encoded to WebP — which also strips EXIF, including any GPS coordinates. Owner or admin only. At most 8 images per listing, 5 MB each.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
         "responses": {
           "201": {
-            "description": "Review created",
+            "description": "The stored image",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Review"
+                  "$ref": "#/components/schemas/ListingImage"
                 }
               }
             }
           },
           "400": {
-            "description": "Validation error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Not a JPEG, PNG or WebP"
           },
           "401": {
-            "description": "Missing or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Missing or invalid token"
           },
           "403": {
-            "description": "Not a buyer",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Not the listing's owner"
           },
           "404": {
-            "description": "Listing not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Listing not found"
           },
           "409": {
-            "description": "Already reviewed this listing",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
+            "description": "Image limit reached"
           },
-          "500": {
-            "description": "Internal server error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
+          "413": {
+            "description": "File too large"
+          },
+          "429": {
+            "description": "Rate limited"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Reorder a listing's photos",
+        "description": "Body `{ order: number[] }` — image ids in their new order. Owner or admin.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
             }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reordered"
+          },
+          "400": {
+            "description": "Invalid body"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          },
+          "403": {
+            "description": "Not the listing's owner"
+          },
+          "404": {
+            "description": "Listing not found"
           }
         }
       }
@@ -1156,7 +1455,7 @@
           "Listings"
         ],
         "summary": "Get a listing by ID",
-        "description": "Returns a single listing with seller and category names.\nOnly active listings are visible publicly; the owner or admin can see any status.\n",
+        "description": "Returns a single listing with seller and category names.\nPublished listings (active, reserved or sold) are visible publicly; draft and\nremoved rows are visible only to the owner or an admin.\n",
         "parameters": [
           {
             "in": "path",
@@ -1184,6 +1483,16 @@
                         "sellerName": {
                           "type": "string",
                           "example": "John Doe"
+                        },
+                        "sellerAvatarUrl": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "sellerReviewCount": {
+                          "type": "integer"
+                        },
+                        "sellerRatingSum": {
+                          "type": "integer"
                         },
                         "categoryName": {
                           "type": "string",
@@ -1229,7 +1538,7 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "Listings"
         ],
@@ -1277,11 +1586,6 @@
                     ],
                     "example": 1099.99
                   },
-                  "imageUrl": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "https://images.unsplash.com/photo-xyz"
-                  },
                   "categoryId": {
                     "type": "integer",
                     "nullable": true,
@@ -1290,6 +1594,7 @@
                   "status": {
                     "type": "string",
                     "enum": [
+                      "draft",
                       "active",
                       "sold",
                       "removed"
@@ -1352,6 +1657,16 @@
               }
             }
           },
+          "409": {
+            "description": "A live order (pending, confirmed or shipped) is still holding this listing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
           "500": {
             "description": "Internal server error",
             "content": {
@@ -1369,7 +1684,7 @@
           "Listings"
         ],
         "summary": "Delete a listing",
-        "description": "Permanently removes a listing. Only the owner seller or an admin may delete.",
+        "description": "Only the owner seller or an admin may delete. A listing with no order history is\ndeleted outright, along with its stored images. A listing any order references is\nwithdrawn instead: `orders.listing_id` is RESTRICT, so the row cannot be deleted\nwhile an order still points at it. Withdrawing sets `status` to `removed`, which\nis outside PUBLIC_LISTING_STATUSES and so leaves browse, search and the public\ndetail route -- the buyer's order keeps pointing at something real, and its\nimages are left alone.\n\nThe response body's `status` field tells the two outcomes apart: `\"deleted\"` for\na hard delete, `\"removed\"` for a withdrawal.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1388,7 +1703,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Listing deleted",
+            "description": "Listing deleted or withdrawn — see `status` in the response body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1397,6 +1712,14 @@
                     "message": {
                       "type": "string",
                       "example": "Listing deleted successfully"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "deleted",
+                        "removed"
+                      ],
+                      "description": "`deleted` when the row was hard-deleted; `removed` when it was withdrawn instead because an order still references it.\n"
                     }
                   }
                 }
@@ -1446,13 +1769,264 @@
         }
       }
     },
+    "/api/listings/{id}/similar": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Listings similar to this one",
+        "description": "Nearest neighbours of a listing by embedding cosine distance. Public for a published source listing — this needs no user history at all, so it works on a visitor's first page view. A `draft` or `removed` source is visible only to its owner or an admin, same rule as `GET /api/images/{id}`: neighbours would otherwise disclose what an unpublished listing is about.\nOnly `active` listings with a computed embedding are returned as neighbours, and the source listing is never among them. A source listing whose own embedding has not been computed yet answers `200` with an empty array rather than an error.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The listing to find neighbours for"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 6,
+              "maximum": 20
+            },
+            "description": "How many neighbours to return (capped at 20)"
+          },
+          {
+            "in": "query",
+            "name": "sameCategoryOnly",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            },
+            "description": "Restrict results to the source listing's category. A source with no category returns an empty array under this filter rather than ignoring it.\n"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Similar listings, most similar first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Listing"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "similarity": {
+                            "type": "number",
+                            "description": "Cosine similarity in (0, 1]"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid listing id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Listing not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/listings/generate-description": {
+      "post": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Generate a listing description with a language model",
+        "description": "Turns a product title, and optionally some keywords and a category, into a marketplace description the seller can edit before saving. Nothing is stored — the client posts the edited text to the normal create route.\nThe model is instructed not to invent specifications or prices and not to include contact details, but the output is a **draft for a human to review**, not a statement of fact about the item.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 3,
+                    "maxLength": 120,
+                    "example": "Mountain bike"
+                  },
+                  "keywords": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "items": {
+                      "type": "string",
+                      "maxLength": 30
+                    },
+                    "example": [
+                      "26 inch",
+                      "aluminium"
+                    ]
+                  },
+                  "categoryName": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "example": "Bicycles"
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "en",
+                      "sr"
+                    ],
+                    "default": "en"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A generated description",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "description": {
+                      "type": "string",
+                      "description": "At most 2000 characters."
+                    },
+                    "model": {
+                      "type": "string",
+                      "description": "The model that produced the text."
+                    },
+                    "generatedAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body — title length, keyword count or keyword length",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Authenticated, but not a seller or admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Generation quota exhausted for this account",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Seconds to wait before retrying"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The language model was unreachable, timed out, or returned nothing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/listings": {
       "get": {
         "tags": [
           "Listings"
         ],
         "summary": "List listings",
-        "description": "Returns paginated active listings with optional filters.\nWhen `sellerId` is provided, all statuses are returned (for seller dashboard).\n",
+        "description": "Returns paginated active listings with optional filters.\nWhen `sellerId` matches the authenticated seller (or the caller is an\nadmin), non-active listings are included too, for the seller dashboard.\nAll other callers only ever receive active listings.\n",
         "parameters": [
           {
             "in": "query",
@@ -1479,7 +2053,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Filter by category ID"
+            "description": "Category id. Includes every descendant category, so filtering by a parent returns listings filed under its subcategories.\n"
           },
           {
             "in": "query",
@@ -1487,7 +2061,7 @@
             "schema": {
               "type": "integer"
             },
-            "description": "Filter by seller ID (returns all statuses)"
+            "description": "Filter by seller ID. Returns all statuses only when it is the authenticated seller's own ID; otherwise active listings only.\n"
           },
           {
             "in": "query",
@@ -1511,7 +2085,21 @@
             "schema": {
               "type": "string"
             },
-            "description": "Search by title (case-insensitive contains)"
+            "description": "Search term. In `keyword` mode it matches the title (case-insensitive contains); in `semantic` and `hybrid` mode it is embedded and compared against listing vectors.\n"
+          },
+          {
+            "in": "query",
+            "name": "mode",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "keyword",
+                "semantic",
+                "hybrid"
+              ],
+              "default": "keyword"
+            },
+            "description": "How `search` is interpreted.\n`keyword` (default) is the original behaviour and is unchanged.\n`semantic` embeds the query and ranks by cosine similarity, returning only matches at or above a similarity floor of 0.25. Listings whose embedding has not been computed are excluded.\n`hybrid` runs the keyword and semantic arms independently and fuses them with reciprocal rank fusion (k = 60), so a listing matching both outranks one matching either alone. A listing with no embedding is still reachable through the keyword arm.\n**`total` differs by mode.** In `keyword` mode it counts every row matching the filters. In `semantic` and `hybrid` mode it counts only ranked candidates — rows above the similarity floor, or the fused candidate set — so it is not the size of the table.\nWith no `search` term, `semantic` and `hybrid` behave as `keyword`: there is nothing to embed.\n"
           },
           {
             "in": "query",
@@ -1556,6 +2144,34 @@
                       "type": "integer"
                     }
                   }
+                },
+                "examples": {
+                  "semantic": {
+                    "summary": "Semantic mode adds a similarity to each row",
+                    "value": {
+                      "data": [
+                        {
+                          "id": 12,
+                          "title": "Insulated parka, size L",
+                          "similarity": 0.61
+                        }
+                      ],
+                      "total": 1,
+                      "page": 1,
+                      "limit": 20,
+                      "totalPages": 1
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid `mode` value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
                 }
               }
             }
@@ -1614,15 +2230,18 @@
                     ],
                     "example": 999.99
                   },
-                  "imageUrl": {
-                    "type": "string",
-                    "nullable": true,
-                    "example": "https://images.unsplash.com/photo-abc"
-                  },
                   "categoryId": {
                     "type": "integer",
                     "nullable": true,
                     "example": 2
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "draft"
+                    ],
+                    "description": "Omit for an immediately-published listing (the default, \"active\"). The only status a caller may request at creation time is \"draft\" — see the create-as-draft upload flow in the design doc.\n",
+                    "example": "draft"
                   }
                 }
               }
@@ -1683,13 +2302,136 @@
         }
       }
     },
+    "/api/orders/{id}/review": {
+      "post": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Review the seller on a completed order",
+        "description": "Reviews are posted against the order because the order is the thing being\nreviewed — it is the proof that the transaction happened, and it is what makes\none review per transaction enforceable.\n\nEligibility is the whole of the rule: the caller is this order's buyer and the\norder is `completed`. A caller who is not party to the order gets **404** rather\nthan 403, because order ids are sequential.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Order ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rating"
+                ],
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "example": 5
+                  },
+                  "comment": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "Packed well, shipped the same day."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Review created; the seller's aggregates moved with it",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid order id or body",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "A party to the order who is not its buyer, or the order is not completed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such order, or not the caller's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "This order has already been reviewed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/orders/{id}": {
       "get": {
         "tags": [
           "Orders"
         ],
         "summary": "Get an order by ID",
-        "description": "Returns a single order with its items. Only the buyer who placed it or an admin can view.",
+        "description": "Returns a single order with the listing it reserves. Only the buyer who placed\nit, the seller who is selling it, or an admin can view. Anyone else receives\n404, not 403.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1708,7 +2450,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Order details with items",
+            "description": "Order details with its listing's title and cover image",
             "content": {
               "application/json": {
                 "schema": {
@@ -1719,24 +2461,19 @@
                     {
                       "type": "object",
                       "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "allOf": [
-                              {
-                                "$ref": "#/components/schemas/OrderItem"
-                              },
-                              {
-                                "type": "object",
-                                "properties": {
-                                  "listingTitle": {
-                                    "type": "string",
-                                    "example": "iPhone 15 Pro"
-                                  }
-                                }
-                              }
-                            ]
-                          }
+                        "listingTitle": {
+                          "type": "string",
+                          "example": "iPhone 15 Pro"
+                        },
+                        "coverImageId": {
+                          "type": "integer",
+                          "nullable": true,
+                          "example": 42
+                        },
+                        "reviewId": {
+                          "type": "integer",
+                          "nullable": true,
+                          "description": "The review of this order, if the buyer has left one"
                         }
                       }
                     }
@@ -1765,18 +2502,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
           "404": {
-            "description": "Order not found",
+            "description": "Order not found, or not one the caller is party to",
             "content": {
               "application/json": {
                 "schema": {
@@ -1802,7 +2529,7 @@
           "Orders"
         ],
         "summary": "Update order status",
-        "description": "Updates the status of an order.\n- **Admin**: can change to any status.\n- **Seller**: can only approve/reject pending orders that contain their listings.\nWhen a seller approves, their listings in the order are marked as \"sold\".\n",
+        "description": "Moves an order through the lifecycle. Which transitions are available depends on\nthe caller's relationship to this order, not on their role:\n- **Buyer**: cancel (from pending, confirmed or shipped); mark received (from shipped).\n- **Seller**: confirm or decline (from pending); mark shipped (from confirmed); cancel (from confirmed or shipped).\n- **Admin**: any legal transition.\n\nConfirming marks the listing sold. Declining, cancelling or expiring returns it\nto browse. Anyone who is not a party to the order receives 404, not 403.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1833,14 +2560,14 @@
                     "type": "string",
                     "enum": [
                       "pending",
-                      "paid",
+                      "confirmed",
                       "shipped",
                       "completed",
                       "cancelled",
-                      "approved",
-                      "rejected"
+                      "declined",
+                      "expired"
                     ],
-                    "example": "approved"
+                    "example": "confirmed"
                   }
                 }
               }
@@ -1859,7 +2586,7 @@
             }
           },
           "400": {
-            "description": "Validation error or invalid status transition",
+            "description": "Validation error — malformed body, or a status outside the enum",
             "content": {
               "application/json": {
                 "schema": {
@@ -1878,8 +2605,8 @@
               }
             }
           },
-          "403": {
-            "description": "Forbidden",
+          "404": {
+            "description": "Order not found, or not one the caller is party to",
             "content": {
               "application/json": {
                 "schema": {
@@ -1888,8 +2615,8 @@
               }
             }
           },
-          "404": {
-            "description": "Order not found",
+          "409": {
+            "description": "The transition is not legal for this caller, another party moved the order first, or the listing is no longer available to sell",
             "content": {
               "application/json": {
                 "schema": {
@@ -1915,7 +2642,7 @@
           "Orders"
         ],
         "summary": "Delete an order",
-        "description": "Permanently removes an order and its items. Admin only.",
+        "description": "Permanently removes an order. Admin only. A deleted pending order no longer\nholds its listing, so the listing is returned to browse in the same transaction.\n",
         "security": [
           {
             "bearerAuth": []
@@ -1997,22 +2724,60 @@
         "tags": [
           "Orders"
         ],
-        "summary": "List orders",
-        "description": "Buyers see only their own orders. Admins see all orders.\nResults are sorted by creation date (newest first).\n",
+        "summary": "List the caller's purchases",
+        "description": "What the caller bought, whatever role they hold — a seller's own purchases appear\nhere, their sales appear in `/api/orders/seller`. Admins see every order.\nSorted newest first.\n",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of orders",
+            "description": "Paginated orders",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Order"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Order"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }
@@ -2020,16 +2785,6 @@
           },
           "401": {
             "description": "Missing or invalid token",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Forbidden",
             "content": {
               "application/json": {
                 "schema": {
@@ -2054,8 +2809,8 @@
         "tags": [
           "Orders"
         ],
-        "summary": "Create an order",
-        "description": "Creates a new order from one or more active listings.\nOnly buyers can place orders. Total is calculated server-side.\n",
+        "summary": "Reserve a listing",
+        "description": "Claims the listing for the caller and creates a pending order priced from the\nlisting row. The listing becomes `reserved` and the seller has 48 hours to\nconfirm or decline before the reservation lapses.\n\nAnyone signed in may buy, including sellers — but not their own listing.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2068,30 +2823,12 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "items"
+                  "listingId"
                 ],
                 "properties": {
-                  "items": {
-                    "type": "array",
-                    "minItems": 1,
-                    "items": {
-                      "type": "object",
-                      "required": [
-                        "listingId"
-                      ],
-                      "properties": {
-                        "listingId": {
-                          "type": "integer",
-                          "example": 5
-                        },
-                        "quantity": {
-                          "type": "integer",
-                          "minimum": 1,
-                          "default": 1,
-                          "example": 1
-                        }
-                      }
-                    }
+                  "listingId": {
+                    "type": "integer",
+                    "example": 5
                   }
                 }
               }
@@ -2100,26 +2837,11 @@
         },
         "responses": {
           "201": {
-            "description": "Order created",
+            "description": "Order created and listing reserved",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Order"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "items": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/OrderItem"
-                          }
-                        }
-                      }
-                    }
-                  ]
+                  "$ref": "#/components/schemas/Order"
                 }
               }
             }
@@ -2145,7 +2867,7 @@
             }
           },
           "403": {
-            "description": "Not a buyer",
+            "description": "The caller is the listing's seller",
             "content": {
               "application/json": {
                 "schema": {
@@ -2155,7 +2877,17 @@
             }
           },
           "404": {
-            "description": "Listing not found or not active",
+            "description": "No such listing, or it is not currently purchasable (draft or removed)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Another buyer reserved it first, or an order already in progress is still\nholding this listing (an admin relisted it without settling that order).\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -2183,71 +2915,103 @@
           "Orders"
         ],
         "summary": "List seller's incoming orders",
-        "description": "Returns orders that contain at least one item from the authenticated seller's\nlistings. Each order includes only the items belonging to the seller, plus\nthe buyer's name and email. Requires seller or admin role.\n",
+        "description": "Returns every order whose `seller_id` is the authenticated seller — the seller\ncaptured at order time, not the listing's current owner. Requires seller or\nadmin role.\n",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of seller orders",
+            "description": "Paginated seller orders",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "integer"
-                      },
-                      "buyerId": {
-                        "type": "integer"
-                      },
-                      "buyerName": {
-                        "type": "string"
-                      },
-                      "buyerEmail": {
-                        "type": "string"
-                      },
-                      "totalPrice": {
-                        "type": "string"
-                      },
-                      "status": {
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time"
-                      },
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
                       "items": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "integer"
-                            },
-                            "listingId": {
-                              "type": "integer"
-                            },
-                            "listingTitle": {
-                              "type": "string"
-                            },
-                            "listingImageUrl": {
-                              "type": "string",
-                              "nullable": true
-                            },
-                            "quantity": {
-                              "type": "integer"
-                            },
-                            "price": {
-                              "type": "string"
-                            }
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "integer"
+                          },
+                          "buyerId": {
+                            "type": "integer"
+                          },
+                          "sellerId": {
+                            "type": "integer"
+                          },
+                          "buyerName": {
+                            "type": "string"
+                          },
+                          "buyerEmail": {
+                            "type": "string"
+                          },
+                          "listingId": {
+                            "type": "integer"
+                          },
+                          "listingTitle": {
+                            "type": "string"
+                          },
+                          "coverImageId": {
+                            "type": "integer",
+                            "nullable": true
+                          },
+                          "price": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
                           }
                         }
                       }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
                     }
                   }
                 }
@@ -2287,13 +3051,196 @@
         }
       }
     },
+    "/api/recommendations": {
+      "get": {
+        "tags": [
+          "Listings"
+        ],
+        "summary": "Listings recommended for the authenticated user",
+        "description": "Personalised from data the marketplace already has — what the user ordered and what they reviewed. No browsing or view history is tracked.\nA user with no usable history gets the newest active listings from the most populated categories instead. The `strategy` field says which of the two happened, so a client never presents a popular list as a personal one.\nListings the user already ordered, their own listings, and anything not `active` are excluded from both strategies.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "maximum": 50
+            },
+            "description": "How many recommendations to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recommendations, best first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Listing"
+                      }
+                    },
+                    "strategy": {
+                      "type": "string",
+                      "enum": [
+                        "personalised",
+                        "popular"
+                      ],
+                      "description": "`personalised` — ranked against a taste vector built from the user's orders and reviews. `popular` — the cold-start fallback.\n"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/reviews/{id}": {
+      "patch": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "Edit a review",
+        "description": "Changes the rating, the comment, or both. Only the author or an admin may edit —\ndeliberately **not** the seller being reviewed, which is the one edit that would\nmake the ratings worthless.\n\nA changed rating moves the seller's `ratingSum` in the same transaction and leaves\n`reviewCount` alone: it is still one review.\n",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Review ID"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "minProperties": 1,
+                "properties": {
+                  "rating": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 5,
+                    "example": 4
+                  },
+                  "comment": {
+                    "type": "string",
+                    "nullable": true,
+                    "example": "Revised after a second look."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated review",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Review"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid review id, or no updatable fields",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Not the author or an admin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Review not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "tags": [
           "Reviews"
         ],
         "summary": "Delete a review",
-        "description": "Permanently removes a review. Only the reviewer or an admin can delete.",
+        "description": "Permanently removes a review. Only the reviewer or an admin can delete. The\nseller's `reviewCount` and `ratingSum` are adjusted in the same transaction.\n",
         "security": [
           {
             "bearerAuth": []
@@ -2359,6 +3306,143 @@
           },
           "404": {
             "description": "Review not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/users/{id}/reviews": {
+      "get": {
+        "tags": [
+          "Reviews"
+        ],
+        "summary": "A seller's reviews, newest first",
+        "description": "Public and paginated. The `seller` envelope carries the denormalised reputation\n(D7) and a derived `averageRating` — `null` for a seller nobody has reviewed,\nbecause a 0 would read as five one-star reviews.\n\nDeliberately narrow: the display name, the avatar and the two counters, and\nnothing else off the user record. `GET /api/users/{id}` remains restricted to the\nuser themselves and admins.\n\n`total` is read from `reviewCount` rather than counted, which is what the\ndenormalisation is for.\n",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The seller's user ID"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The seller's summary and a page of their reviews",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "seller": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "avatarUrl": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "reviewCount": {
+                          "type": "integer"
+                        },
+                        "ratingSum": {
+                          "type": "integer"
+                        },
+                        "averageRating": {
+                          "type": "number",
+                          "nullable": true
+                        }
+                      }
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Review"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "reviewerName": {
+                                "type": "string",
+                                "nullable": true
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid user id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -2466,7 +3550,7 @@
           }
         }
       },
-      "put": {
+      "patch": {
         "tags": [
           "Users"
         ],
@@ -2675,21 +3759,59 @@
           "Users"
         ],
         "summary": "List all users",
-        "description": "Returns all users sorted by creation date. Admin only. Passwords are excluded.",
+        "description": "Returns paginated users sorted by creation date. Admin only. Passwords are excluded.",
         "security": [
           {
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "Page number"
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 100
+            },
+            "description": "Items per page (max 100)"
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Array of users",
+            "description": "Paginated users",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/User"
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/User"
+                      }
+                    },
+                    "total": {
+                      "type": "integer"
+                    },
+                    "page": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "totalPages": {
+                      "type": "integer"
+                    }
                   }
                 }
               }

@@ -1,56 +1,101 @@
 @import "tailwindcss";
 
-/* ─── Brand tokens ──────────────────────────────────────────────────────────── */
+/* ─── Design tokens — market signage ─────────────────────────────────────────
+   One rule holds this palette together: colour means category, and it means
+   nothing else. The five category hues below are reserved; anything that is not
+   a category is drawn in the neutrals, and order/listing state gets three
+   deliberately duller colours of its own so a status chip can never be mistaken
+   for a category. */
 :root {
-  --background: #f8f9fc;
-  --foreground: #111827;
+  --background: #fafaf8;
+  --foreground: #141414;
 
-  /* Brand palette — indigo-based */
-  --brand-50:  #eef2ff;
-  --brand-100: #e0e7ff;
-  --brand-200: #c7d2fe;
-  --brand-500: #6366f1;
-  --brand-600: #4f46e5;
-  --brand-700: #4338ca;
+  /* Neutrals */
+  --paper: #fafaf8;
+  --surface: #ffffff;
+  --inset: #f1f1ee;
+  --ink: #141414;
+  --ink-2: #5a5a57;
+  --ink-3: #8e8e8a;
+  --rule: #dededa;
+  --rule-strong: #c7c7c2;
 
-  /* Surface / border */
-  --surface:        #ffffff;
-  --surface-raised: #ffffff;
-  --border:         #e5e7eb;
-  --border-muted:   #f3f4f6;
+  /* Category hues — reserved. One per top-level category. */
+  --cat-electronics: #1b4de4;
+  --cat-clothing: #d9376e;
+  --cat-home: #0b7285;
+  --cat-books: #e4661b;
+  --cat-sports: #6b3fd4;
 
-  /* Text */
-  --text-primary:   #111827;
-  --text-secondary: #4b5563;
-  --text-muted:     #9ca3af;
+  /* Category tints — the empty-photo stand-in, so a listing with no upload
+     still reads as belonging somewhere. */
+  --cat-electronics-tint: #e4eafb;
+  --cat-clothing-tint: #fbe4ec;
+  --cat-home-tint: #deeef2;
+  --cat-books-tint: #fceadd;
+  --cat-sports-tint: #ede6fb;
+  --cat-none-tint: #f1f1ee;
 
-  /* Status */
-  --success-bg: #ecfdf5;
-  --success-border: #a7f3d0;
-  --success-text: #065f46;
+  /* State — never one of the five above */
+  --go: #12813f;
+  --go-ink: #0c5c2c;
+  --go-tint: #e1f1e7;
+  --go-rule: #b9dcc7;
 
-  --error-bg: #fef2f2;
-  --error-border: #fecaca;
-  --error-text: #991b1b;
+  --wait: #9a6700;
+  --wait-ink: #7a5100;
+  --wait-tint: #f7eedb;
+  --wait-rule: #e4d2a8;
 
-  --warning-bg: #fffbeb;
-  --warning-border: #fde68a;
-  --warning-text: #92400e;
+  --stop: #c4231c;
+  --stop-ink: #96170f;
+  --stop-tint: #fae4e2;
+  --stop-rule: #efc3bf;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
 
-  /* expose brand as Tailwind color utilities */
-  --color-brand-50:  var(--brand-50);
-  --color-brand-100: var(--brand-100);
-  --color-brand-200: var(--brand-200);
-  --color-brand-500: var(--brand-500);
-  --color-brand-600: var(--brand-600);
-  --color-brand-700: var(--brand-700);
+  --font-sans: var(--font-public-sans);
+  --font-display: var(--font-bricolage);
+
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-inset: var(--inset);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-cat-electronics: var(--cat-electronics);
+  --color-cat-clothing: var(--cat-clothing);
+  --color-cat-home: var(--cat-home);
+  --color-cat-books: var(--cat-books);
+  --color-cat-sports: var(--cat-sports);
+
+  --color-cat-electronics-tint: var(--cat-electronics-tint);
+  --color-cat-clothing-tint: var(--cat-clothing-tint);
+  --color-cat-home-tint: var(--cat-home-tint);
+  --color-cat-books-tint: var(--cat-books-tint);
+  --color-cat-sports-tint: var(--cat-sports-tint);
+  --color-cat-none-tint: var(--cat-none-tint);
+
+  --color-go: var(--go);
+  --color-go-ink: var(--go-ink);
+  --color-go-tint: var(--go-tint);
+  --color-go-rule: var(--go-rule);
+
+  --color-wait: var(--wait);
+  --color-wait-ink: var(--wait-ink);
+  --color-wait-tint: var(--wait-tint);
+  --color-wait-rule: var(--wait-rule);
+
+  --color-stop: var(--stop);
+  --color-stop-ink: var(--stop-ink);
+  --color-stop-tint: var(--stop-tint);
+  --color-stop-rule: var(--stop-rule);
 }
 
 /* ─── Base styles ──────────────────────────────────────────────────────────── */
@@ -61,31 +106,87 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans, system-ui, Arial, sans-serif);
+  font-family: var(--font-public-sans, "Helvetica Neue", Arial, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  line-height: 1.6;
+  line-height: 1.55;
+}
+
+/* Display face for headings. Set once here rather than as a `font-display` class
+   on every heading in the app — the pairing is a property of the type system, not
+   of any one screen. */
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-bricolage, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-weight: 700;
+  letter-spacing: -0.021em;
+  line-height: 1.08;
+}
+
+/* ─── Utilities ────────────────────────────────────────────────────────────── */
+
+/* Small caps label used for eyebrows, column heads and table headers. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* Prices, counts and anything that lines up in a column. */
+.figure {
+  font-family: var(--font-bricolage, "Helvetica Neue", Helvetica, Arial, sans-serif);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 /* ─── Skeleton shimmer animation ───────────────────────────────────────────── */
 @keyframes skeleton-shimmer {
-  0%   { background-position: -400px 0; }
-  100% { background-position:  400px 0; }
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
 }
 
 .skeleton-shimmer {
-  background: linear-gradient(
-    90deg,
-    #f3f4f6 25%,
-    #e5e7eb 50%,
-    #f3f4f6 75%
-  );
+  background: linear-gradient(90deg, #f1f1ee 25%, #dededa 50%, #f1f1ee 75%);
   background-size: 800px 100%;
   animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 
-/* ─── Focus ring utility ────────────────────────────────────────────────────── */
+/* ─── Focus ring ───────────────────────────────────────────────────────────── */
+/* A hard square ring rather than a soft glow: this palette has no shadows, and a
+   blurred focus ring would be the only soft edge in the interface. */
 :focus-visible {
-  outline: 2px solid var(--brand-600);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+
+/* ─── Reduced motion ────────────────────────────────────────────────────────── */
+/* A grid of eight shimmering skeletons on a slow connection animates indefinitely,
+   which is the classic vestibular trigger. Everything here is decoration; none of it
+   carries meaning, so switching it off costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .skeleton-shimmer {
+    animation: none;
+    background: #f1f1ee;
+  }
 }

@@ -70,7 +70,14 @@ const swaggerDefinition = {
           name: { type: "string", example: "Electronics" },
           slug: { type: "string", example: "electronics" },
           description: { type: "string", nullable: true, example: "Gadgets & devices" },
-          createdAt: { type: "string", format: "date-time" },
+          parentId: { type: "integer", nullable: true, example: null },
+          path: {
+            type: "string",
+            description: "Dot-separated ancestor ids, including this category.",
+            example: "1.7.12",
+          },
+          depth: { type: "integer", description: "0 for a root category.", example: 0 },
+          sortOrder: { type: "integer", example: 0 },
         },
       },
       Listing: {
@@ -80,12 +87,32 @@ const swaggerDefinition = {
           title: { type: "string", example: "iPhone 15 Pro" },
           description: { type: "string", example: "Brand new, sealed." },
           price: { type: "string", example: "999.99" },
-          imageUrl: { type: "string", nullable: true, example: "https://images.unsplash.com/photo-abc" },
-          status: { type: "string", enum: ["active", "sold", "removed"], example: "active" },
+          coverImageId: {
+            type: "integer",
+            nullable: true,
+            description: "Id of the listing's lowest-sort-order image, if it has one. Fetch the bytes from GET /api/images/{id}.",
+            example: 12,
+          },
+          status: { type: "string", enum: ["draft", "active", "reserved", "sold", "removed"], example: "active" },
           sellerId: { type: "integer", example: 1 },
           categoryId: { type: "integer", nullable: true, example: 2 },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      ListingImage: {
+        type: "object",
+        description:
+          "The client-facing shape of a photo, as returned by the upload endpoint and " +
+          "GET /api/listings/{id}'s `images` array (db/listing-images.ts#toImageSummary). " +
+          "`storageKey`, `listingId`, `contentType` and `byteSize` are deliberately not " +
+          "sent — the row's other columns are server-only. Fetch the bytes from " +
+          "GET /api/images/{id}.",
+        properties: {
+          id: { type: "integer", example: 12 },
+          sortOrder: { type: "integer", example: 0 },
+          width: { type: "integer", nullable: true, example: 800 },
+          height: { type: "integer", nullable: true, example: 600 },
         },
       },
       Order: {
@@ -93,24 +120,17 @@ const swaggerDefinition = {
         properties: {
           id: { type: "integer", example: 1 },
           buyerId: { type: "integer", example: 3 },
+          sellerId: { type: "integer", example: 7 },
+          listingId: { type: "integer", example: 5 },
+          price: { type: "string", example: "999.99" },
           status: {
             type: "string",
-            enum: ["pending", "approved", "rejected", "paid", "shipped", "completed", "cancelled"],
+            enum: ["pending", "confirmed", "shipped", "completed", "cancelled", "declined", "expired"],
             example: "pending",
           },
-          totalAmount: { type: "string", example: "1299.98" },
+          expiresAt: { type: "string", format: "date-time" },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
-        },
-      },
-      OrderItem: {
-        type: "object",
-        properties: {
-          id: { type: "integer", example: 1 },
-          orderId: { type: "integer", example: 1 },
-          listingId: { type: "integer", example: 5 },
-          quantity: { type: "integer", example: 1 },
-          priceAtPurchase: { type: "string", example: "999.99" },
         },
       },
       Review: {
@@ -120,9 +140,13 @@ const swaggerDefinition = {
           rating: { type: "integer", minimum: 1, maximum: 5, example: 4 },
           comment: { type: "string", nullable: true, example: "Great seller!" },
           reviewerId: { type: "integer", example: 3 },
-          listingId: { type: "integer", example: 5 },
+          sellerId: { type: "integer", example: 5, description: "The user being reviewed" },
+          orderId: {
+            type: "integer",
+            example: 9,
+            description: "The transaction being reviewed; unique across reviews",
+          },
           createdAt: { type: "string", format: "date-time" },
-          updatedAt: { type: "string", format: "date-time" },
         },
       },
       Pagination: {
@@ -142,7 +166,7 @@ const swaggerDefinition = {
     { name: "Categories", description: "Product categories" },
     { name: "Listings", description: "Marketplace listings" },
     { name: "Orders", description: "Purchase orders" },
-    { name: "Reviews", description: "Listing reviews & ratings" },
+    { name: "Reviews", description: "Seller reviews & ratings" },
   ],
 };
 

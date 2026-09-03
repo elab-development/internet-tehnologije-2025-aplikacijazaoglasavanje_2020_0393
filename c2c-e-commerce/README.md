@@ -16,6 +16,165 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Environment variables
+
+Copy `.env.example` to `.env.local` and fill it in. `.env.local` is never committed.
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `DATABASE_URL` | yes | — | Postgres connection string |
+| `JWT_SECRET` | yes | — | Signing key for access tokens (HS256) |
+| `LLM_PROVIDER` | no | `mock` under `NODE_ENV=test`, otherwise `groq` | Which language-model provider to use: `groq` or `mock` |
+| `GROQ_API_KEY` | when `LLM_PROVIDER=groq` | — | Groq API key |
+| `GROQ_MODEL` | no | `qwen/qwen3.8-27b` | Open-weights model to call |
+| `LLM_TIMEOUT_MS` | no | `15000` | Abort a completion that takes longer than this |
+| `EMBEDDING_PROVIDER` | no | `mock` under `NODE_ENV=test`, otherwise `local` | `local` runs the embedding model in-process; `mock` is deterministic and offline |
+| `TRANSFORMERS_CACHE` | no | package-internal | Directory holding the embedding model files |
+
+### Getting a free Groq API key
+
+1. Sign up at [console.groq.com](https://console.groq.com) — the free tier needs no card.
+2. Open [console.groq.com/keys](https://console.groq.com/keys) and create an API key.
+3. Put it in `.env.local` as `GROQ_API_KEY=gsk_…` and set `LLM_PROVIDER=groq`.
+
+The free tier allows roughly 30 requests per minute, which is why `LLM_TIMEOUT_MS`
+exists and why AI endpoints are rate-limited.
+
+A missing or blank `GROQ_API_KEY` makes the provider throw when it is constructed. It
+does **not** fall back to the mock: a deployment that quietly serves fabricated
+descriptions is a worse failure than one that refuses to start.
+
+Set `LLM_PROVIDER=mock` to develop with no key and no network. The mock is deterministic —
+the same prompt always yields the same text — which is what makes the AI tests reproducible.
+
+## Listing embeddings
+
+`POST /api/listings` and `PUT /api/listings/[id]` embed a listing's title and description
+as they write it. The measured cost on this machine, with the local provider warm:
+
+| | |
+|---|---|
+| First embed in a process (model load) | ~1.9 s |
+| p50 added to a write | **17 ms** |
+| p95 added to a write | 27 ms |
+
+The story budgeted 100–300 ms, so the real cost is an order of magnitude smaller. The
+one-off model load is paid at server start rather than on the first request:
+`src/instrumentation.ts` calls `warmupEmbeddings()` on the Node runtime, and logs and
+continues if it fails — a marketplace that cannot embed still runs on keyword search.
+
+**An embedding failure never fails the write.** The listing is stored with
+`embedding = NULL`, the failure is logged once with the listing id, and the row stays fully
+keyword-searchable until the backfill fills it in. A `PUT` that changes the text but cannot
+re-embed clears the stale vector rather than leaving one that describes text no longer
+there.
+
+`PUT` re-embeds only when the embedded *text* changed — a price, status, image or category
+edit costs nothing, and neither does resubmitting an identical title.
+
+### Backfilling
+
+```bash
+npm run db:backfill-embeddings
+```
+
+Embeds every listing whose vector is missing or older than its text
+(`embedding IS NULL OR embedding_updated_at < updated_at`). Safely re-runnable: a second
+run with nothing stale processes zero rows and exits 0. It prints a
+processed / skipped / failed summary, and exits non-zero only if a row actually failed —
+a listing with no embeddable text is *skipped*, not failed.
+
+## Database migrations
+
+Applied in order by `npm run db:migrate`, which reads `drizzle/meta/_journal.json` rather
+than the directory listing — a `.sql` file without a journal entry is silently skipped.
+
+| # | Migration | What it does |
+|---|---|---|
+| 0000 | `initial_schema` | Users, categories, listings, orders, order items, reviews |
+| 0001 | `add_phone_number_to_users` | `users.phone_number` |
+| 0002 | `add_rating_check_and_description_notnull` | Rating 1–5 constraint; `listings.description` NOT NULL |
+| 0003 | `add_image_url_to_listings` | `listings.image_url` |
+| 0004 | `add_approved_rejected_order_status` | `approved` and `rejected` order statuses |
+| 0005 | `enable_pgvector` | `CREATE EXTENSION IF NOT EXISTS vector` |
+| 0006 | `add_listing_embedding` | `listings.embedding vector(384)` (nullable), `listings.embedding_updated_at`, and the HNSW cosine index |
+| 0007 | `add_listing_updated_at` | `listings.updated_at`, seeded from `created_at`, so the backfill can detect stale vectors |
+
+0005 and 0006 are hand-written: `drizzle-kit` emits neither `CREATE EXTENSION` nor an HNSW
+index with an operator class. They are kept apart because installing an extension is a
+database-level privilege operation and adding a column is not — on a managed host that
+withholds the former, an administrator can apply 0005 out-of-band.
+
+### Checking a deployed database for pgvector
+
+Postgres must have the `vector` extension available. The compose files use
+`pgvector/pgvector:pg16`, so local development needs no extra step. Before deploying, check
+the managed database:
+
+```bash
+DATABASE_URL="<production url>" npm run db:check-pgvector
+```
+
+It reports whether the extension is available, whether the connecting role may install it,
+and whether an HNSW index with `vector_cosine_ops` can be created. Exit code 0 means
+migrations 0005 and 0006 will apply.
+
+### Scheduled maintenance scripts
+
+| Command | What it does |
+|---|---|
+| `npm run db:expire-reservations` | Return listings held by lapsed reservations to browse. Safe to run repeatedly; a cron entry every ten minutes is ample for a 48-hour deadline. Correctness does not depend on it — placing an order expires whatever is holding that listing first. |
+
+## Generating listing descriptions
+
+`POST /api/listings/generate-description` turns a title, and optionally keywords and a
+category, into a description a seller can edit. Sellers and admins only; nothing is stored.
+
+```json
+{ "title": "Mountain bike", "keywords": ["26 inch", "aluminium"], "language": "en" }
+```
+
+Answers `{ description, model, generatedAt }`. The description is capped at 2 000
+characters and the model is instructed to write 60–120 words of plain text, invent no
+specifications and no price, and include no contact details.
+
+**It is a draft for a human to review, not a statement of fact about the item.** The
+constraints reduce the ways a generated description can mislead a buyer; they do not
+eliminate them.
+
+Rate-limited to 10 generations per hour **per account** — the endpoint is authenticated, so
+the budget belongs to the user rather than to whoever shares their IP. Exceeding it answers
+`429` with `Retry-After`. If the model is unreachable, times out, or returns nothing usable,
+the answer is `502`: the request was fine, the provider was not.
+
+Set `LLM_PROVIDER=mock` to work on the form without a key or a network — the mock is
+deterministic, so the same title always produces the same text.
+
+## Embeddings
+
+Semantic search, "similar listings" and recommendations are all driven by 384-dimension
+vectors produced by [`Xenova/all-MiniLM-L6-v2`](https://huggingface.co/Xenova/all-MiniLM-L6-v2),
+run **in-process** through Transformers.js. There is no API key and no per-request cost.
+
+The model is ~87 MB on disk and is downloaded on first use. Measured on this project:
+
+| | |
+|---|---|
+| Cold load (download + init) | ~4.5 s |
+| Warm load (cached on disk) | ~620 ms |
+| Single embed, warm | ~7 ms |
+| Batch of 8 vs. 8 sequential | 20 ms vs. 47 ms (2.4×) |
+
+To avoid paying the download at runtime, the Docker image bakes the model in at build time:
+
+```bash
+TRANSFORMERS_CACHE=/app/.cache/transformers node scripts/prefetch-embedding-model.mjs
+```
+
+Run the same command locally before an offline demo. Set `EMBEDDING_PROVIDER=mock` to skip
+the model entirely — the mock returns deterministic unit vectors of the same width, which
+is what keeps the AI tests reproducible.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 ## Docker development (with live reload)

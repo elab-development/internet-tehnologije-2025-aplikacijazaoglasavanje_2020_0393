@@ -2,8 +2,22 @@ import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
+import { isUniqueViolation } from "@/db/pg-errors";
+import { USERS_EMAIL_LOWER_INDEX } from "@/db/users";
 import { hashPassword, signToken, sanitizeUser } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
+import {
+  clearRateLimit,
+  rateLimitByIp,
+  rateLimitHeaders,
+  recordRateLimitHit,
+  REGISTER_RATE_LIMIT,
+} from "@/lib/rate-limit";
+import { clientIdentity } from "@/lib/client-ip";
+import { parseRequest, RegisterBodySchema } from "@/lib/validation";
+import { AUTH_COOKIE, authCookieOptions } from "@/lib/cookies";
+import { REFRESH_COOKIE, refreshCookieOptions } from "@/lib/refresh-cookies";
+import { issueRefreshToken } from "@/lib/refresh-token";
 
 /**
  * @swagger
@@ -61,6 +75,20 @@ import { jsonOk, jsonError } from "@/lib/response";
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: >
+ *           Too many registration attempts from this IP, or too many *rejected* attempts
+ *           against this email address. A registration that would succeed is never
+ *           refused with a 429.
+ *         headers:
+ *           Retry-After:
+ *             schema:
+ *               type: integer
+ *             description: Seconds to wait before retrying
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -70,42 +98,53 @@ import { jsonOk, jsonError } from "@/lib/response";
  */
 export async function POST(request: NextRequest) {
   try {
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
+    // ── Rate limit ────────────────────────────────────────────────────────────
+    // Registration runs bcrypt at 12 rounds, so unbounded signups are also a
+    // cheap way to burn CPU. Limit before we touch the DB.
+    const byIp = rateLimitByIp("register", request, REGISTER_RATE_LIMIT);
+    if (byIp.applied && !byIp.result.allowed) {
       return jsonError(
-        "Invalid request body",
-        400 );
+        "Too many registration attempts. Please try again later.",
+        429,
+        rateLimitHeaders(byIp.result, REGISTER_RATE_LIMIT),
+      );
     }
-
-    const { email, password, name, role = "buyer" } = body as Record<string, unknown>;
 
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!email || typeof email !== "string") {
-      return jsonError(
-        "email is required",
-        400
-      );
-    }
-    if (!password || typeof password !== "string" || password.length < 8) {
-      return jsonError(
-        "password is required and must be at least 8 characters",
-         400
-      );
-    }
-    if (!name || typeof name !== "string") {
-      return jsonError(
-        "name is required", 
-        400 
-      );
-    }
+    // RegisterBodySchema's role enum is restricted to buyer/seller, so admin can
+    // never be self-assigned here.
+    const parsed = await parseRequest(request, RegisterBodySchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    // if (role !== "buyer" && role !== "seller") {
-    //   return jsonError(
-    //     "role must be 'buyer' or 'seller'" ,
-    //     400
-    //   );
-    // }
+    const { email, password, name, phoneNumber, role } = parsed.data;
+
+    // The key that survives IP rotation, and the only one that applies at all when no
+    // proxy is trusted. Normalised the same way the column is, so `A@x.com` and
+    // `a@x.com` cannot each get their own budget against one account.
+    const accountKey = `register:email:${email.trim().toLowerCase()}`;
+
+    /**
+     * Book a *rejected* attempt against the address, and refuse outright once spent.
+     *
+     * Same shape and same reason as login: this gate used to run before the request was
+     * evaluated, so anyone could burn an address's budget with ten cheap POSTs and the
+     * person who actually holds that address was then told to come back in an hour. The
+     * budget now counts only the collisions — which is all this key was ever usefully
+     * bounding, since it is the 409/201 difference that leaks which addresses are
+     * registered — and a signup that is going to succeed never consults it.
+     */
+    const refuseConflict = () => {
+      const spent = recordRateLimitHit(accountKey, REGISTER_RATE_LIMIT);
+      if (spent.allowed) {
+        return jsonError("An account with that email already exists", 409);
+      }
+
+      return jsonError(
+        "Too many registration attempts. Please try again later.",
+        429,
+        rateLimitHeaders(spent, REGISTER_RATE_LIMIT),
+      );
+    };
 
     // ── Uniqueness check ──────────────────────────────────────────────────────
     const existing = await db
@@ -114,24 +153,46 @@ export async function POST(request: NextRequest) {
       .where(eq(users.email, email))
       .limit(1);
 
-    if (existing.length > 0) {
-      return jsonError(
-        "An account with that email already exists",
-        409
-      );
-    }
+    if (existing.length > 0) return refuseConflict();
 
     // ── Create user ───────────────────────────────────────────────────────────
     const passwordHash = await hashPassword(password);
 
-    const [user] = await db
-      .insert(users)
-      .values({ email: email as string, passwordHash, name: name as string, role: role as "buyer" | "seller" | "admin" })
-      .returning();
+    let user;
+    try {
+      [user] = await db
+        .insert(users)
+        .values({ email, passwordHash, name, phoneNumber: phoneNumber ?? null, role })
+        .returning();
+    } catch (err) {
+      // The pre-check above is a courtesy; two simultaneous registrations both pass it
+      // and only the index decides. Reaching here is a real conflict, not a server
+      // fault, and it used to surface as a 500.
+      if (isUniqueViolation(err, USERS_EMAIL_LOWER_INDEX)) {
+        return refuseConflict();
+      }
+      throw err;
+    }
+
+    // The address is now this account's. Nothing an earlier caller did to the bucket
+    // should follow the person who successfully claimed it.
+    clearRateLimit(accountKey);
 
     const token = signToken({ sub: user.id, email: user.email, role: user.role });
 
-    return jsonOk({ user: sanitizeUser(user), token }, 201);
+    // Same as login: cookie for the browser, body token for API clients.
+    const identity = clientIdentity(request);
+    const refresh = await issueRefreshToken(user.id, {
+      userAgent: request.headers.get("user-agent"),
+      ip: identity.kind === "ip" ? identity.value : null,
+    });
+
+    const response = jsonOk({ user: sanitizeUser(user), token }, 201, {
+      Location: `/api/users/${user.id}`,
+    });
+    response.cookies.set(AUTH_COOKIE, token, authCookieOptions());
+    response.cookies.set(REFRESH_COOKIE, refresh.token, refreshCookieOptions());
+    return response;
   } catch (err) {
     console.error("[POST /api/auth/register]", err);
     return jsonError("Internal server error");

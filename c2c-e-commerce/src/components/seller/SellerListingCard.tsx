@@ -1,0 +1,110 @@
+"use client";
+
+import {
+  RiDeleteBin2Line,
+  RiEyeLine,
+  RiEyeOffLine,
+} from "@remixicon/react";
+import { Button, Card, StatusBadge } from "@/components/ui";
+import { formatPrice } from "@/lib/format";
+import type { Listing } from "@/types/api";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export type SellerListingCardProps = {
+  listing: Listing;
+  formatConverted: (amount: number) => string;
+  /** Whether the status toggle is mid-request for this listing. */
+  updating?: boolean;
+  /** Show the destructive delete control (admins only). */
+  canDelete?: boolean;
+  /** Where the card goes when opened — the listing's edit page. */
+  href: string;
+  onToggleStatus: () => void;
+  onDelete: () => void;
+};
+
+const DESCRIPTION_LIMIT = 80;
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+/**
+ * One card in the seller's "My Listings" grid: price, status, and the
+ * activate/disable and delete controls.
+ */
+export default function SellerListingCard({
+  listing,
+  formatConverted,
+  updating = false,
+  canDelete = false,
+  href,
+  onToggleStatus,
+  onDelete,
+}: SellerListingCardProps) {
+  const isActive = listing.status === "active";
+  // A sold listing cannot be put back on sale from here.
+  const canToggle = isActive || listing.status === "removed";
+
+  const description =
+    listing.description.length > DESCRIPTION_LIMIT
+      ? listing.description.slice(0, DESCRIPTION_LIMIT) + "…"
+      : listing.description;
+
+  return (
+    <Card
+      image={listing.coverImageId ? `/api/images/${listing.coverImageId}` : null}
+      title={listing.title}
+      badge={listing.status}
+      description={description}
+      href={href}
+      // The seller dashboard shows removed (and, once drafts are visible here, draft)
+      // listings, whose images 404 through next/image's cookie-less optimizer fetch —
+      // see Card's `unoptimized` doc. The bytes are already sharp-produced WebP capped
+      // at 4000px and served same-origin, so the optimizer has little left to add here.
+      unoptimized
+      footer={
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-ink">
+                {formatPrice(listing.price)}
+              </span>
+              <span className="text-ink-3">
+                ({formatConverted(Number(listing.price))})
+              </span>
+            </div>
+            <StatusBadge status={listing.status} kind="listing" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            {canToggle && (
+              <Button
+                variant={isActive ? "danger" : "primary"}
+                size="sm"
+                fullWidth
+                icon={
+                  isActive ? <RiEyeOffLine size={16} /> : <RiEyeLine size={16} />
+                }
+                loading={updating}
+                onClick={onToggleStatus}
+              >
+                {isActive ? "Disable" : "Activate"}
+              </Button>
+            )}
+
+            {canDelete && (
+              <button
+                type="button"
+                aria-label="Delete listing"
+                onClick={onDelete}
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-none border border-stop-rule bg-stop-tint text-stop transition-colors hover:bg-stop-tint hover:border-stop-rule"
+              >
+                <RiDeleteBin2Line size={15} aria-hidden="true" />
+              </button>
+            )}
+          </div>
+        </div>
+      }
+    />
+  );
+}

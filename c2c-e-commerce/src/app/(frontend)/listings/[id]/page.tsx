@@ -1,244 +1,141 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import Button from "@/components/ui/Button";
-import InputField from "@/components/ui/InputField";
-import Modal from "@/components/ui/Modal";
-import { ListingDetailSkeleton } from "@/components/ui/Skeleton";
+import CategoryBreadcrumb from "@/components/categories/CategoryBreadcrumb";
+import {
+  makeHueResolver,
+  TOP_SPINE_CLASS,
+} from "@/components/categories/categoryHue";
+import CurrencySelect from "@/components/CurrencySelect";
+import ListingGallery from "@/components/listings/ListingGallery";
+import SimilarListings from "@/components/listings/SimilarListings";
+import SellerCard from "@/components/reviews/SellerCard";
+import {
+  Button,
+  ErrorAlert,
+  ListingDetailSkeleton,
+  Modal,
+  StatusBadge,
+} from "@/components/ui";
+import { useAnnounce } from "@/components/ui/Announcer";
 import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
-import { api } from "@/lib/api";
+import { useFetch } from "@/hooks/useFetch";
+import { ApiError, api } from "@/lib/api";
+import { formatPrice } from "@/lib/format";
+import type {
+  Category,
+  CreatedOrder,
+  ListingDetail,
+} from "@/types/api";
 
-type Listing = {
-  id: number;
-  title: string;
-  description: string;
-  imageUrl: string | null;
-  price: string;
-  sellerId: number;
-  categoryId: number | null;
-  status: "active" | "sold" | "removed";
-  sellerName: string | null;
-  categoryName: string | null;
-};
-
-type Category = {
-  id: number;
-  name: string;
-};
-
-type Review = {
-  id: number;
-  reviewerId: number;
-  listingId: number;
-  rating: number;
-  comment: string | null;
-  reviewerName: string | null;
-  createdAt: string;
-};
-
-type CreatedOrder = {
-  id: number;
-};
-
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-function getErrorStatus(error: unknown): number | null {
-  if (!error || typeof error !== "object") return null;
-
-  const candidate = error as {
-    status?: unknown;
-    statusCode?: unknown;
-    response?: { status?: unknown };
-  };
-
-  if (typeof candidate.status === "number") return candidate.status;
-  if (typeof candidate.statusCode === "number") return candidate.statusCode;
-  if (typeof candidate.response?.status === "number") return candidate.response.status;
-
-  return null;
-}
-
-export default function ListingDetailPage({ params }: Props) {
+export default function ListingDetailPage() {
   const router = useRouter();
+  const params = useParams<{ id: string }>();
   const { user, isAuthenticated } = useAuth();
 
-  const [listingId, setListingId] = useState<number | null>(null);
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [reviews, setReviews] = useState<Review[]>([]);
+  const listingId = Number(params.id);
+  const hasValidId = Number.isInteger(listingId) && listingId > 0;
 
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const {
+    data: listing,
+    loading,
+    error: loadError,
+    refetch: refetchListing,
+  } = useFetch<ListingDetail>(hasValidId ? `/api/listings/${listingId}` : null);
+
+  const { data: categoryData } = useFetch<Category[]>("/api/categories");
+
+  // Errors raised by an action on this page, as opposed to the initial load.
+  // Kept separate so a failed purchase no longer replaces the whole listing.
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [buying, setBuying] = useState(false);
   const [orderSuccessId, setOrderSuccessId] = useState<number | null>(null);
 
-  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
-  const [comment, setComment] = useState("");
-  const [rating, setRating] = useState(5);
-  const [reviewSubmitting, setReviewSubmitting] = useState(false);
-  const [reviewError, setReviewError] = useState<string | null>(null);
+  // Set when the server tells us the world changed underneath this page. The Buy
+  // button cannot succeed again until the listing is refetched, so say so.
+  const [isStale, setIsStale] = useState(false);
+  const announce = useAnnounce();
 
-  const {
-    selectedCurrency,
-    setSelectedCurrency,
-    loadingRates,
-    ratesError,
-    availableCurrencies,
-    formatConverted,
-  } = useCurrencyConversion();
+  const conversion = useCurrencyConversion();
+  const { formatConverted } = conversion;
 
-  const canReview = isAuthenticated && user?.role === "buyer";
+  // A `reserved` or `sold` listing is publicly readable, because the buyer's own order
+  // page links to it. Offering a stranger a Buy button on one only produces a 409.
+  const isForSale = listing?.status === "active";
 
-  const categoryName = useMemo(() => {
-    if (listing?.categoryName) return listing.categoryName;
-    if (!listing?.categoryId) return "Uncategorized";
-    const category = categories.find((item) => item.id === listing.categoryId);
-    return category?.name ?? "Uncategorized";
-  }, [categories, listing]);
-
- async function fetchReviews(idNum: number) {
-    try {
-      const reviewData = await api.get<Review[]>(`/api/listings/${idNum}/reviews`);
-      setReviews(reviewData);
-    } catch (err: unknown) {
-      if (getErrorStatus(err) === 404) {
-        console.log("ASD");
-        setReviews([]);
-        return;
-      }
-
-      throw err;
-    }
-  }
-  useEffect(() => {
-    let alive = true;
-
-    async function load() {
-      try {
-        const resolvedParams = await params;
-        const idNum = Number(resolvedParams.id);
-
-        if (!Number.isInteger(idNum) || idNum <= 0) {
-          if (alive) {
-            setError("Invalid listing id");
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (!alive) return;
-        setListingId(idNum);
-        setLoading(true);
-        setError(null);
-
-        const [listingData, categoryData] = await Promise.all([
-          api.get<Listing>(`/api/listings/${idNum}`),
-          api.get<Category[]>("/api/categories"),
-        ]);
-
-        if (!alive) return;
-
-        setListing(listingData);
-        setCategories(categoryData);
-        await fetchReviews(idNum);
-      } catch (err: unknown) {
-        if (!alive) return;
-        setError(err instanceof Error ? err.message : "Failed to load listing");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    }
-
-    load();
-
-    return () => {
-      alive = false;
-    };
-  }, [params]);
+  // Which of the five hues this listing's category rolls up to — the same colour it
+  // carries on its card in the grid.
+  const hue = useMemo(
+    () => makeHueResolver(categoryData ?? [])(listing?.categoryId ?? null),
+    [categoryData, listing?.categoryId],
+  );
 
   async function handleBuyNow() {
-    if (!listingId) return;
+    if (!hasValidId || !listing) return;
 
     if (!isAuthenticated) {
       router.push("/login");
       return;
     }
 
-    if (user?.role !== "buyer") {
-      setError("Only buyers can place orders");
+    if (user?.id === listing.sellerId) {
+      setActionError("You cannot buy your own listing");
+      setIsBuyModalOpen(false);
       return;
     }
 
     setBuying(true);
-    setError(null);
+    setActionError(null);
 
     try {
-      const order = await api.post<CreatedOrder>("/api/orders", {
-        items: [{ listingId }],
-      });
+      const order = await api.post<CreatedOrder>("/api/orders", { listingId });
 
       setOrderSuccessId(order.id);
       setIsBuyModalOpen(false);
+      setIsStale(false);
       toast.success(`Order #${order.id} placed successfully!`);
+      announce(`Order ${order.id} placed successfully`);
+
+      // The status this page is rendering was fetched before the mutation. Without
+      // this the success banner sits above a still-live Buy Now button.
+      refetchListing();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to create order";
-      setError(msg);
+      setActionError(msg);
       toast.error(msg);
+      announce(msg, { assertive: true });
+
+      // 409 means the world changed, not that the request was malformed. Retrying the
+      // same click can only produce the same answer; only a reload can help.
+      if (err instanceof ApiError && err.status === 409) {
+        setIsStale(true);
+        setIsBuyModalOpen(false);
+      }
     } finally {
       setBuying(false);
     }
   }
 
-  async function handleSubmitReview(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!listingId) return;
+  if (hasValidId && loading) return <ListingDetailSkeleton />;
 
-    setReviewError(null);
-    setReviewSubmitting(true);
-
-    try {
-      if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
-        setReviewError("Rating must be between 1 and 5");
-        return;
-      }
-
-      await api.post<Review>(`/api/listings/${listingId}/reviews`, {
-        comment: comment.trim(),
-        rating,
-      });
-
-      await fetchReviews(listingId);
-      setIsReviewModalOpen(false);
-      setComment("");
-      setRating(5);
-      toast.success("Review submitted!");
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to submit review";
-      setReviewError(msg);
-      toast.error(msg);
-    } finally {
-      setReviewSubmitting(false);
-    }
-  }
-
-  if (loading) {
-    return <ListingDetailSkeleton />;
-  }
-  if (error || !listing) {
+  if (!hasValidId || !listing) {
     return (
       <div className="space-y-4">
-        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="shrink-0 mt-0.5">⚠️</span>
-          <span>{error ?? "Listing not found"}</span>
-        </div>
-        <Button variant="secondary" onClick={() => router.push("/listings")}>Back to listings</Button>
+        <ErrorAlert
+          message={
+            !hasValidId
+              ? "Invalid listing id"
+              : (loadError ?? "Listing not found")
+          }
+        />
+        <Button variant="secondary" onClick={() => router.push("/listings")}>
+          Back to listings
+        </Button>
       </div>
     );
   }
@@ -246,115 +143,113 @@ export default function ListingDetailPage({ params }: Props) {
   return (
     <div className="space-y-8">
       {orderSuccessId && (
-        <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span className="shrink-0 text-base">✅</span>
+        <div className="flex items-start gap-3 border border-l-[6px] border-go-rule border-l-go bg-go-tint px-4 py-3 text-sm text-go-ink">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="mt-0.5 h-[18px] w-[18px] shrink-0"
+            aria-hidden="true"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="m5 12.5 4.5 4.5L19 7" />
+          </svg>
           <div className="flex flex-col gap-1">
             <p className="font-semibold">Order placed successfully!</p>
-            <p>Order ID: <span className="font-mono font-bold">#{orderSuccessId}</span></p>
+            <p>
+              Order ID:{" "}
+              <span className="font-mono font-bold">#{orderSuccessId}</span>
+            </p>
           </div>
         </div>
       )}
 
-      <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-4">
-          {listing.imageUrl ? (
-            <img
-              src={listing.imageUrl}
-              alt={listing.title}
-              className="w-full rounded-xl object-cover max-h-80 border border-zinc-100 bg-zinc-50"
-            />
-          ) : (
-            <div className="flex w-full items-center justify-center rounded-xl border border-zinc-100 bg-zinc-50 max-h-80 h-48 text-zinc-300 text-5xl select-none">
-              🖼️
-            </div>
-          )}
-          <span className="inline-flex w-fit rounded-full bg-indigo-600 px-3 py-1 text-xs font-semibold text-white">
-            {categoryName}
-          </span>
-          <h1 className="text-2xl font-bold text-zinc-900">{listing.title}</h1>
-          <p className="text-zinc-600">{listing.description}</p>
+      {actionError && <ErrorAlert message={actionError} />}
 
-          <div className="grid gap-2 text-sm text-zinc-600 sm:grid-cols-2">
-            <p>
-              <span className="font-medium text-zinc-900">Price:</span> ${Number(listing.price).toFixed(2)}
-            </p>
-            <p>
-              <span className="font-medium text-zinc-900">Converted:</span> {formatConverted(Number(listing.price))}
-            </p>
-            <p>
-              <span className="font-medium text-zinc-900">Seller:</span>{" "}
-              {listing.sellerName ?? `Seller #${listing.sellerId}`}
+      {/* Two columns rather than one stacked block: the price used to sit in a
+          14px line between the description and the currency picker, which made the
+          one number a buyer is actually here for smaller than the prose above it. */}
+      <section className="grid gap-8 lg:grid-cols-[1.6fr_1fr] lg:items-start">
+        <div className="flex flex-col gap-5">
+          <ListingGallery images={listing.images} title={listing.title} />
+          <CategoryBreadcrumb
+            categories={categoryData ?? []}
+            categoryId={listing.categoryId}
+            fallbackName={listing.categoryName}
+          />
+          <h1 className="text-4xl sm:text-5xl">{listing.title}</h1>
+          <p className="max-w-[68ch] text-base text-ink-2">{listing.description}</p>
+        </div>
+
+        <aside
+          className={[
+            "flex flex-col gap-5 border-[1.5px] border-t-[6px] border-ink bg-surface p-6",
+            "lg:sticky lg:top-28",
+            TOP_SPINE_CLASS[hue],
+          ].join(" ")}
+        >
+          <div className="flex flex-col gap-1">
+            <span className="eyebrow text-ink-3">Asking price</span>
+            <span className="figure text-5xl leading-none">
+              {formatPrice(listing.price)}
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <CurrencySelect conversion={conversion} />
+            <p className="text-sm text-ink-3">
+              ≈ {formatConverted(Number(listing.price))} at today&rsquo;s rate
             </p>
           </div>
 
-          <div className="flex flex-col gap-1 sm:max-w-xs">
-            <label className="text-sm font-medium text-zinc-700" htmlFor="listing-currency">
-              Convert price
-            </label>
-            <select
-              id="listing-currency"
-              value={selectedCurrency}
-              onChange={(event) => setSelectedCurrency(event.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-              disabled={loadingRates}
-            >
-              {availableCurrencies.map((currency) => (
-                <option key={currency} value={currency}>
-                  {currency}
-                </option>
-              ))}
-            </select>
-            {ratesError && <p className="text-xs text-red-500">{ratesError}</p>}
-          </div>
-
-          <div className="flex flex-wrap gap-2 pt-2">
-            <Button onClick={() => setIsBuyModalOpen(true)}>Buy Now</Button>
+          <div className="flex flex-col gap-3">
+            {isForSale && !isStale ? (
+              <Button fullWidth onClick={() => setIsBuyModalOpen(true)}>
+                Buy Now
+              </Button>
+            ) : (
+              <StatusBadge status={listing.status} kind="listing" size="md" />
+            )}
+            {isStale && (
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => {
+                  setIsStale(false);
+                  setActionError(null);
+                  refetchListing();
+                }}
+              >
+                Refresh listing
+              </Button>
+            )}
             {orderSuccessId && (
-              <Button variant="secondary" onClick={() => router.push(`/orders/${orderSuccessId}`)}>
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => router.push(`/orders/${orderSuccessId}`)}
+              >
                 View order
               </Button>
             )}
           </div>
-        </div>
+        </aside>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-xl font-semibold text-zinc-900">Reviews</h2>
+      <SellerCard
+        sellerId={listing.sellerId}
+        name={listing.sellerName}
+        avatarUrl={listing.sellerAvatarUrl}
+        reviewCount={listing.sellerReviewCount}
+        ratingSum={listing.sellerRatingSum}
+      />
 
-        {reviews.length === 0 ? (
-          <p className="text-sm text-zinc-500">No reviews yet.</p>
-        ) : (
-          <div className="space-y-3">
-            {reviews.map((review) => (
-              <article key={review.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <div className="mb-2 flex items-center gap-2">
-                  <img
-                    src={`https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(review.reviewerName ?? `user-${review.reviewerId}`)}`}
-                    alt={review.reviewerName ?? `User ${review.reviewerId}`}
-                    className="h-8 w-8 rounded-full border border-zinc-200 bg-zinc-50"
-                  />
-                  <div>
-                    <p className="text-sm font-medium text-zinc-900">
-                      {review.reviewerName ?? `Buyer #${review.reviewerId}`}
-                    </p>
-                    <p className="text-xs text-zinc-500">
-                      {new Date(review.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm font-medium text-zinc-900">Rating: {review.rating}/5</p>
-                <p className="mt-1 text-sm text-zinc-600">{review.comment || "No comment."}</p>
-              </article>
-            ))}
-          </div>
-        )}
-
-        {canReview && (
-          <Button variant="secondary" onClick={() => setIsReviewModalOpen(true)}>
-            Write a review
-          </Button>
-        )}
-      </section>
+      {/* Renders nothing when there is nothing to recommend, so no empty heading is left
+          behind on a listing with no neighbours (AI-9 AC9). */}
+      <SimilarListings listingId={listingId} />
 
       <Modal
         isOpen={isBuyModalOpen}
@@ -362,13 +257,22 @@ export default function ListingDetailPage({ params }: Props) {
         title="Confirm order"
       >
         <div className="space-y-4">
-          <p className="text-sm text-zinc-600">
-            Confirm purchase of <span className="font-medium text-zinc-900">{listing.title}</span> for
-            <span className="font-medium text-zinc-900"> ${Number(listing.price).toFixed(2)}</span>.
+          <p className="text-sm text-ink-2">
+            Confirm purchase of{" "}
+            <span className="font-medium text-ink">{listing.title}</span>{" "}
+            for
+            <span className="font-medium text-ink">
+              {" "}
+              {formatPrice(listing.price)}
+            </span>
+            .
           </p>
 
           <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setIsBuyModalOpen(false)}>
+            <Button
+              variant="secondary"
+              onClick={() => setIsBuyModalOpen(false)}
+            >
               Cancel
             </Button>
             <Button onClick={handleBuyNow} loading={buying}>
@@ -376,54 +280,6 @@ export default function ListingDetailPage({ params }: Props) {
             </Button>
           </div>
         </div>
-      </Modal>
-
-      <Modal
-        isOpen={isReviewModalOpen}
-        onClose={() => setIsReviewModalOpen(false)}
-        title="Submit review"
-      >
-        <form onSubmit={handleSubmitReview} className="space-y-4">
-          {reviewError && (
-            <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {reviewError}
-            </p>
-          )}
-
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-zinc-700">Star rating</p>
-            <div className="flex items-center gap-1">
-              {[1, 2, 3, 4, 5].map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setRating(value)}
-                  className="text-2xl leading-none"
-                  aria-label={`Set rating to ${value}`}
-                >
-                  {value <= rating ? "★" : "☆"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <InputField
-            label="Comment"
-            type="text"
-            value={comment}
-            onChange={(event) => setComment(event.target.value)}
-            placeholder="Share your experience"
-          />
-
-          <div className="flex items-center justify-end gap-2">
-            <Button variant="secondary" onClick={() => setIsReviewModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={reviewSubmitting}>
-              Submit review
-            </Button>
-          </div>
-        </form>
       </Modal>
     </div>
   );

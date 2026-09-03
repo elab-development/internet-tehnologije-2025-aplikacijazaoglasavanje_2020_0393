@@ -1,29 +1,40 @@
 "use client";
 
-import { useState, useEffect, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, type FormEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import type { Metadata } from "next";
 import toast from "react-hot-toast";
 import { RiStoreLine, RiLoginBoxLine } from "@remixicon/react";
 import { useAuth } from "@/context/AuthContext";
+import AuthPageShell from "@/components/auth/AuthPageShell";
 import Button from "@/components/ui/Button";
+import ErrorAlert from "@/components/ui/ErrorAlert";
+import FormErrorSummary, { type FieldError } from "@/components/ui/FormErrorSummary";
 import InputField from "@/components/ui/InputField";
-
-// Note: metadata export is ignored in client components — title is set in
-// the nearest server layout. Keep it here as documentation intent.
-export const _metadata: Pick<Metadata, "title"> = { title: "Login" };
+import OAuthButtons from "@/components/auth/OAuthButtons";
+import { oauthErrorMessage } from "@/lib/oauth/error-messages";
+import { safeReturnTo } from "@/lib/oauth/return-to";
+import { looksLikeEmail } from "@/lib/validation";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function LoginPage() {
+function LoginPageContent() {
   const { login, isAuthenticated, loading: authLoading } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Redirect already-authenticated users away from login
+  // The OAuth callback redirects here with ?error=<code> on every failure path. An
+  // unknown code maps to null and renders nothing, rather than putting a value from
+  // the query string on the page.
+  const oauthError = oauthErrorMessage(searchParams.get("error"));
+  const returnTo = searchParams.get("returnTo") ?? undefined;
+
+  // Redirect already-authenticated users away from login. Honours returnTo too, so
+  // arriving at /login?returnTo=… while already signed in lands in the same place
+  // signing in would.
   useEffect(() => {
-    if (!authLoading && isAuthenticated) router.replace("/");
-  }, [authLoading, isAuthenticated, router]);
+    if (!authLoading && isAuthenticated) router.replace(safeReturnTo(returnTo));
+  }, [authLoading, isAuthenticated, router, returnTo]);
 
   // ── Form state ────────────────────────────────────────────────────────────
   const [email, setEmail] = useState("");
@@ -36,15 +47,26 @@ export default function LoginPage() {
     email?: string;
     password?: string;
   }>({});
+  // Mirrors fieldErrors for FormErrorSummary. A plain state value (set once per
+  // validate() call) rather than a value derived at render time, so its identity stays
+  // stable across the re-renders every keystroke causes — otherwise the summary's
+  // focus effect would fire on every keystroke and steal focus back from the field the
+  // user is trying to fix.
+  const [fieldErrorList, setFieldErrorList] = useState<FieldError[]>([]);
 
   function validate(): boolean {
     const errs: typeof fieldErrors = {};
     if (!email.trim()) errs.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
-      errs.email = "Enter a valid email address";
+    else if (!looksLikeEmail(email)) errs.email = "Enter a valid email address";
     if (!password) errs.password = "Password is required";
+
+    const list: FieldError[] = [];
+    if (errs.email) list.push({ field: "email", message: errs.email });
+    if (errs.password) list.push({ field: "password", message: errs.password });
+
     setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+    setFieldErrorList(list);
+    return list.length === 0;
   }
 
   // ── Submit ────────────────────────────────────────────────────────────────
@@ -57,7 +79,8 @@ export default function LoginPage() {
     try {
       await login(email, password);
       toast.success("Welcome back!");
-      router.push("/");
+      // safeReturnTo already exists for the OAuth path; the password path ignored it.
+      router.push(safeReturnTo(returnTo));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Login failed";
       setError(msg);
@@ -69,78 +92,101 @@ export default function LoginPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        {/* Card */}
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
-          {/* Logo */}
-          <div className="mb-8 flex flex-col items-center gap-2 text-center">
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600">
-              <RiStoreLine size={28} />
-            </span>
-            <h1 className="text-2xl font-bold text-zinc-900">Welcome back</h1>
-            <p className="text-sm text-zinc-500">Sign in to your C2C Market account</p>
-          </div>
+    <AuthPageShell
+      icon={<RiStoreLine size={28} aria-hidden="true" />}
+      title="Welcome back"
+      subtitle="Sign in to your C2C Market account"
+      footer={
+        <p className="mt-6 text-center text-sm text-ink-3">
+          Don&apos;t have an account?{" "}
+          <Link
+            href="/register"
+            className="font-medium text-ink hover:text-black hover:underline"
+          >
+            Create one
+          </Link>
+        </p>
+      }
+    >
+      {/* Global error banner */}
+      {error && <ErrorAlert message={error} className="mb-5" />}
+      {!error && oauthError && <ErrorAlert message={oauthError} className="mb-5" />}
 
-          {/* Global error banner */}
-          {error && (
-            <div
-              role="alert"
-              className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              <span className="shrink-0 mt-0.5">⚠️</span>
-              <span>{error}</span>
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-            <InputField
-              label="Email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-              autoComplete="email"
-            />
-
-            <InputField
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-              autoComplete="current-password"
-            />
-
-            <Button
-              type="submit"
-              variant="primary"
-              size="md"
-              fullWidth
-              loading={submitting}
-              icon={<RiLoginBoxLine size={18} />}
-              className="mt-2"
-            >
-              Sign in
-            </Button>
-          </form>
-
-          {/* Footer link */}
-          <p className="mt-6 text-center text-sm text-zinc-500">
-            Don&apos;t have an account?{" "}
-            <Link
-              href="/register"
-              className="font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
-            >
-              Create one
-            </Link>
-          </p>
+      {fieldErrorList.length > 0 && (
+        <div className="mb-5">
+          <FormErrorSummary errors={fieldErrorList} />
         </div>
-      </div>
-    </div>
+      )}
+
+      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <InputField
+          id="email"
+          label="Email"
+          type="email"
+          placeholder="you@example.com"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          required
+          autoComplete="email"
+        />
+
+        <InputField
+          id="password"
+          label="Password"
+          type="password"
+          placeholder="••••••••"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          required
+          autoComplete="current-password"
+        />
+
+        <Button
+          type="submit"
+          variant="primary"
+          size="md"
+          fullWidth
+          loading={submitting}
+          icon={<RiLoginBoxLine size={18} />}
+          className="mt-2"
+        >
+          Sign in
+        </Button>
+      </form>
+
+      <OAuthButtons returnTo={returnTo} />
+    </AuthPageShell>
+  );
+}
+
+// Suspense boundary for useSearchParams (Next 16 requires one in every page that reads
+// them). The fallback is a skeleton of the same card shell so there is no layout jump
+// between this and the real form.
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center px-4">
+          <div className="w-full max-w-md animate-pulse">
+            <div className="rounded-none border border-rule bg-white p-8 shadow-none">
+              <div className="mb-8 flex flex-col items-center gap-2 text-center">
+                <span className="h-12 w-12 rounded-none bg-inset" />
+                <span className="h-6 w-40 rounded-none bg-inset" />
+                <span className="h-4 w-56 rounded-none bg-inset" />
+              </div>
+              <div className="flex flex-col gap-4">
+                <span className="h-10 w-full rounded-none bg-inset" />
+                <span className="h-10 w-full rounded-none bg-inset" />
+                <span className="mt-2 h-10 w-full rounded-none bg-inset" />
+              </div>
+            </div>
+          </div>
+        </div>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

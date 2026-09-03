@@ -1,8 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-import { and, asc, count, desc, eq, gte, ilike, lte } from "drizzle-orm";
+import { sql, type SQL } from "drizzle-orm";
+import { NextRequest } from "next/server";
 import { db } from "@/db";
 import { listings, type NewListing } from "@/db/schema";
+import { isLeafCategory } from "@/db/categories";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import type { TokenPayload } from "@/lib/auth";
+import { coverImageIdsFor } from "@/db/listing-images";
+import { computeListingEmbedding } from "@/lib/ai/listing-embedding";
+import { buildListingQuery, listingColumns, runListingQuery } from "@/lib/listings-query";
+import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, CreateListingSchema } from "@/lib/validation";
 
 // ─── GET /api/listings ────────────────────────────────────────────────────────
 // Public. Returns paginated active listings with optional filters.
@@ -25,7 +32,9 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *     summary: List listings
  *     description: |
  *       Returns paginated active listings with optional filters.
- *       When `sellerId` is provided, all statuses are returned (for seller dashboard).
+ *       When `sellerId` matches the authenticated seller (or the caller is an
+ *       admin), non-active listings are included too, for the seller dashboard.
+ *       All other callers only ever receive active listings.
  *     parameters:
  *       - in: query
  *         name: page
@@ -44,12 +53,16 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *         name: categoryId
  *         schema:
  *           type: integer
- *         description: Filter by category ID
+ *         description: >
+ *           Category id. Includes every descendant category, so filtering by a parent
+ *           returns listings filed under its subcategories.
  *       - in: query
  *         name: sellerId
  *         schema:
  *           type: integer
- *         description: Filter by seller ID (returns all statuses)
+ *         description: >
+ *           Filter by seller ID. Returns all statuses only when it is the
+ *           authenticated seller's own ID; otherwise active listings only.
  *       - in: query
  *         name: minPrice
  *         schema:
@@ -64,7 +77,37 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *         name: search
  *         schema:
  *           type: string
- *         description: Search by title (case-insensitive contains)
+ *         description: >
+ *           Search term. In `keyword` mode it matches the title
+ *           (case-insensitive contains); in `semantic` and `hybrid` mode it is
+ *           embedded and compared against listing vectors.
+ *       - in: query
+ *         name: mode
+ *         schema:
+ *           type: string
+ *           enum: [keyword, semantic, hybrid]
+ *           default: keyword
+ *         description: >
+ *           How `search` is interpreted.
+ *
+ *           `keyword` (default) is the original behaviour and is unchanged.
+ *
+ *           `semantic` embeds the query and ranks by cosine similarity,
+ *           returning only matches at or above a similarity floor of 0.25.
+ *           Listings whose embedding has not been computed are excluded.
+ *
+ *           `hybrid` runs the keyword and semantic arms independently and
+ *           fuses them with reciprocal rank fusion (k = 60), so a listing
+ *           matching both outranks one matching either alone. A listing with
+ *           no embedding is still reachable through the keyword arm.
+ *
+ *           **`total` differs by mode.** In `keyword` mode it counts every row
+ *           matching the filters. In `semantic` and `hybrid` mode it counts
+ *           only ranked candidates — rows above the similarity floor, or the
+ *           fused candidate set — so it is not the size of the table.
+ *
+ *           With no `search` term, `semantic` and `hybrid` behave as `keyword`:
+ *           there is nothing to embed.
  *       - in: query
  *         name: sort
  *         schema:
@@ -92,6 +135,24 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
  *                   type: integer
  *                 totalPages:
  *                   type: integer
+ *             examples:
+ *               semantic:
+ *                 summary: Semantic mode adds a similarity to each row
+ *                 value:
+ *                   data:
+ *                     - id: 12
+ *                       title: "Insulated parka, size L"
+ *                       similarity: 0.61
+ *                   total: 1
+ *                   page: 1
+ *                   limit: 20
+ *                   totalPages: 1
+ *       400:
+ *         description: Invalid `mode` value
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  *       500:
  *         description: Internal server error
  *         content:
@@ -102,83 +163,30 @@ import { authenticate, authorize, AuthError } from "@/lib/middleware";
 export async function GET(request: NextRequest) {
   try {
     // ── Authentication ────────────────────────────────────────────────────────
-    const payload = authenticate(request);
-    const isAdmin = payload.role === "admin";
-    
-    const { searchParams } = request.nextUrl;
-
-    // ── Pagination ────────────────────────────────────────────────────────────
-    const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
-    const limit = Math.min(
-      100,
-      Math.max(1, parseInt(searchParams.get("limit") ?? "20", 10) || 20)
-    );
-    const offset = (page - 1) * limit;
-
-    // ── Filters ───────────────────────────────────────────────────────────────
-    const sellerId = searchParams.get("sellerId");
-
-    // When a sellerId is provided, return all listings (including sold/removed)
-    // so sellers can manage their own inventory. Otherwise only show active.
-    const conditions = sellerId
-      ? []
-      : [eq(listings.status, "active")];
-
-    const categoryId = searchParams.get("categoryId");
-    if (categoryId) {
-      const id = parseInt(categoryId, 10);
-      if (!isNaN(id)) conditions.push(eq(listings.categoryId, id));
+    // This endpoint is public, so a missing or expired token is not an error —
+    // it just means the caller is anonymous. Anything that is *not* an AuthError
+    // (e.g. JWT_SECRET missing) is a real fault and must not be swallowed.
+    let payload: TokenPayload | null = null;
+    try {
+      payload = authenticate(request);
+    } catch (err) {
+      if (!(err instanceof AuthError)) throw err;
     }
 
-    if (sellerId && !isAdmin) {
-      const id = parseInt(sellerId, 10);
-      if (!isNaN(id)) conditions.push(eq(listings.sellerId, id));
-    }
+    // Filters, visibility, mode and sorting all live in lib/listings-query.ts. The
+    // visibility rules in particular are a security fix that predates this endpoint's
+    // search modes — see resolveListingVisibility, and AC12's regression tests.
+    const parsed = buildListingQuery(request.nextUrl.searchParams, payload);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const minPrice = searchParams.get("minPrice");
-    if (minPrice) {
-      const val = parseFloat(minPrice);
-      if (!isNaN(val)) conditions.push(gte(listings.price, String(val)));
-    }
+    const page = await runListingQuery(parsed.query);
+    const covers = await coverImageIdsFor(page.data.map((row) => row.id));
+    const data = page.data.map((row) => ({ ...row, coverImageId: covers.get(row.id) ?? null }));
 
-    const maxPrice = searchParams.get("maxPrice");
-    if (maxPrice) {
-      const val = parseFloat(maxPrice);
-      if (!isNaN(val)) conditions.push(lte(listings.price, String(val)));
-    }
-
-    const search = searchParams.get("search");
-    if (search?.trim()) conditions.push(ilike(listings.title, `%${search.trim()}%`));
-
-    // ── Sorting ───────────────────────────────────────────────────────────────
-    const sortParam = searchParams.get("sort") ?? "newest";
-    const orderBy =
-      sortParam === "oldest"
-        ? asc(listings.createdAt)
-        : sortParam === "price_asc"
-          ? asc(listings.price)
-          : sortParam === "price_desc"
-            ? desc(listings.price)
-            : desc(listings.createdAt); // default: newest
-
-    const where = and(...conditions);
-
-    // ── Queries ───────────────────────────────────────────────────────────────
-    const [data, [{ total }]] = await Promise.all([
-      db.select().from(listings).where(where).orderBy(orderBy).limit(limit).offset(offset),
-      db.select({ total: count() }).from(listings).where(where),
-    ]);
-
-    return NextResponse.json({
-      data,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    });
+    return jsonOk({ ...page, data });
   } catch (err) {
     console.error("[GET /api/listings]", err);
-    return NextResponse.json({ error: "Internal server error", status: 500 }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }
 
@@ -213,14 +221,18 @@ export async function GET(request: NextRequest) {
  *                   - type: number
  *                   - type: string
  *                 example: 999.99
- *               imageUrl:
- *                 type: string
- *                 nullable: true
- *                 example: https://images.unsplash.com/photo-abc
  *               categoryId:
  *                 type: integer
  *                 nullable: true
  *                 example: 2
+ *               status:
+ *                 type: string
+ *                 enum: [draft]
+ *                 description: >
+ *                   Omit for an immediately-published listing (the default, "active").
+ *                   The only status a caller may request at creation time is "draft" —
+ *                   see the create-as-draft upload flow in the design doc.
+ *                 example: draft
  *     responses:
  *       201:
  *         description: Listing created
@@ -258,72 +270,68 @@ export async function POST(request: NextRequest) {
     const payload = authenticate(request);
     authorize("seller", "admin")(payload);
 
-    const body: unknown = await request.json();
-
-    if (!body || typeof body !== "object") {
-      return NextResponse.json({ error: "Invalid request body", status: 400 }, { status: 400 });
-    }
-
-    const { title, description, price, imageUrl, categoryId } = body as Record<string, unknown>;
-
     // ── Validation ────────────────────────────────────────────────────────────
-    if (!title || typeof title !== "string" || !title.trim()) {
-      return NextResponse.json({ error: "title is required", status: 400 }, { status: 400 });
+    const parsed = await parseRequest(request, CreateListingSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
+
+    const { title, description, price, categoryId, status } = parsed.data;
+
+    // Leaf-only (spec D12): a listing under "Electronics" when "Electronics › Phones"
+    // exists cannot be found by anyone drilling down.
+    if (categoryId !== undefined && categoryId !== null) {
+      if (!(await isLeafCategory(categoryId))) {
+        return jsonError(
+          "Listings must be filed under a category with no subcategories",
+          400,
+        );
+      }
     }
-    if (!description || typeof description !== "string" || !description.trim()) {
-      return NextResponse.json({ error: "description is required", status: 400 }, { status: 400 });
-    }
-    const priceNum = typeof price === "string" ? parseFloat(price) : typeof price === "number" ? price : NaN;
-    if (isNaN(priceNum) || priceNum < 0) {
-      return NextResponse.json(
-        { error: "price must be a non-negative number", status: 400 },
-        { status: 400 }
+
+    // Embed before the insert so the happy path is a single write. The failure cannot be
+    // logged yet — AC2 wants the listing id, which does not exist until the row does — so
+    // the outcome is held and reported below.
+    const outcome = await computeListingEmbedding({ title, description });
+
+    // `embeddingUpdatedAt` is stamped by Postgres rather than Node, so the field holds a
+    // SQL expression that Drizzle's inferred insert type does not model. Widening one
+    // property beats casting the whole object and losing the rest of the checking.
+    const newListing: Omit<NewListing, "embeddingUpdatedAt"> & {
+      embeddingUpdatedAt?: NewListing["embeddingUpdatedAt"] | SQL;
+    } = {
+      title,
+      description,
+      // `price` is already the canonical decimal string priceField produces; the column
+      // is numeric(10,2), which Drizzle types as string, so no conversion is needed.
+      price,
+      sellerId: payload.sub,
+      ...(categoryId !== undefined && categoryId !== null && { categoryId }),
+      // Create-as-draft (spec §4.3). `status` is validated to only ever be "draft" here —
+      // omitting it leaves the column's own default, "active".
+      ...(status !== undefined && { status }),
+      ...(outcome.status === "embedded" && {
+        embedding: outcome.embedding,
+        embeddingUpdatedAt: sql`now()`,
+      }),
+    };
+
+    const [created] = await db.insert(listings).values(newListing).returning(listingColumns);
+
+    if (outcome.status === "failed") {
+      // Logged once, with the id, so the row can be found again. The listing is still
+      // created and still fully keyword-searchable; db:backfill-embeddings will fill the
+      // vector in later.
+      console.error(
+        `[POST /api/listings] embedding failed for listing ${created.id}; stored without one`,
+        outcome.error,
       );
     }
 
-    let parsedImageUrl: string | null = null;
-    if (imageUrl !== undefined && imageUrl !== null) {
-      if (typeof imageUrl !== "string") {
-        return NextResponse.json({ error: "imageUrl must be a string", status: 400 }, { status: 400 });
-      }
-
-      const trimmed = imageUrl.trim();
-      if (trimmed) {
-        try {
-          const parsed = new URL(trimmed);
-          if (!["http:", "https:"].includes(parsed.protocol)) {
-            return NextResponse.json(
-              { error: "imageUrl must be a valid http or https URL", status: 400 },
-              { status: 400 }
-            );
-          }
-          parsedImageUrl = parsed.toString();
-        } catch {
-          return NextResponse.json(
-            { error: "imageUrl must be a valid URL", status: 400 },
-            { status: 400 }
-          );
-        }
-      }
-    }
-
-    const newListing: NewListing = {
-      title: title.trim(),
-      description: description.trim(),
-      price: String(priceNum),
-      imageUrl: parsedImageUrl,
-      sellerId: payload.sub,
-      ...(categoryId !== undefined && categoryId !== null && { categoryId: Number(categoryId) }),
-    };
-
-    const [created] = await db.insert(listings).values(newListing).returning();
-
-    return NextResponse.json(created, { status: 201 });
+    return jsonOk(created, 201, { Location: `/api/listings/${created.id}` });
   } catch (err) {
     if (err instanceof AuthError) {
-      return NextResponse.json({ error: err.message, status: err.statusCode }, { status: err.statusCode });
+      return jsonError(err.message, err.statusCode);
     }
     console.error("[POST /api/listings]", err);
-    return NextResponse.json({ error: "Internal server error", status: 500 }, { status: 500 });
+    return jsonError("Internal server error", 500);
   }
 }

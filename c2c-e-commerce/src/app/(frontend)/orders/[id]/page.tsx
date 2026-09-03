@@ -1,207 +1,166 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import Button from "@/components/ui/Button";
-import Card from "@/components/ui/Card";
+import toast from "react-hot-toast";
+import CurrencySelect from "@/components/CurrencySelect";
+import OrderActions from "@/components/orders/OrderActions";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import { Skeleton } from "@/components/ui/Skeleton";
+import ReviewForm from "@/components/reviews/ReviewForm";
+import {
+  Button,
+  ErrorAlert,
+  Skeleton,
+  StatusBadge,
+} from "@/components/ui";
+import { useAuth } from "@/context/AuthContext";
 import { useCurrencyConversion } from "@/hooks/useCurrencyConversion";
+import { useFetch } from "@/hooks/useFetch";
 import { api } from "@/lib/api";
+import { formatDate, formatPrice } from "@/lib/format";
+import type { OrderActor, OrderStatus } from "@/lib/order-lifecycle";
+import type { Order, OrderDetail } from "@/types/api";
 
-type OrderItem = {
-  id: number;
-  listingId: number;
-  listingTitle: string;
-  quantity: number;
-  price: string;
-};
-
-type OrderDetail = {
-  id: number;
-  totalPrice: string;
-  status: "pending" | "paid" | "shipped" | "completed" | "cancelled" | "approved" | "rejected";
-  createdAt: string;
-  items: OrderItem[];
-};
-
-const statusClasses: Record<OrderDetail["status"], string> = {
-  pending: "bg-amber-100 text-amber-700",
-  paid: "bg-blue-100 text-blue-700",
-  shipped: "bg-indigo-100 text-indigo-700",
-  completed: "bg-emerald-100 text-emerald-700",
-  cancelled: "bg-red-100 text-red-700",
-  approved: "bg-green-100 text-green-700",
-  rejected: "bg-red-100 text-red-700",
-};
-
-const statusLabels: Record<OrderDetail["status"], string> = {
-  pending: "Awaiting seller approval",
-  paid: "Paid",
-  shipped: "Shipped",
-  completed: "Completed",
-  cancelled: "Cancelled",
-  approved: "Approved by seller",
-  rejected: "Rejected by seller",
-};
+function OrderDetailSkeleton() {
+  return (
+    <div className="space-y-6" aria-hidden="true">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-6 w-20 rounded-none" />
+      </div>
+      <div className="rounded-none border border-rule bg-white p-4 space-y-3">
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-4 w-1/3" />
+        <Skeleton className="h-4 w-2/5" />
+      </div>
+      {/* One row of controls, not a list of lines: an order is one listing now. */}
+      <div className="flex gap-2">
+        <Skeleton className="h-8 w-32 rounded-none" />
+        <Skeleton className="h-8 w-32 rounded-none" />
+      </div>
+    </div>
+  );
+}
 
 function OrderDetailPageContent() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
-  const [order, setOrder] = useState<OrderDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  const idNum = Number(params.id);
+  const hasValidId = Number.isInteger(idNum) && idNum > 0;
 
   const {
-    selectedCurrency,
-    setSelectedCurrency,
-    loadingRates,
-    ratesError,
-    availableCurrencies,
-    formatConverted,
-  } = useCurrencyConversion();
+    data: order,
+    setData,
+    loading,
+    error,
+    refetch,
+  } = useFetch<OrderDetail>(hasValidId ? `/api/orders/${idNum}` : null);
 
-  useEffect(() => {
-    let alive = true;
+  const conversion = useCurrencyConversion();
+  const { formatConverted } = conversion;
 
-    async function loadOrder() {
-      const idNum = Number(params.id);
-      if (!Number.isInteger(idNum) || idNum <= 0) {
-        setError("Invalid order id");
-        setLoading(false);
-        return;
-      }
+  // The viewer's relationship to this order, which is what decides the controls — a
+  // seller may be the buyer on someone else's sale, so the role alone answers nothing.
+  const actor: OrderActor | null =
+    !order || !user
+      ? null
+      : user.role === "admin"
+        ? "admin"
+        : user.id === order.buyerId
+          ? "buyer"
+          : user.id === order.sellerId
+            ? "seller"
+            : null;
 
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await api.get<OrderDetail>(`/api/orders/${idNum}`);
-        if (!alive) return;
-        setOrder(data);
-      } catch (err: unknown) {
-        if (!alive) return;
-        setError(err instanceof Error ? err.message : "Failed to load order");
-      } finally {
-        if (alive) setLoading(false);
-      }
+  const [pendingStatus, setPendingStatus] = useState<OrderStatus | null>(null);
+
+  async function handleTransition(to: OrderStatus) {
+    if (!order) return;
+    setPendingStatus(to);
+    try {
+      // The route returns the order row, without the joined listing title — merging keeps
+      // the fields the page already has rather than blanking them.
+      const updated = await api.put<Order>(`/api/orders/${order.id}`, { status: to });
+      setData({ ...order, ...updated });
+      toast.success(`Order #${order.id} is now ${updated.status}`);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update the order");
+    } finally {
+      setPendingStatus(null);
     }
-
-    loadOrder();
-
-    return () => {
-      alive = false;
-    };
-  }, [params.id]);
-
-  if (loading) {
-    return (
-      <div className="space-y-6" aria-hidden="true">
-        <div className="flex items-center justify-between">
-          <Skeleton className="h-8 w-40" />
-          <Skeleton className="h-6 w-20 rounded-full" />
-        </div>
-        <div className="rounded-xl border border-zinc-200 bg-white p-4 space-y-3">
-          <Skeleton className="h-4 w-1/2" />
-          <Skeleton className="h-4 w-1/3" />
-          <Skeleton className="h-4 w-2/5" />
-        </div>
-        <div className="space-y-3">
-          <Skeleton className="h-6 w-28" />
-          <Skeleton className="h-20 rounded-2xl" />
-          <Skeleton className="h-20 rounded-2xl" />
-        </div>
-      </div>
-    );
   }
 
-  if (error || !order) {
+  if (!hasValidId || (!loading && (error || !order))) {
     return (
       <div className="space-y-4">
-        <div role="alert" className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <span className="shrink-0 mt-0.5">⚠️</span>
-          <span>{error ?? "Order not found"}</span>
-        </div>
-        <Button variant="secondary" onClick={() => router.push("/orders")}>Back to orders</Button>
+        <ErrorAlert
+          message={
+            !hasValidId ? "Invalid order id" : (error ?? "Order not found")
+          }
+        />
+        <Button variant="secondary" onClick={() => router.push("/orders")}>
+          Back to orders
+        </Button>
       </div>
     );
   }
+
+  if (loading || !order) return <OrderDetailSkeleton />;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-zinc-900">Order #{order.id}</h1>
-        <span
-          className={[
-            "rounded-full px-3 py-1 text-xs font-semibold",
-            statusClasses[order.status],
-          ].join(" ")}
-        >
-          {statusLabels[order.status]}
-        </span>
+        <h1 className="text-2xl font-bold text-ink">Order #{order.id}</h1>
+        <StatusBadge status={order.status} descriptive size="md" />
       </div>
 
-      <div className="grid gap-2 rounded-xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+      <div className="grid gap-2 rounded-none border border-rule bg-white p-4 text-sm text-ink-2">
         <p>
-          <span className="font-medium text-zinc-900">Date:</span> {new Date(order.createdAt).toLocaleString()}
+          <span className="font-medium text-ink">Listing:</span>{" "}
+          <Link href={`/listings/${order.listingId}`} className="text-black hover:underline">
+            {order.listingTitle}
+          </Link>
         </p>
         <p>
-          <span className="font-medium text-zinc-900">Total:</span> ${Number(order.totalPrice).toFixed(2)}
+          <span className="font-medium text-ink">Placed:</span>{" "}
+          {formatDate(order.createdAt)}
         </p>
         <p>
-          <span className="font-medium text-zinc-900">Converted total:</span> {formatConverted(Number(order.totalPrice))}
+          <span className="font-medium text-ink">Price:</span> {formatPrice(order.price)}{" "}
+          <span className="text-ink-3">({formatConverted(Number(order.price))})</span>
         </p>
-      </div>
-
-      <div className="flex flex-col gap-1 sm:max-w-xs">
-        <label className="text-sm font-medium text-zinc-700" htmlFor="order-detail-currency">
-          Convert price
-        </label>
-        <select
-          id="order-detail-currency"
-          value={selectedCurrency}
-          onChange={(event) => setSelectedCurrency(event.target.value)}
-          className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20"
-          disabled={loadingRates}
-        >
-          {availableCurrencies.map((currency) => (
-            <option key={currency} value={currency}>
-              {currency}
-            </option>
-          ))}
-        </select>
-        {ratesError && <p className="text-xs text-red-500">{ratesError}</p>}
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold text-zinc-900">Order Items</h2>
-
-        {order.items.length === 0 ? (
-          <p className="text-sm text-zinc-500">No items found for this order.</p>
-        ) : (
-          <div className="grid gap-3">
-            {order.items.map((item) => {
-              const lineTotal = Number(item.price) * item.quantity;
-              return (
-                <Card
-                  key={item.id}
-                  title={item.listingTitle}
-                  description={`Quantity: ${item.quantity}`}
-                  footer={
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                      <span className="font-semibold text-zinc-900">
-                        ${lineTotal.toFixed(2)}
-                      </span>
-                      <span className="text-zinc-500">{formatConverted(lineTotal)}</span>
-                    </div>
-                  }
-                />
-              );
-            })}
-          </div>
+        {order.status === "pending" && (
+          <p>
+            <span className="font-medium text-ink">Reservation expires:</span>{" "}
+            {formatDate(order.expiresAt)}
+          </p>
         )}
-      </section>
+      </div>
 
-      <Button variant="secondary" onClick={() => router.push("/orders")}>Back to orders</Button>
+      <CurrencySelect conversion={conversion} className="sm:max-w-xs" />
+
+      {actor && (
+        <OrderActions
+          status={order.status}
+          actor={actor}
+          busy={pendingStatus !== null}
+          onTransition={handleTransition}
+        />
+      )}
+
+      {/* Three conditions, all of them the server's rules restated: completed, this
+          viewer's own purchase, and not already reviewed. Getting any of them wrong here
+          produces a 403 or a 409 rather than a bad write — the endpoint decides. */}
+      {actor === "buyer" && order.status === "completed" && order.reviewId === null && (
+        <ReviewForm orderId={order.id} onSubmitted={refetch} />
+      )}
+
+      <Button variant="secondary" onClick={() => router.push("/orders")}>
+        Back to orders
+      </Button>
     </div>
   );
 }

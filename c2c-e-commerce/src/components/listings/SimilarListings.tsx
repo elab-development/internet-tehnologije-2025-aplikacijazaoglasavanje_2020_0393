@@ -1,0 +1,76 @@
+"use client";
+
+import Link from "next/link";
+
+import { useFetch } from "@/hooks/useFetch";
+import { formatPrice } from "@/lib/format";
+import type { SimilarListing } from "@/types/api";
+
+export type SimilarListingsProps = {
+  listingId: number;
+};
+
+/**
+ * C2C-AI-9 — the "Similar listings" section.
+ *
+ * Renders nothing at all unless there is something to show. Loading, error, an empty
+ * array and a malformed body all produce `null`: this strip is supplementary, and a
+ * spinner or an error banner for it would compete with the page's actual content — which
+ * has loaded fine in every one of those cases. `onError: "silent"` tells the hook to
+ * honour that instead of raising a toast for something the user cannot see.
+ */
+export default function SimilarListings({
+  listingId,
+}: SimilarListingsProps): React.ReactElement | null {
+  const { data } = useFetch<SimilarListing[]>(
+    Number.isInteger(listingId) && listingId > 0
+      ? `/api/listings/${listingId}/similar?limit=6`
+      : null,
+    { onError: "silent" },
+  );
+
+  // The array check also covers an error body, which arrives as `{ error: … }`.
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  return (
+    <section className="mt-12" aria-labelledby="similar-listings-heading">
+      <h2
+        id="similar-listings-heading"
+        className="mb-4 border-b-[1.5px] border-ink pb-3 text-3xl text-ink"
+      >
+        Similar listings
+      </h2>
+
+      <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        {data.map((listing) => (
+          <li key={listing.id}>
+            <Link
+              href={`/listings/${listing.id}`}
+              className="block overflow-hidden rounded-none border border-rule transition hover:border-ink-3 hover:shadow-none"
+            >
+              {listing.coverImageId ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`/api/images/${listing.coverImageId}`}
+                  alt=""
+                  className="h-24 w-full object-cover"
+                />
+              ) : (
+                <div className="h-24 w-full bg-inset" />
+              )}
+
+              <div className="flex flex-col gap-1.5 p-3">
+                <p className="line-clamp-2 text-sm font-semibold text-ink">
+                  {listing.title}
+                </p>
+                <p className="figure text-base text-ink">
+                  {formatPrice(listing.price)}
+                </p>
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

@@ -1,0 +1,15 @@
+# Text files are LF in the repository and in every working tree. Without this,
+# a Windows checkout with core.autocrlf=true rewrites line endings and any test
+# matching a literal "\n" against a repo file fails — src/test/threat-model.test.ts
+# does exactly that with its ```mermaid fences.
+* text=auto eol=lf
+
+# Binary: never touch these. The seed's sample photos are the reason this matters.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.node binary

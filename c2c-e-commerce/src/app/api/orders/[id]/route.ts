@@ -1,19 +1,38 @@
 import { NextRequest } from "next/server";
-import { eq, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+
 import { db } from "@/db";
-import { listings, orderItems, orders } from "@/db/schema";
+import { coverImageIdsFor } from "@/db/listing-images";
+import {
+  applyListingSideEffect,
+  releaseUnheldListings,
+  transitionOrder,
+} from "@/db/orders";
+import { applyRatingDelta } from "@/db/reviews";
+import { listings, orders, reviews } from "@/db/schema";
+import { HIDE_EXISTENCE_MESSAGE, canViewOrder, orderActorFor } from "@/lib/authorization";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { canTransition, listingStatusAfter } from "@/lib/order-lifecycle";
+import { parseResourceId } from "@/lib/params";
+import { deleteDelta } from "@/lib/reviews";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseRequest, UpdateOrderStatusSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
+/**
+ * Thrown inside the `PUT` transaction when the listing was not in the state the
+ * transition assumed, to roll the order's own status change back with it.
+ *
+ * A thrown error is the only way out of a Drizzle transaction that does not commit, and
+ * committing here is exactly how two confirmed orders come to own one object: the order
+ * moves, the listing does not, and nobody is told.
+ */
+class ListingNotSellableError extends Error {}
+
 
 // ─── GET /api/orders/[id] ─────────────────────────────────────────────────────
-// Owner buyer or admin.
+// Either party to the order, or an admin.
 
 /**
  * @swagger
@@ -21,7 +40,10 @@ function parseId(raw: string): number | null {
  *   get:
  *     tags: [Orders]
  *     summary: Get an order by ID
- *     description: Returns a single order with its items. Only the buyer who placed it or an admin can view.
+ *     description: |
+ *       Returns a single order with the listing it reserves. Only the buyer who placed
+ *       it, the seller who is selling it, or an admin can view. Anyone else receives
+ *       404, not 403.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -33,7 +55,7 @@ function parseId(raw: string): number | null {
  *         description: Order ID
  *     responses:
  *       200:
- *         description: Order details with items
+ *         description: Order details with its listing's title and cover image
  *         content:
  *           application/json:
  *             schema:
@@ -41,16 +63,17 @@ function parseId(raw: string): number | null {
  *                 - $ref: '#/components/schemas/Order'
  *                 - type: object
  *                   properties:
- *                     items:
- *                       type: array
- *                       items:
- *                         allOf:
- *                           - $ref: '#/components/schemas/OrderItem'
- *                           - type: object
- *                             properties:
- *                               listingTitle:
- *                                 type: string
- *                                 example: iPhone 15 Pro
+ *                     listingTitle:
+ *                       type: string
+ *                       example: iPhone 15 Pro
+ *                     coverImageId:
+ *                       type: integer
+ *                       nullable: true
+ *                       example: 42
+ *                     reviewId:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: The review of this order, if the buyer has left one
  *       400:
  *         description: Invalid order id
  *         content:
@@ -63,14 +86,8 @@ function parseId(raw: string): number | null {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       404:
- *         description: Order not found
+ *         description: Order not found, or not one the caller is party to
  *         content:
  *           application/json:
  *             schema:
@@ -85,31 +102,44 @@ function parseId(raw: string): number | null {
 export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
-    authorize("buyer", "admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
-    const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+    const [row] = await db
+      .select({
+        order: orders,
+        listingTitle: listings.title,
+      })
+      .from(orders)
+      .leftJoin(listings, eq(listings.id, orders.listingId))
+      .where(eq(orders.id, id))
+      .limit(1);
 
-    if (!order) return jsonError("Order not found", 404);
-
-    if (payload.role !== "admin" && order.buyerId !== payload.sub) {
-      return jsonError("Forbidden", 403);
+    // 404 for "not yours", identical to "does not exist" (C2C-SEC-10 AC3). A 403 here
+    // would confirm the order is real, and order ids are sequential.
+    if (!row || !canViewOrder(payload, row.order)) {
+      return jsonError(HIDE_EXISTENCE_MESSAGE, 404);
     }
 
-    const items = await db
-      .select()
-      .from(orderItems)
-      .leftJoin(listings, eq(listings.id, orderItems.listingId))
-      .where(eq(orderItems.orderId, id));
+    const covers = await coverImageIdsFor([row.order.listingId]);
+
+    // Whether this order has been reviewed, so the order page can offer the affordance
+    // once and not again. Sent to both parties: a review of this seller is public the
+    // moment it exists, so there is nothing here the seller cannot already read.
+    const [review] = await db
+      .select({ id: reviews.id })
+      .from(reviews)
+      .where(eq(reviews.orderId, row.order.id))
+      .limit(1);
 
     return jsonOk({
-      ...order,
-      items: items.map((row) => ({
-        ...row.order_items,
-        listingTitle: row.listings?.title ?? `Listing #${row.order_items.listingId}`,
-      })),
+      ...row.order,
+      // The FK is RESTRICT, so the join cannot miss. The fallback is for a database that
+      // has been edited by hand rather than for a case the code can reach.
+      listingTitle: row.listingTitle ?? `Listing #${row.order.listingId}`,
+      coverImageId: covers.get(row.order.listingId) ?? null,
+      reviewId: review?.id ?? null,
     });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
@@ -119,9 +149,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 // ─── PUT /api/orders/[id] ─────────────────────────────────────────────────────
-// Admin – any status change.
-// Seller – can approve/reject orders that contain their listings (only from pending).
-// Body: { status: "pending" | "paid" | "shipped" | "completed" | "cancelled" | "approved" | "rejected" }
+// Which transitions are available is decided by the caller's relationship to this order
+// (`orderActorFor`) and the graph (`canTransition`), not by their role.
 
 /**
  * @swagger
@@ -130,10 +159,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *     tags: [Orders]
  *     summary: Update order status
  *     description: |
- *       Updates the status of an order.
- *       - **Admin**: can change to any status.
- *       - **Seller**: can only approve/reject pending orders that contain their listings.
- *       When a seller approves, their listings in the order are marked as "sold".
+ *       Moves an order through the lifecycle. Which transitions are available depends on
+ *       the caller's relationship to this order, not on their role:
+ *       - **Buyer**: cancel (from pending, confirmed or shipped); mark received (from shipped).
+ *       - **Seller**: confirm or decline (from pending); mark shipped (from confirmed); cancel (from confirmed or shipped).
+ *       - **Admin**: any legal transition.
+ *
+ *       Confirming marks the listing sold. Declining, cancelling or expiring returns it
+ *       to browse. Anyone who is not a party to the order receives 404, not 403.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -153,8 +186,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             properties:
  *               status:
  *                 type: string
- *                 enum: [pending, paid, shipped, completed, cancelled, approved, rejected]
- *                 example: approved
+ *                 enum: [pending, confirmed, shipped, completed, cancelled, declined, expired]
+ *                 example: confirmed
  *     responses:
  *       200:
  *         description: Order updated
@@ -163,7 +196,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/Order'
  *       400:
- *         description: Validation error or invalid status transition
+ *         description: Validation error — malformed body, or a status outside the enum
  *         content:
  *           application/json:
  *             schema:
@@ -174,14 +207,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       403:
- *         description: Forbidden
+ *       404:
+ *         description: Order not found, or not one the caller is party to
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
- *       404:
- *         description: Order not found
+ *       409:
+ *         description: The transition is not legal for this caller, another party moved the order first, or the listing is no longer available to sell
  *         content:
  *           application/json:
  *             schema:
@@ -195,84 +228,82 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  */
 export async function PUT(request: NextRequest, { params }: RouteContext) {
   try {
+    // No role gate. Whether this caller may act is decided by their relationship to this
+    // order, which `authorize()` cannot see.
     const payload = authenticate(request);
-    authorize("admin", "seller")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-    if (!order) return jsonError("Order not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    // Authorisation before state, and 404 rather than 403: "Only pending orders can be
+    // confirmed" would tell a stranger what state someone else's purchase is in, and a
+    // 403 would tell them it exists at all.
+    const actor = order ? orderActorFor(payload, order) : null;
+    if (!order || actor === null) return jsonError(HIDE_EXISTENCE_MESSAGE, 404);
 
-    const { status } = body as Record<string, unknown>;
+    const parsed = await parseRequest(request, UpdateOrderStatusSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const allowed = ["pending", "paid", "shipped", "completed", "cancelled", "approved", "rejected"] as const;
-    if (!status || !allowed.includes(status as (typeof allowed)[number])) {
-      return jsonError(`status must be one of: ${allowed.join(", ")}`, 400);
+    const { status } = parsed.data;
+
+    if (!canTransition(order.status, status, actor)) {
+      // 409, not 400: the body parsed and the status is a real one. What is wrong is the
+      // resource's current state, which is what 409 means -- and the two sibling
+      // conflicts in this handler already say so.
+      return jsonError(`Cannot move an order from ${order.status} to ${status}`, 409);
     }
 
-    // Seller-specific authorization: can only approve/reject their own orders
-    if (payload.role === "seller") {
-      const sellerAllowed = ["approved", "rejected"] as const;
-      if (!sellerAllowed.includes(status as (typeof sellerAllowed)[number])) {
-        return jsonError("Sellers can only approve or reject orders", 403);
+    const nextListingStatus = listingStatusAfter(status);
+
+    let updated;
+    try {
+      updated = await db.transaction(async (tx) => {
+        // Only the sale itself is guarded: a lapsed order must still be declinable or
+        // cancellable, or it would be stranded in a status nobody can leave.
+        const row = await transitionOrder(tx, id, order.status, status, status === "confirmed");
+        if (!row) return null;
+
+        // Same transaction as the status change, per §5.3: an order that confirmed while
+        // its listing stayed reserved is the inconsistency this part exists to prevent.
+        if (nextListingStatus !== null) {
+          const applied = await applyListingSideEffect(tx, order.listingId, nextListingStatus);
+
+          // Selling requires the listing to still be this order's to sell. If it is not
+          // — an admin removed it, or legacy data left it already `sold` under another
+          // order — the compare-and-set on the order succeeded against an assumption
+          // that turned out to be false, and the whole transition has to come back.
+          //
+          // Only this direction. Releasing a listing that is already released is
+          // idempotent, and rolling a cancellation back because the listing had moved on
+          // would strand the order in a status nobody can leave.
+          if (nextListingStatus === "sold" && applied === 0) {
+            throw new ListingNotSellableError();
+          }
+        }
+
+        return row;
+      });
+    } catch (err) {
+      if (err instanceof ListingNotSellableError) {
+        return jsonError("The listing is no longer available to sell", 409);
       }
-
-      if (order.status !== "pending") {
-        return jsonError("Only pending orders can be approved or rejected", 400);
-      }
-
-      // Verify the order contains at least one listing owned by the seller
-      const items = await db
-        .select({ listingId: orderItems.listingId })
-        .from(orderItems)
-        .where(eq(orderItems.orderId, id));
-
-      const sellerListings = await db
-        .select({ id: listings.id })
-        .from(listings)
-        .where(eq(listings.sellerId, payload.sub));
-
-      const sellerListingIds = new Set(sellerListings.map((l) => l.id));
-      const hasSellerItem = items.some((i) => sellerListingIds.has(i.listingId));
-
-      if (!hasSellerItem) {
-        return jsonError("Forbidden: this order does not contain your listings", 403);
-      }
+      throw err;
     }
 
-    const [updated] = await db
-      .update(orders)
-      .set({ status: status as (typeof allowed)[number] })
-      .where(eq(orders.id, id))
-      .returning();
-
-    // When a seller approves an order, mark their listings in that order as "sold"
-    if (status === "approved" && payload.role === "seller") {
-      const items = await db
-        .select({ listingId: orderItems.listingId })
-        .from(orderItems)
-        .where(eq(orderItems.orderId, id));
-
-      const sellerOwnedListings = await db
-        .select({ id: listings.id })
-        .from(listings)
-        .where(eq(listings.sellerId, payload.sub));
-
-      const sellerListingIds = new Set(sellerOwnedListings.map((l) => l.id));
-      const listingIdsToMark = items
-        .map((i) => i.listingId)
-        .filter((lid) => sellerListingIds.has(lid));
-
-      if (listingIdsToMark.length > 0) {
-        await db
-          .update(listings)
-          .set({ status: "sold" })
-          .where(inArray(listings.id, listingIdsToMark));
-      }
+    // Matches `POST /api/orders`'s answer when someone else got there first. The caller
+    // is already established as a party to this order, so a real message leaks nothing.
+    //
+    // Also the answer when `requireUnexpired` refused the confirm: `transitionOrder`'s
+    // compare-and-set returns the same null either way, and a lapsed order is still
+    // `pending`, not "moved" -- a seller retrying a stale confirm has to be told the
+    // reservation lapsed, or the message is simply untrue and they never find out why.
+    if (!updated) {
+      return jsonError(
+        "This order has already moved to another status, or its reservation has lapsed",
+        409,
+      );
     }
 
     return jsonOk(updated);
@@ -292,7 +323,9 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
  *   delete:
  *     tags: [Orders]
  *     summary: Delete an order
- *     description: Permanently removes an order and its items. Admin only.
+ *     description: |
+ *       Permanently removes an order. Admin only. A deleted pending order no longer
+ *       holds its listing, so the listing is returned to browse in the same transaction.
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -343,13 +376,34 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const payload = authenticate(request);
     authorize("admin")(payload);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid order id", 400);
 
     const [order] = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
     if (!order) return jsonError("Order not found", 404);
 
-    await db.delete(orders).where(eq(orders.id, id));
+    await db.transaction(async (tx) => {
+      // `reviews.order_id` is `ON DELETE CASCADE` (migration 0017), so the database would
+      // remove a review of this order on its own — but silently, and without touching the
+      // seller's `review_count`/`rating_sum`. Those two integers are denormalised (D7) and
+      // have no source of truth but this kind of write, so the review is removed
+      // explicitly, first, so its delta can be applied before the cascade would otherwise
+      // do the deletion for free and unaccounted-for. This mirrors
+      // `DELETE /api/reviews/[id]`, which is the route that owns this shape normally.
+      const [removed] = await tx
+        .delete(reviews)
+        .where(eq(reviews.orderId, id))
+        .returning({ rating: reviews.rating, sellerId: reviews.sellerId });
+
+      if (removed) {
+        await applyRatingDelta(tx, removed.sellerId, deleteDelta(removed.rating));
+      }
+
+      await tx.delete(orders).where(eq(orders.id, id));
+      // A deleted pending order was the only thing holding its listing; without this the
+      // listing stays `reserved` until the next sweep, unbuyable and for no reason.
+      await releaseUnheldListings(tx, order.listingId);
+    });
 
     return jsonOk({ message: "Order deleted successfully" });
   } catch (err) {

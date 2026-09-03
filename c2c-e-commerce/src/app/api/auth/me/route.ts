@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { oauthAccounts, users } from "@/db/schema";
 import { sanitizeUser } from "@/lib/auth";
 import { authenticate, AuthError } from "@/lib/middleware";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -59,7 +59,21 @@ export async function GET(request: NextRequest) {
       return jsonError("User not found", 404);
     }
 
-    return jsonOk({ user: sanitizeUser(user) });
+    const links = await db
+      .select({ provider: oauthAccounts.provider })
+      .from(oauthAccounts)
+      .where(eq(oauthAccounts.userId, user.id));
+
+    // `hasPassword` is derived rather than exposing the hash: the settings page needs
+    // to know whether unlinking the last provider would lock the user out (SEC-8 AC7),
+    // and that is the only thing about the password it may learn.
+    return jsonOk({
+      user: {
+        ...sanitizeUser(user),
+        linkedProviders: links.map((l) => l.provider),
+        hasPassword: user.passwordHash !== null,
+      },
+    });
   } catch (err) {
     if (err instanceof AuthError) {
       return jsonError(err.message, err.statusCode);

@@ -1,17 +1,18 @@
 import { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
+import { repairAggregatesBeforeUserDelete } from "@/db/reviews";
 import { users } from "@/db/schema";
+import { isSelfOrAdmin } from "@/lib/authorization";
 import { authenticate, AuthError } from "@/lib/middleware";
-import { sanitizeUser, hashPassword } from "@/lib/auth";
+import { sanitizeUser, hashPassword, verifyPassword } from "@/lib/auth";
 import { jsonOk, jsonError } from "@/lib/response";
+import { parseResourceId } from "@/lib/params";
+import { revokeAllRefreshFamiliesForUser } from "@/lib/refresh-token";
+import { parseRequest, UpdateUserSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function parseId(raw: string): number | null {
-  const n = parseInt(raw, 10);
-  return isNaN(n) ? null : n;
-}
 
 // ─── GET /api/users/[id] ──────────────────────────────────────────────────────
 // Admin or self.
@@ -74,10 +75,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
-    if (payload.role !== "admin" && payload.sub !== id) {
+    if (!isSelfOrAdmin(payload, id)) {
       return jsonError("Forbidden", 403);
     }
 
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   }
 }
 
-// ─── PUT /api/users/[id] ──────────────────────────────────────────────────────
+// ─── PATCH /api/users/[id] ─────────────────────────────────────────────────────
 // Admin or self.
 // Editable fields:
 //   - self:  name, phoneNumber, password
@@ -101,7 +102,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 /**
  * @swagger
  * /api/users/{id}:
- *   put:
+ *   patch:
  *     tags: [Users]
  *     summary: Update a user
  *     description: |
@@ -178,64 +179,92 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  */
-export async function PUT(request: NextRequest, { params }: RouteContext) {
+export async function PATCH(request: NextRequest, { params }: RouteContext) {
   try {
     const payload = authenticate(request);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
-    if (payload.role !== "admin" && payload.sub !== id) {
+    if (!isSelfOrAdmin(payload, id)) {
       return jsonError("Forbidden", 403);
     }
 
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!user) return jsonError("User not found", 404);
 
-    const body: unknown = await request.json();
-    if (!body || typeof body !== "object") return jsonError("Invalid request body", 400);
+    const parsed = await parseRequest(request, UpdateUserSchema);
+    if (!parsed.ok) return jsonError(parsed.error, 400);
 
-    const { name, phoneNumber, password, role } = body as Record<string, unknown>;
+    const { name, phoneNumber, password, currentPassword, role } = parsed.data;
 
     const updates: Partial<typeof users.$inferInsert> = {};
 
-    if (name !== undefined) {
-      if (typeof name !== "string" || !name.trim()) return jsonError("name must be a non-empty string", 400);
-      updates.name = name.trim();
-    }
+    if (name !== undefined) updates.name = name;
+    if (phoneNumber !== undefined) updates.phoneNumber = phoneNumber;
 
-    if (phoneNumber !== undefined) {
-      updates.phoneNumber = phoneNumber === null ? null : String(phoneNumber).trim();
-    }
+    const isSelfChange = payload.sub === id;
 
     if (password !== undefined) {
-      if (typeof password !== "string" || password.length < 8) {
-        return jsonError("password must be at least 8 characters", 400);
+      // A self-change must prove knowledge of what it replaces. An admin reset is exempt:
+      // an admin recovering a compromised account does not know the current password, and
+      // requiring it would break the case the reset exists for. An account with no
+      // password -- OAuth-only -- has nothing to prove against.
+      if (isSelfChange && user.passwordHash !== null) {
+        if (currentPassword === undefined) {
+          return jsonError("currentPassword is required to change your own password", 400);
+        }
+        if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+          return jsonError("Current password is incorrect", 403);
+        }
       }
       updates.passwordHash = await hashPassword(password);
     }
 
     if (role !== undefined) {
+      // The schema permits "admin" because admins may grant it; authorisation,
+      // not validation, is what keeps a self-update from escalating.
       if (payload.role !== "admin") return jsonError("Only admins may change roles", 403);
-      const allowed = ["buyer", "seller", "admin"] as const;
-      if (!allowed.includes(role as (typeof allowed)[number])) {
-        return jsonError(`role must be one of: ${allowed.join(", ")}`, 400);
-      }
-      updates.role = role as (typeof allowed)[number];
+      updates.role = role;
     }
 
-    if (Object.keys(updates).length === 0) return jsonError("No updatable fields provided", 400);
+    // `UpdateUserSchema`'s "at least one field" refinement counts *schema* keys, and
+    // `currentPassword` is the one key that never becomes an update -- it authorises a
+    // password change rather than being one. So `{"currentPassword":"x"}` satisfies the
+    // schema, sets nothing, and used to reach `set({})`, which Drizzle throws on
+    // synchronously: a 500 on a body the client fully controls. A refusal is the honest
+    // answer, and it belongs here rather than in the schema, which cannot see that this
+    // particular field does not map through.
+    if (Object.keys(updates).length === 0) {
+      return jsonError(
+        "No updatable fields provided: currentPassword only authorises a password " +
+          "change, send it together with password",
+        400,
+      );
+    }
 
-    const [updated] = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning();
+    const [updated] = await db.transaction(async (tx) => {
+      const rows = await tx
+        .update(users)
+        .set(updates)
+        .where(eq(users.id, id))
+        .returning();
+
+      // A password change is remediation. Leaving every existing refresh family live
+      // means the credential the person is trying to invalidate still works for another
+      // 30 days -- so the revocation belongs in the same transaction as the new hash,
+      // not beside it where a failure could commit one without the other.
+      if (updates.passwordHash !== undefined) {
+        await revokeAllRefreshFamiliesForUser(tx, id);
+      }
+
+      return rows;
+    });
 
     return jsonOk(sanitizeUser(updated));
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
-    console.error("[PUT /api/users/[id]]", err);
+    console.error("[PATCH /api/users/[id]]", err);
     return jsonError("Internal server error");
   }
 }
@@ -301,13 +330,22 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
 
     if (payload.role !== "admin") return jsonError("Forbidden", 403);
 
-    const id = parseId((await params).id);
+    const id = parseResourceId((await params).id);
     if (!id) return jsonError("Invalid user id", 400);
 
     const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
     if (!user) return jsonError("User not found", 404);
 
-    await db.delete(users).where(eq(users.id, id));
+    await db.transaction(async (tx) => {
+      // Deleting this user cascades to the reviews they wrote, their orders on both
+      // sides, and — through those orders — the reviews anchored to them. Every one of
+      // those rows can be a review of some *other* seller, and the cascade would remove
+      // it without moving that seller's `review_count`/`rating_sum` (D7). Repair those
+      // third parties before the user row goes, in the same transaction, so the cascade
+      // and the compensation commit or roll back together.
+      await repairAggregatesBeforeUserDelete(tx, id);
+      await tx.delete(users).where(eq(users.id, id));
+    });
 
     return jsonOk({ message: "User deleted successfully" });
   } catch (err) {

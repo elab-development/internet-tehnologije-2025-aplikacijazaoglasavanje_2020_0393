@@ -1,14 +1,12 @@
 import { NextRequest } from "next/server";
-import { desc, eq, inArray } from "drizzle-orm";
-import { db } from "@/db";
-import { listings, orderItems, orders, users } from "@/db/schema";
-import { authenticate, authorize, AuthError } from "@/lib/middleware";
-import { jsonOk, jsonError } from "@/lib/response";
+import { count, desc, eq } from "drizzle-orm";
 
-// ─── GET /api/orders/seller ───────────────────────────────────────────────────
-// Returns orders that contain at least one item from the authenticated seller's
-// listings. Each order includes its items (only those belonging to the seller)
-// and the buyer info.
+import { db } from "@/db";
+import { coverImageIdsFor } from "@/db/listing-images";
+import { listings, orders, users } from "@/db/schema";
+import { authenticate, authorize, AuthError } from "@/lib/middleware";
+import { parseBoundedInt } from "@/lib/params";
+import { jsonOk, jsonError } from "@/lib/response";
 
 /**
  * @swagger
@@ -17,54 +15,76 @@ import { jsonOk, jsonError } from "@/lib/response";
  *     tags: [Orders]
  *     summary: List seller's incoming orders
  *     description: |
- *       Returns orders that contain at least one item from the authenticated seller's
- *       listings. Each order includes only the items belonging to the seller, plus
- *       the buyer's name and email. Requires seller or admin role.
+ *       Returns every order whose `seller_id` is the authenticated seller — the seller
+ *       captured at order time, not the listing's current owner. Requires seller or
+ *       admin role.
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *           maximum: 100
+ *         description: Items per page (max 100)
  *     responses:
  *       200:
- *         description: Array of seller orders
+ *         description: Paginated seller orders
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: integer
- *                   buyerId:
- *                     type: integer
- *                   buyerName:
- *                     type: string
- *                   buyerEmail:
- *                     type: string
- *                   totalPrice:
- *                     type: string
- *                   status:
- *                     type: string
- *                   createdAt:
- *                     type: string
- *                     format: date-time
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
  *                   items:
- *                     type: array
- *                     items:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         listingId:
- *                           type: integer
- *                         listingTitle:
- *                           type: string
- *                         listingImageUrl:
- *                           type: string
- *                           nullable: true
- *                         quantity:
- *                           type: integer
- *                         price:
- *                           type: string
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       buyerId:
+ *                         type: integer
+ *                       sellerId:
+ *                         type: integer
+ *                       buyerName:
+ *                         type: string
+ *                       buyerEmail:
+ *                         type: string
+ *                       listingId:
+ *                         type: integer
+ *                       listingTitle:
+ *                         type: string
+ *                       coverImageId:
+ *                         type: integer
+ *                         nullable: true
+ *                       price:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       expiresAt:
+ *                         type: string
+ *                         format: date-time
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                       updatedAt:
+ *                         type: string
+ *                         format: date-time
+ *                 total:
+ *                   type: integer
+ *                 page:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 totalPages:
+ *                   type: integer
  *       401:
  *         description: Missing or invalid token
  *         content:
@@ -88,78 +108,56 @@ export async function GET(request: NextRequest) {
   try {
     const payload = authenticate(request);
     authorize("seller", "admin")(payload);
-    const isAdmin = payload.role === "admin";
-    
-    const sellerListings = await db
-      .select({ id: listings.id })
-      .from(listings)
-      .where(isAdmin ? undefined : eq(listings.sellerId, payload.sub));
 
-    const sellerListingIds = sellerListings.map((l) => l.id);
+    const page = parseBoundedInt(request.nextUrl.searchParams.get("page"), {
+      fallback: 1,
+      max: Number.MAX_SAFE_INTEGER,
+    });
+    const limit = parseBoundedInt(request.nextUrl.searchParams.get("limit"), {
+      fallback: 20,
+      max: 100,
+    });
 
-    if (sellerListingIds.length === 0) {
-      return jsonOk([]);
-    }
+    const scope = payload.role === "admin" ? undefined : eq(orders.sellerId, payload.sub);
 
-    // 2. Find order IDs that contain items from the seller's listings
-    const relevantOrderItems = await db
-      .select({
-        orderId: orderItems.orderId,
-        orderItemId: orderItems.id,
-        listingId: orderItems.listingId,
-        quantity: orderItems.quantity,
-        price: orderItems.price,
-        listingTitle: listings.title,
-        listingImageUrl: listings.imageUrl,
-      })
-      .from(orderItems)
-      .innerJoin(listings, eq(listings.id, orderItems.listingId))
-      .where(inArray(orderItems.listingId, sellerListingIds));
+    const [{ total }] = await db.select({ total: count() }).from(orders).where(scope);
 
-    if (relevantOrderItems.length === 0) {
-      return jsonOk([]);
-    }
-
-    const orderIds = [...new Set(relevantOrderItems.map((i) => i.orderId))];
-
-    // 3. Get the orders with buyer info
-    const orderRows = await db
+    // One query. This used to be three — every listing the seller owns, every order item
+    // touching one of them, then the orders behind those items — plus a reconciliation in
+    // Node. `seller_id` on the order is what D1 bought.
+    const rows = await db
       .select({
         id: orders.id,
         buyerId: orders.buyerId,
-        totalPrice: orders.totalPrice,
+        sellerId: orders.sellerId,
+        listingId: orders.listingId,
+        price: orders.price,
         status: orders.status,
+        expiresAt: orders.expiresAt,
         createdAt: orders.createdAt,
+        updatedAt: orders.updatedAt,
         buyerName: users.name,
         buyerEmail: users.email,
+        listingTitle: listings.title,
       })
       .from(orders)
       .innerJoin(users, eq(users.id, orders.buyerId))
-      .where(inArray(orders.id, orderIds))
-      .orderBy(desc(orders.createdAt));
+      .innerJoin(listings, eq(listings.id, orders.listingId))
+      .where(scope)
+      // `id` breaks the tie: two orders placed in the same millisecond share a
+      // `created_at`, and a dashboard that reshuffles between refreshes is a bug report.
+      .orderBy(desc(orders.createdAt), desc(orders.id))
+      .limit(limit)
+      .offset((page - 1) * limit);
 
-    // 4. Assemble response: each order + its items from this seller
-    const result = orderRows.map((order) => ({
-      id: order.id,
-      buyerId: order.buyerId,
-      buyerName: order.buyerName,
-      buyerEmail: order.buyerEmail,
-      totalPrice: order.totalPrice,
-      status: order.status,
-      createdAt: order.createdAt,
-      items: relevantOrderItems
-        .filter((i) => i.orderId === order.id)
-        .map((i) => ({
-          id: i.orderItemId,
-          listingId: i.listingId,
-          listingTitle: i.listingTitle,
-          listingImageUrl: i.listingImageUrl,
-          quantity: i.quantity,
-          price: i.price,
-        })),
+    const covers = await coverImageIdsFor(rows.map((row) => row.listingId));
+
+    const data = rows.map((row) => ({
+      ...row,
+      coverImageId: covers.get(row.listingId) ?? null,
     }));
 
-    return jsonOk(result);
+    return jsonOk({ data, total, page, limit, totalPages: Math.ceil(total / limit) });
   } catch (err) {
     if (err instanceof AuthError) return jsonError(err.message, err.statusCode);
     console.error("[GET /api/orders/seller]", err);

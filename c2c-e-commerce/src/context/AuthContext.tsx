@@ -1,13 +1,24 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { api } from "@/lib/api";
+
+/**
+ * How long after a successful refresh to schedule the next one.
+ *
+ * Two minutes inside the access token's 15-minute life (JWT_EXPIRES_IN, C2C-SEC-3), so
+ * an idle tab renews before it lapses instead of discovering the expiry through a failed
+ * request the user is waiting on.
+ */
+const PROACTIVE_REFRESH_MS = 13 * 60 * 1000;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -21,7 +32,6 @@ export type AuthUser = {
 
 type AuthContextValue = {
   user: AuthUser | null;
-  token: string | null;
   loading: boolean;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -37,8 +47,9 @@ type RegisterPayload = {
   phoneNumber?: string;
 };
 
+// The endpoints also return a `token` for API clients; the browser client
+// deliberately ignores it and relies on the httpOnly cookie instead.
 type AuthResponse = {
-  token: string;
   user: AuthUser;
 };
 
@@ -50,61 +61,87 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  // Rehydrate current user from localStorage token on mount
+  // The session lives in an httpOnly cookie this code cannot read, so the only
+  // way to know whether one exists is to ask the server. A 401 simply means not
+  // logged in.
   useEffect(() => {
-    const stored = localStorage.getItem("token");
-    if (!stored) {
-      Promise.resolve().then(() => setLoading(false));
-      return;
-    }
-
-    Promise.resolve().then(() => setToken(stored));
-
     api
       .get<{ user: AuthUser }>("/api/auth/me")
       .then(({ user }) => setUser(user))
-      .catch(() => {
-        localStorage.removeItem("token");
-        setToken(null);
-        setUser(null);
-      })
+      .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  // Read by the auth-lost handler below, which must not close over `user`: re-registering
+  // it on every sign-in would leave a window with no handler at all.
+  const hadSession = useRef(false);
+  useEffect(() => {
+    hadSession.current = user !== null;
+  }, [user]);
+
+  // The API client refreshes silently on a 401 (lib/api.ts). This fires only when that
+  // refresh failed too -- the session is genuinely gone, so stop showing a signed-in UI
+  // and send the user somewhere they can do something about it.
+  useEffect(() => {
+    api.onAuthLost(() => {
+      // Unless there was never a session to lose. The bootstrap GET /api/auth/me above
+      // 401s for every anonymous visitor, and a 401 the client cannot refresh away lands
+      // here -- so redirecting unconditionally bounces anyone who is merely logged out
+      // off /, /listings and /register, all of which are deliberately public (SEC-4 AC7).
+      if (!hadSession.current) return;
+
+      hadSession.current = false;
+      setUser(null);
+      router.push("/login");
+    });
+
+    // Without this, an unmounted provider's handler would still hold a stale router
+    // and redirect on behalf of a tree that no longer exists.
+    return () => api.onAuthLost(null);
+  }, [router]);
+
+  // Proactive refresh. Renewing on a timer rather than waiting for a 401 means an idle
+  // tab does not make the user's next click pay for the round trip. Only while signed
+  // in: refreshing for a visitor who never logged in is a guaranteed 401 on a loop.
+  useEffect(() => {
+    if (!user) return;
+
+    const timer = setInterval(() => {
+      // A failure here is not fatal: the token is still valid for another two minutes,
+      // and the 401 path will refresh again if this was a transient blip.
+      api.post("/api/auth/refresh").catch(() => {});
+    }, PROACTIVE_REFRESH_MS);
+
+    return () => clearInterval(timer);
+  }, [user]);
 
   const login = useCallback(async (email: string, password: string) => {
     const data = await api.post<AuthResponse>("/api/auth/login", {
       email,
       password,
     });
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
     setUser(data.user);
   }, []);
 
   const register = useCallback(async (payload: RegisterPayload) => {
     const data = await api.post<AuthResponse>("/api/auth/register", payload);
-    localStorage.setItem("token", data.token);
-    setToken(data.token);
     setUser(data.user);
   }, []);
 
   const logout = useCallback(() => {
-    // Fire-and-forget server-side session cleanup, then always clear client auth.
+    // The server clears the cookie; clear local state regardless so the UI does
+    // not keep showing a signed-in user if that request fails.
     api
       .post("/api/auth/logout")
       .catch(() => {})
-      .finally(() => {
-        localStorage.removeItem("token");
-        setToken(null);
-        setUser(null);
-      });
+      .finally(() => setUser(null));
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isAuthenticated: !!user, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated: !!user, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

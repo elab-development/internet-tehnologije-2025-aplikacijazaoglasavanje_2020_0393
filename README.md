@@ -75,10 +75,33 @@ Izmenite `.env` fajl i postavite vrednosti:
 | Varijabla | Opis | Primer |
 |---|---|---|
 | `POSTGRES_USER` | PostgreSQL korisnik | `postgres` |
-| `POSTGRES_PASSWORD` | PostgreSQL lozinka | `postgres` |
+| `POSTGRES_PASSWORD` | PostgreSQL lozinka. Produkcioni `docker-compose.yml` je zahteva i odbija da krene bez nje; `docker-compose.dev.yml` i dalje ima podrazumevanu vrednost radi lakšeg lokalnog rada | (obavezno u produkciji), `postgres` u dev modu |
 | `POSTGRES_DB` | Ime baze podataka | `c2c_ecommerce` |
 | `DATABASE_URL` | Connection string za bazu | `postgresql://postgres:postgres@db:5432/c2c_ecommerce` |
 | `JWT_SECRET` | Tajni ključ za JWT tokene | (dugačak random string) |
+| `STORAGE_DRIVER` | Provajder za skladištenje fotografija oglasa (`local` piše na disk) | `local` |
+| `STORAGE_DIR` | Direktorijum za `local` provajder — u Dockeru je to mount tačka `uploads_data` volumena. **Van Dockera** koristite obični lokalni direktorijum (npr. `./.uploads`) — `/app/uploads` ne postoji izvan kontejnera | `/app/uploads` |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | OAuth2 kredencijali za Google prijavu | (Google Cloud Console) |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | OAuth2 kredencijali za GitHub prijavu | (GitHub Developer settings) |
+| `OAUTH_REDIRECT_BASE_URL` | Javni origin aplikacije, iz koga se gradi callback URL | `http://localhost:3000` |
+| `OAUTH_PROVIDER` | `mock` pokreće ceo OAuth tok offline, bez kredencijala | (prazno) |
+| `TRUSTED_PROXY_HOPS` | Broj proxy-ja između klijenta i procesa; koristi se za čitanje `X-Forwarded-For`/`X-Real-IP`. Podrazumevano `0` — **bez poverenja ni u jedan proxy, IP-keyed rate limiti se tada u potpunosti preskaču** (vidi napomenu ispod), a ne kolabiraju u jedan zajednički bucket. Railway stavlja aplikaciju iza tačno jednog proxy-ja, pa tamo mora biti `1` | `0` (lokalno), `1` (Railway) |
+
+Ostavljanje `TRUSTED_PROXY_HOPS` nepostavljenim u produkciji nije neutralno — to je
+odluka da se limiti na `/api/auth/login`, `/api/auth/register`, `/api/auth/refresh`
+i OAuth rutama uopšte ne primenjuju, jer aplikacija bez poverenog proxy-ja ne sme
+da veruje `X-Forwarded-For` zaglavlju (napadač bi njime tvrdio bilo koju adresu).
+Deployment iza reverse proxy-ja koji "zaboravi" ovu varijablu izgleda zaštićeno —
+tabela limita ispod i dalje postoji — ali u praksi nije.
+
+Provajder kome nedostaje `CLIENT_ID` **ili** `CLIENT_SECRET` uopšte se ne
+registruje: njegovo dugme se ne prikazuje, a ruta vraća 404 umesto preusmeravanja
+koje bi puklo na drugoj strani.
+
+> **Napomena o PKCE.** Google podržava PKCE (RFC 7636), a GitHub OAuth Apps ga
+> **ne podržavaju** — nemaju `code_challenge` parametar. Zato Google dobija PKCE
+> *i* `state`, dok se GitHub oslanja na `state` i client secret. Zajednička
+> "PKCE za sve" implementacija bi na GitHubu tiho ne radila ništa.
 
 ### 3a. Pokretanje u development modu (sa live reload)
 
@@ -115,6 +138,10 @@ npm install
 ```
 
 Potrebna je lokalna PostgreSQL instanca. Postavite `DATABASE_URL` u `.env` da pokazuje na nju.
+
+`STORAGE_DIR` iz `.env.example` (`./.uploads`) već radi bez izmena — to je obični
+lokalni direktorijum, za razliku od `/app/uploads` koji koriste compose fajlovi i koji
+postoji samo unutar kontejnera.
 
 ```bash
 npm run db:migrate   # Pokreni migracije
@@ -174,8 +201,68 @@ npm run db:studio    # Drizzle Studio (GUI)
 |---|---|---|
 | POST | `/api/auth/register` | Registracija novog korisnika |
 | POST | `/api/auth/login` | Prijava, vraća JWT token |
-| POST | `/api/auth/logout` | Odjava |
+| POST | `/api/auth/logout` | Odjava, poništava celu familiju refresh tokena |
+| POST | `/api/auth/refresh` | Rotira refresh token i izdaje novi access token |
 | GET | `/api/auth/me` | Trenutni korisnik (zahteva token) |
+| GET | `/api/auth/oauth/{provider}` | Pokreće OAuth2 prijavu (`google` ili `github`) |
+| GET | `/api/auth/oauth/{provider}/callback` | Callback provajdera |
+
+## Bezbednost
+
+Detaljna dokumentacija:
+
+- [`docs/security/threat-model.md`](docs/security/threat-model.md) — model pretnji:
+  devet pretnji, mitigacija za svaku, i test koji je dokazuje. Sadrži i sekvencne
+  dijagrame za authorization-code + PKCE tok i za rotaciju refresh tokena.
+- [`docs/security/rbac-matrix.md`](docs/security/rbac-matrix.md) — matrica pristupa:
+  svaka ruta × uloga × pravilo vlasništva.
+
+Ukratko, šta je implementirano:
+
+| Kontrola | Gde |
+|---|---|
+| Access token 15 min + rotirajući refresh token, oba u `HttpOnly` kolačićima | `src/lib/refresh-token.ts` |
+| Detekcija ponovne upotrebe refresh tokena (poništava celu familiju) | isto |
+| OAuth2 authorization code, PKCE za Google | `src/lib/oauth/` |
+| Provera vlasništva nad resursom, ne samo uloge | `src/lib/authorization.ts` |
+| Rate limiting | `src/lib/rate-limit.ts` |
+| Zaštita od open redirect-a | `src/lib/oauth/return-to.ts` |
+
+> **Napomena o PKCE.** GitHub OAuth Apps ne podržavaju PKCE. Zajednička implementacija
+> za oba provajdera bi na GitHubu tiho ne radila ništa, pa je razlika eksplicitna u
+> interfejsu (`supportsPkce`) i pokrivena testovima u oba smera.
+
+### Rate limiting
+
+Svaki limit je *sliding window* u memoriji procesa (`src/lib/rate-limit.ts`).
+Blokiran odgovor nosi `Retry-After`, `X-RateLimit-Limit` i `X-RateLimit-Remaining`.
+
+| Endpoint | Limit | Prozor | Ključ |
+|---|---|---|---|
+| `POST /api/auth/login` | 10 | 15 min | IP |
+| `POST /api/auth/register` | 10 | 60 min | IP |
+| `POST /api/auth/refresh` | 30 | 5 min | IP |
+| `POST /api/auth/oauth/link` | 10 | 15 min | IP |
+| `GET /api/auth/oauth/{provider}` | 20 | 5 min | IP |
+| `GET /api/auth/oauth/{provider}/callback` | 20 | 5 min | IP |
+| `POST /api/listings/generate-description` | 10 | 60 min | **user id** |
+
+Generisanje opisa se ključa po **korisniku**, ne po IP adresi: endpoint je
+autentifikovan, pa kvota pripada nalogu. Ključanje po IP-u bi kaznilo sve iza
+jednog NAT-a, a jednom korisniku bi dozvolilo da rotira adrese.
+
+Refresh limit je namerno labav. Single-flight na klijentu (SEC-4) znači jedan
+refresh po isteku tokena, ali nekoliko tabova otvorenih istovremeno i dalje pravi
+mali burst — gušenje toga bi pokvarilo oporavak sesije koji limit treba da štiti.
+
+> **Ograničenje.** Limiter je in-memory i po instanci. Na više instanci svaka drži
+> svoje brojače, pa je efektivni limit `N × limit`. Deployment je jedna Railway
+> instanca, pa je to prihvaćeno; Redis varijanta je odložena (§6 backlog-a).
+
+Sesija koristi kratkotrajni access token (15 minuta) u `auth_token` httpOnly
+kolačiću i rotirajući refresh token u `refresh_token` kolačiću ograničenom na
+`/api/auth`. Refresh token je jednokratan: ponovno slanje već rotiranog tokena
+tretira se kao krađa i poništava celu familiju.
 
 ### Kategorije
 
@@ -260,6 +347,8 @@ Aplikacija je postavljena na **Railway** platformu.
    - `DATABASE_URL` — kopirajte iz PostgreSQL servisa
    - `JWT_SECRET` — dugačak random string
    - `NODE_ENV` — `production`
+   - `TRUSTED_PROXY_HOPS` — `1` (Railway je jedan proxy hop; bez ovoga IP-keyed
+     rate limiti se tiho preskaču, vidi napomenu u sekciji Environment varijabli)
 6. (Opciono) Kopirajte **Deploy Webhook URL** u GitHub Secrets kao `RAILWAY_DEPLOY_WEBHOOK`
 
 <!-- ### Produkcioni URL
