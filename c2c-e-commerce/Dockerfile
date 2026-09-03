@@ -71,6 +71,21 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts         ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle         ./drizzle
 COPY --from=builder --chown=nextjs:nodejs /app/src/db/migrate.ts ./src/db/migrate.ts
 
+# The seed, for populating a fresh deployment with demo data (`npm run db:seed` over
+# `railway ssh`). It has to run *inside* this container rather than from a laptop: the
+# seed stores listing photos through the same StorageProvider a real upload uses, so the
+# files must land on the mounted STORAGE_DIR volume. Seeded from outside, every image row
+# would point at a key that exists on no disk the server can see.
+#
+# Only what seed.ts actually reaches for -- it opens its own pool rather than importing
+# @/db, and src/lib/storage.ts pulls in nothing but Node builtins. tsconfig.json comes
+# along because tsx resolves the `@/*` path alias through it.
+COPY --from=builder --chown=nextjs:nodejs /app/src/db/seed.ts     ./src/db/seed.ts
+COPY --from=builder --chown=nextjs:nodejs /app/src/db/seed-assets ./src/db/seed-assets
+COPY --from=builder --chown=nextjs:nodejs /app/src/db/schema      ./src/db/schema
+COPY --from=builder --chown=nextjs:nodejs /app/src/lib/storage.ts ./src/lib/storage.ts
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json      ./tsconfig.json
+
 # Production dependencies only, so migrate.ts (via tsx) can still resolve drizzle-orm
 # and pg without dragging typescript, drizzle-kit and babel into the runtime image.
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules  ./node_modules
