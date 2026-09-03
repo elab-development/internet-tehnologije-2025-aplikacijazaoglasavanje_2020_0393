@@ -66,25 +66,26 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static    ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public          ./public
 
-# Copy migration script and SQL files (used by railway.toml preDeployCommand)
+# Copy migration and seed sources plus the SQL files. railway.toml's preDeployCommand
+# runs src/db/migrate.ts; the seed is run by hand over `railway ssh` to populate a fresh
+# deployment.
+#
+# The seed has to run inside this container rather than from a laptop: it stores listing
+# photos through the same StorageProvider a real upload uses, so the files must land on
+# the volume mounted at STORAGE_DIR. Seeded from outside, every image row would point at
+# a storage key that exists on no disk the server can see.
+#
+# Whole directories rather than named files. Cherry-picking seed.ts, schema/ and
+# storage.ts looked minimal but was wrong -- schema/users.ts imports ../users, and
+# schema/listings.ts and orders.ts reach for @/lib/ai/embeddings and @/lib/order-lifecycle.
+# Nothing under src/db or src/lib imports outside those two trees except from @/test, and
+# only test files do that, so this pair is the closure. It is 915 KB of source text.
 COPY --from=builder --chown=nextjs:nodejs /app/scripts         ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/drizzle         ./drizzle
-COPY --from=builder --chown=nextjs:nodejs /app/src/db/migrate.ts ./src/db/migrate.ts
-
-# The seed, for populating a fresh deployment with demo data (`npm run db:seed` over
-# `railway ssh`). It has to run *inside* this container rather than from a laptop: the
-# seed stores listing photos through the same StorageProvider a real upload uses, so the
-# files must land on the mounted STORAGE_DIR volume. Seeded from outside, every image row
-# would point at a key that exists on no disk the server can see.
-#
-# Only what seed.ts actually reaches for -- it opens its own pool rather than importing
-# @/db, and src/lib/storage.ts pulls in nothing but Node builtins. tsconfig.json comes
-# along because tsx resolves the `@/*` path alias through it.
-COPY --from=builder --chown=nextjs:nodejs /app/src/db/seed.ts     ./src/db/seed.ts
-COPY --from=builder --chown=nextjs:nodejs /app/src/db/seed-assets ./src/db/seed-assets
-COPY --from=builder --chown=nextjs:nodejs /app/src/db/schema      ./src/db/schema
-COPY --from=builder --chown=nextjs:nodejs /app/src/lib/storage.ts ./src/lib/storage.ts
-COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json      ./tsconfig.json
+COPY --from=builder --chown=nextjs:nodejs /app/src/db          ./src/db
+COPY --from=builder --chown=nextjs:nodejs /app/src/lib         ./src/lib
+# tsx resolves the `@/*` path alias through tsconfig.json.
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json   ./tsconfig.json
 
 # Production dependencies only, so migrate.ts (via tsx) can still resolve drizzle-orm
 # and pg without dragging typescript, drizzle-kit and babel into the runtime image.
