@@ -138,10 +138,17 @@ describe("C2C-AI-3 — re-runnability", () => {
 });
 
 describe("C2C-AI-3 — the seed still works", () => {
-  it("AC5: db:seed succeeds after migrating and leaves every embedding NULL", async () => {
+  it("AC5: db:seed succeeds after migrating, and embeds every listing", async () => {
     execFileSync("npx", ["tsx", "src/db/seed.ts"], {
       cwd: APP_ROOT,
-      env: { ...process.env, DATABASE_URL: await getTestDatabaseUrl() },
+      // Pinned rather than inherited. The seed now calls the embedding provider, and
+      // `local` would pull the model down inside the integration job; NODE_ENV happens to
+      // reach the subprocess as "test" today, but nothing here should depend on that.
+      env: {
+        ...process.env,
+        DATABASE_URL: await getTestDatabaseUrl(),
+        EMBEDDING_PROVIDER: "mock",
+      },
       encoding: "utf8",
       timeout: 120_000,
       stdio: ["ignore", "pipe", "pipe"],
@@ -151,11 +158,33 @@ describe("C2C-AI-3 — the seed still works", () => {
     const total = await pool.query("SELECT count(*)::int AS n FROM listings");
     expect(total.rows[0].n).toBeGreaterThan(0);
 
+    // AI-3 AC5 asks that the seed still *succeed* against a pgvector-migrated database;
+    // that is what the execFileSync above proves and it is unchanged. The criterion also
+    // recorded that embeddings came out NULL, and AI-3's plan marked it "nothing to
+    // implement" on that basis -- a description of the seed as it stood, not a rule that
+    // it must stay that way.
+    //
+    // It did have to change. Leaving the vectors NULL meant a freshly seeded database had
+    // no semantic search at all: that mode excludes rows without a vector, so it returned
+    // nothing for every query while hybrid quietly fell back to keyword-only. The backfill
+    // remains the safety net for rows whose embedding failed; it is no longer the only way
+    // a seeded row ever gets one.
     const embedded = await pool.query(
       "SELECT count(*)::int AS n FROM listings WHERE embedding IS NOT NULL",
     );
-    // AI-4's backfill is what fills these in; the seed must not pretend to.
-    expect(embedded.rows[0].n).toBe(0);
+    expect(embedded.rows[0].n).toBe(total.rows[0].n);
+
+    const widths = await pool.query(
+      "SELECT DISTINCT vector_dims(embedding) AS d FROM listings WHERE embedding IS NOT NULL",
+    );
+    expect(widths.rows.map((r) => r.d)).toEqual([EMBEDDING_DIMENSIONS]);
+
+    // Distinct rows must not share a vector: a batch mis-sliced by one would still be
+    // non-NULL and the right width, and only the *values* would give it away.
+    const distinct = await pool.query(
+      "SELECT count(DISTINCT embedding::text)::int AS n FROM listings WHERE embedding IS NOT NULL",
+    );
+    expect(distinct.rows[0].n).toBe(total.rows[0].n);
   }, 180_000);
 
   it("AC5: a seeded row accepts an embedding of the right width", async () => {

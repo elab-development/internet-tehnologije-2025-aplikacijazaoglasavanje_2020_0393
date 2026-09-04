@@ -8,7 +8,13 @@
  */
 import { describe, expect, it } from "vitest";
 
-import { buildEmbeddingText, needsReembedding } from "./listing-embedding";
+import { EMBEDDING_DIMENSIONS } from "./embeddings";
+import {
+  buildEmbeddingText,
+  computeListingEmbedding,
+  computeListingEmbeddings,
+  needsReembedding,
+} from "./listing-embedding";
 
 describe("C2C-AI-4 — buildEmbeddingText", () => {
   it("joins the title and description with a blank line", () => {
@@ -97,5 +103,60 @@ describe("C2C-AI-4 — needsReembedding", () => {
     // buildEmbeddingText trims, so the embedded text would be identical — re-embedding
     // would burn time to store the same vector.
     expect(needsReembedding(current, { title: "  Mountain bike  " })).toBe(false);
+  });
+});
+
+describe("C2C-AI-4 — computeListingEmbeddings (batch)", () => {
+  it("returns one outcome per listing, in the order given", async () => {
+    const outcomes = await computeListingEmbeddings([
+      { title: "Mountain bike", description: "Rides well." },
+      { title: "Espresso machine", description: "Makes cappuccino." },
+    ]);
+
+    expect(outcomes).toHaveLength(2);
+    expect(outcomes.map((o) => o.status)).toEqual(["embedded", "embedded"]);
+  });
+
+  it("gives each listing its own vector rather than repeating one", async () => {
+    const [bike, coffee] = await computeListingEmbeddings([
+      { title: "Mountain bike", description: "Rides well." },
+      { title: "Espresso machine", description: "Makes cappuccino." },
+    ]);
+
+    expect(bike.status).toBe("embedded");
+    expect(coffee.status).toBe("embedded");
+    if (bike.status !== "embedded" || coffee.status !== "embedded") return;
+    expect(bike.embedding).toHaveLength(EMBEDDING_DIMENSIONS);
+    expect(bike.embedding).not.toEqual(coffee.embedding);
+  });
+
+  it("matches computeListingEmbedding, so a seeded row and a written one agree", async () => {
+    const listing = { title: "Mountain bike", description: "Rides well." };
+
+    const [batched] = await computeListingEmbeddings([listing]);
+    const single = await computeListingEmbedding(listing);
+
+    expect(batched).toEqual(single);
+  });
+
+  it("AC7: an unembeddable listing is reported empty without shifting the others", async () => {
+    const outcomes = await computeListingEmbeddings([
+      { title: "Mountain bike", description: "Rides well." },
+      { title: "   ", description: "  " },
+      { title: "Espresso machine", description: "Makes cappuccino." },
+    ]);
+
+    expect(outcomes.map((o) => o.status)).toEqual(["embedded", "empty", "embedded"]);
+
+    // The alignment is the point: index 2 must hold Espresso's own vector, not the one
+    // the blank row would have displaced it by if the empties were filtered out.
+    const [espresso] = await computeListingEmbeddings([
+      { title: "Espresso machine", description: "Makes cappuccino." },
+    ]);
+    expect(outcomes[2]).toEqual(espresso);
+  });
+
+  it("returns no outcomes for no listings, without calling the model", async () => {
+    expect(await computeListingEmbeddings([])).toEqual([]);
   });
 });
