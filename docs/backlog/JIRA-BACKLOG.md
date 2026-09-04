@@ -405,7 +405,10 @@ deployment chapter.
 2. **Given** migrations have run, **when** the `listings` table is inspected, **then** `embedding` exists with type `vector(384)` and is nullable, and `embedding_updated_at` exists.
 3. **Given** migrations have run, **when** `\d listings` is inspected, **then** `listings_embedding_hnsw_idx` exists and uses `hnsw` with `vector_cosine_ops`.
 4. **Given** migrations are applied twice to the same database, **then** the second run is a no-op and does not error.
-5. **Given** the existing seed data, **when** `npm run db:seed` runs after migrating, **then** it still succeeds with `embedding` left `NULL`.
+5. **Given** the existing seed data, **when** `npm run db:seed` runs after migrating, **then** it still succeeds.
+   *(Superseded in part: the criterion originally read "with `embedding` left `NULL`", describing the seed as it
+   stood at AI-3. The seed now embeds as it inserts — leaving the vectors NULL meant a freshly seeded database
+   had no semantic search at all. The "still succeeds" requirement is unchanged and still tested.)*
 6. **Given** `docker compose -f docker-compose.dev.yml up`, **then** the `db` service reports healthy and the app connects, with no manual step needed to install the extension.
 7. **Given** the deployed Railway environment, **when** the migration job runs, **then** AC1 holds there too.
 

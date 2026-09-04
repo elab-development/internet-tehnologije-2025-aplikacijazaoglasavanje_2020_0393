@@ -85,3 +85,47 @@ export async function computeListingEmbedding(
     return { status: "failed", error };
   }
 }
+
+/**
+ * Computes vectors for many listings in one model call.
+ *
+ * **Never throws**, for the same reason `computeListingEmbedding` does not: a bulk write
+ * must not be lost because the model was unavailable. A failed batch yields `failed` for
+ * every embeddable row, and the rows are still written — keyword-searchable, and waiting
+ * for `db:backfill-embeddings` to fill the vector in.
+ *
+ * The returned array is aligned with the input by index, including the entries that had
+ * nothing to embed. Filtering those out and zipping the vectors back on would silently
+ * shift every later listing onto its neighbour's vector — a corruption no test of the
+ * *count* would catch, and nothing downstream would reveal.
+ */
+export async function computeListingEmbeddings(
+  listings: EmbeddableListing[],
+): Promise<EmbeddingOutcome[]> {
+  // AC7: a listing with no text is `empty`, and its text never reaches the model.
+  const outcomes: EmbeddingOutcome[] = listings.map(() => ({ status: "empty" }));
+
+  const embeddable: { index: number; text: string }[] = [];
+  listings.forEach((listing, index) => {
+    const text = buildEmbeddingText(listing);
+    if (text) embeddable.push({ index, text });
+  });
+
+  if (embeddable.length === 0) return outcomes;
+
+  try {
+    const vectors = await getEmbeddingProvider().embedBatch(
+      embeddable.map((entry) => entry.text),
+    );
+    embeddable.forEach((entry, i) => {
+      outcomes[entry.index] = { status: "embedded", embedding: vectors[i] };
+    });
+  } catch (error) {
+    // The caller logs; only it knows which listings these were.
+    for (const entry of embeddable) {
+      outcomes[entry.index] = { status: "failed", error };
+    }
+  }
+
+  return outcomes;
+}

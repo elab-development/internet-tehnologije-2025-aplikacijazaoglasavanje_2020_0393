@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import * as dotenv from "dotenv";
 import * as path from "path";
 import { readFile } from "node:fs/promises";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, type SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import sharp from "sharp";
 
@@ -11,6 +11,7 @@ import { users } from "./schema/users";
 import { categories } from "./schema/categories";
 import { listings } from "./schema/listings";
 import { listingImages } from "./schema";
+import { computeListingEmbeddings } from "@/lib/ai/listing-embedding";
 import { getStorageProvider } from "@/lib/storage";
 
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
@@ -182,12 +183,46 @@ async function seed() {
     },
   ];
 
+  // Embedded here rather than left to db:backfill-embeddings, so a freshly seeded
+  // database has working semantic search immediately. Seeding through the same helper the
+  // write path uses is what keeps a seeded row and an uploaded one in the same vector
+  // space -- a seed that embedded its own way would rank against the real listings subtly
+  // wrongly, and nothing downstream would reveal it.
+  //
+  // One batch call rather than six: AI-2 measured embedBatch at 2.4x a sequential loop.
+  const outcomes = await computeListingEmbeddings(listingData);
+
+  // `embeddingUpdatedAt` is Postgres's `now()`, not Node's clock, so that it cannot land
+  // behind the row's own `updated_at` and mark every seeded listing stale on arrival.
+  type SeedListing = (typeof listingData)[number] & {
+    embedding?: number[];
+    embeddingUpdatedAt?: SQL;
+  };
+
+  const listingValues: SeedListing[] = listingData.map((listing, i) => {
+    const outcome = outcomes[i];
+    if (outcome.status !== "embedded") return listing;
+    return { ...listing, embedding: outcome.embedding, embeddingUpdatedAt: sql`now()` };
+  });
+
   const insertedListings = await db
     .insert(listings)
-    .values(listingData)
+    .values(listingValues)
     .returning();
 
+  const embedded = outcomes.filter((outcome) => outcome.status === "embedded").length;
   console.log(`  ✔ Listings created: ${insertedListings.length} items`);
+
+  if (embedded === outcomes.length) {
+    console.log(`  ✔ Listing embeddings computed: ${embedded}`);
+  } else {
+    // Not fatal: the listings exist and are keyword-searchable. Semantic search stays
+    // dark for the missing rows until the backfill runs, so say so plainly.
+    console.warn(
+      `  ⚠ Listing embeddings computed: ${embedded}/${outcomes.length} — ` +
+        `run \`npm run db:backfill-embeddings\` to fill the rest`,
+    );
+  }
 
   // ─── Photos ───────────────────────────────────────────────────────────────
   // Seeded photos go through the same StorageProvider as a real upload, so seeded data
