@@ -65,7 +65,7 @@ export default function ListingGallery({ images, title }: ListingGalleryProps) {
       <img
         src={`/api/images/${displayImageId}`}
         alt={title}
-        className="w-full rounded-none object-cover max-h-80 border border-rule bg-inset"
+        className="w-full rounded-none object-scale-down max-h-80 border border-rule bg-inset"
       />
       {images.length > 1 && (
         <div className="flex flex-wrap gap-2">
