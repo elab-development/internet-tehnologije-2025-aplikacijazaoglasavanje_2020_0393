@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
 import { getLlmProvider, LlmError } from "@/lib/ai/llm";
-import { buildDescriptionPrompt } from "@/lib/ai/prompts";
+import { buildDescriptionPrompt, trimToWordBudget } from "@/lib/ai/prompts";
 import { authenticate, authorize, AuthError } from "@/lib/middleware";
 import { AI_RATE_LIMIT, rateLimit, rateLimitHeaders } from "@/lib/rate-limit";
 import { jsonError, jsonOk } from "@/lib/response";
@@ -155,7 +155,10 @@ export async function POST(request: NextRequest) {
       maxTokens: MAX_TOKENS,
     });
 
-    const description = completion.trim().slice(0, MAX_DESCRIPTION_CHARS);
+    // Word budget first, character cap second. The prompt asks for at most 120 words, and
+    // the model overshoots it often enough (see trimToWordBudget) that the promise has to
+    // be kept here; the character cap then only guards against a text with no sentences.
+    const description = trimToWordBudget(completion).slice(0, MAX_DESCRIPTION_CHARS);
     if (!description) {
       // A 200 carrying an empty description would look like success to the form in AI-6.
       throw new LlmError("model returned no usable text", { kind: "malformed" });

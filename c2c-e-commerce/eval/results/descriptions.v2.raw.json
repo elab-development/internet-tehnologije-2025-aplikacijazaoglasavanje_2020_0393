@@ -1,0 +1,957 @@
+{
+  "model": "qwen/qwen3.8-27b",
+  "promptVersion": "v2",
+  "temperature": 0.5,
+  "maxTokens": 400,
+  "language": "en",
+  "repeats": 2,
+  "generatedAt": "2026-09-13T02:26:43.228Z",
+  "samples": [
+    {
+      "id": "d01",
+      "repeat": 1,
+      "input": {
+        "title": "iPhone 13, 128 GB, unlocked",
+        "keywords": [
+          "battery 89%",
+          "no scratches",
+          "charging cable"
+        ],
+        "categoryName": "Smartphones"
+      },
+      "raw": "This unlocked iPhone 13 features 128 GB of storage capacity. The device is in excellent physical condition with no scratches visible on the exterior. The battery health currently stands at 89 percent. A charging cable is included in the sale. The phone is ready for immediate use with any carrier. No additional accessories are listed beyond the cable.",
+      "description": "This unlocked iPhone 13 features 128 GB of storage capacity. The device is in excellent physical condition with no scratches visible on the exterior. The battery health currently stands at 89 percent. A charging cable is included in the sale. The phone is ready for immediate use with any carrier. No additional accessories are listed beyond the cable.",
+      "trimmed": false,
+      "ms": 717,
+      "words": 58,
+      "wordsAfterTrim": 58,
+      "passed": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "length": "58 words"
+      }
+    },
+    {
+      "id": "d02",
+      "repeat": 1,
+      "input": {
+        "title": "ThinkPad T480 business laptop",
+        "keywords": [
+          "i5",
+          "16 GB RAM",
+          "256 GB SSD"
+        ],
+        "categoryName": "Laptops"
+      },
+      "raw": "This ThinkPad T480 business laptop is available for sale. It features an Intel Core i5 processor to handle daily computing tasks. The system includes 16 GB of RAM, providing ample memory for multitasking and running multiple applications simultaneously. Storage is managed by a 256 GB SSD, which offers fast boot times and quick file access. The device is configured as a standard business machine suitable for office work. All listed specifications reflect the current hardware setup of the unit.",
+      "description": "This ThinkPad T480 business laptop is available for sale. It features an Intel Core i5 processor to handle daily computing tasks. The system includes 16 GB of RAM, providing ample memory for multitasking and running multiple applications simultaneously. Storage is managed by a 256 GB SSD, which offers fast boot times and quick file access. The device is configured as a standard business machine suitable for office work. All listed specifications reflect the current hardware setup of the unit.",
+      "trimmed": false,
+      "ms": 279,
+      "words": 79,
+      "wordsAfterTrim": 79,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d03",
+      "repeat": 1,
+      "input": {
+        "title": "Mountain bike, 26 inch",
+        "keywords": [
+          "aluminium frame",
+          "21 gears",
+          "front suspension"
+        ],
+        "categoryName": "Bicycles"
+      },
+      "raw": "This mountain bike features a 26 inch wheel size suitable for various terrains. The frame is constructed from aluminium, offering a lightweight structure for easier handling. It includes a 21 gear system to provide flexibility across different speeds and inclines. A front suspension fork is installed to absorb shocks from rough surfaces. These components work together to create a functional setup for outdoor riding. The listing focuses on these specific mechanical and structural elements. No additional accessories or condition details are provided in the original information.",
+      "description": "This mountain bike features a 26 inch wheel size suitable for various terrains. The frame is constructed from aluminium, offering a lightweight structure for easier handling. It includes a 21 gear system to provide flexibility across different speeds and inclines. A front suspension fork is installed to absorb shocks from rough surfaces. These components work together to create a functional setup for outdoor riding. The listing focuses on these specific mechanical and structural elements. No additional accessories or condition details are provided in the original information.",
+      "trimmed": false,
+      "ms": 283,
+      "words": 86,
+      "wordsAfterTrim": 86,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d04",
+      "repeat": 1,
+      "input": {
+        "title": "IKEA Kallax shelf, 4x4",
+        "keywords": [
+          "white",
+          "disassembled",
+          "pickup only"
+        ],
+        "categoryName": "Furniture"
+      },
+      "raw": "This listing features a white IKEA Kallax shelf unit configured in a four by four grid. The item is currently disassembled and ready for transport. Pickup only is required as the seller will not ship this furniture piece. The structure provides ample storage space for books, media, or decorative items. All components are included for reassembly at the new location. The white finish remains consistent with the original design. Buyers should arrange their own vehicle for removal.",
+      "description": "This listing features a white IKEA Kallax shelf unit configured in a four by four grid. The item is currently disassembled and ready for transport. Pickup only is required as the seller will not ship this furniture piece. The structure provides ample storage space for books, media, or decorative items. All components are included for reassembly at the new location. The white finish remains consistent with the original design. Buyers should arrange their own vehicle for removal.",
+      "trimmed": false,
+      "ms": 4942,
+      "words": 77,
+      "wordsAfterTrim": 77,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d05",
+      "repeat": 1,
+      "input": {
+        "title": "Winter jacket, men's size L",
+        "keywords": [
+          "down filling",
+          "worn one season"
+        ],
+        "categoryName": "Clothing"
+      },
+      "raw": "This men's winter jacket is available in size L. It features down filling for insulation during cold weather. The item has been worn for one season. The seller provides these specific details regarding the garment's size, filling material, and usage history. No additional condition notes or specifications are included in the listing. The jacket is listed under the clothing category. Buyers can review the provided facts to determine if the item fits their needs.",
+      "description": "This men's winter jacket is available in size L. It features down filling for insulation during cold weather. The item has been worn for one season. The seller provides these specific details regarding the garment's size, filling material, and usage history. No additional condition notes or specifications are included in the listing. The jacket is listed under the clothing category. Buyers can review the provided facts to determine if the item fits their needs.",
+      "trimmed": false,
+      "ms": 1419,
+      "words": 74,
+      "wordsAfterTrim": 74,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d06",
+      "repeat": 1,
+      "input": {
+        "title": "Canon EOS 250D with 18-55 kit lens",
+        "keywords": [
+          "shutter count 4000",
+          "two batteries"
+        ],
+        "categoryName": "Cameras"
+      },
+      "raw": "This listing features a Canon EOS 250D mirrorless camera paired with the standard 18-55 kit lens. The shutter count is currently at 4,000 actuations, indicating relatively light usage. The package includes two batteries to support extended shooting sessions. The camera and lens are presented as a complete set for photography enthusiasts. No other accessories or condition details are specified in the seller's notes. This setup offers a versatile option for both beginners and experienced users.",
+      "description": "This listing features a Canon EOS 250D mirrorless camera paired with the standard 18-55 kit lens. The shutter count is currently at 4,000 actuations, indicating relatively light usage. The package includes two batteries to support extended shooting sessions. The camera and lens are presented as a complete set for photography enthusiasts. No other accessories or condition details are specified in the seller's notes. This setup offers a versatile option for both beginners and experienced users.",
+      "trimmed": false,
+      "ms": 287,
+      "words": 75,
+      "wordsAfterTrim": 75,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d07",
+      "repeat": 1,
+      "input": {
+        "title": "PlayStation 4 Slim 500 GB",
+        "keywords": [
+          "two controllers",
+          "three games"
+        ],
+        "categoryName": "Gaming"
+      },
+      "raw": "This listing features a PlayStation 4 Slim console with 500 GB of internal storage. The seller includes two controllers to allow for immediate multiplayer gaming sessions. Three games are also part of the package, providing a ready-to-play setup for various genres. The console is offered as a complete bundle for those looking to expand their gaming library. All items are listed together in this single transaction. The seller has provided these specific details regarding the hardware and included accessories. No additional information about the condition or specific game titles is available in the provided data.",
+      "description": "This listing features a PlayStation 4 Slim console with 500 GB of internal storage. The seller includes two controllers to allow for immediate multiplayer gaming sessions. Three games are also part of the package, providing a ready-to-play setup for various genres. The console is offered as a complete bundle for those looking to expand their gaming library. All items are listed together in this single transaction. The seller has provided these specific details regarding the hardware and included accessories. No additional information about the condition or specific game titles is available in the provided data.",
+      "trimmed": false,
+      "ms": 325,
+      "words": 95,
+      "wordsAfterTrim": 95,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d08",
+      "repeat": 1,
+      "input": {
+        "title": "Espresso machine with steam wand",
+        "keywords": [
+          "descaled",
+          "no leaks"
+        ],
+        "categoryName": "Home appliances"
+      },
+      "raw": "The espresso machine features a steam wand for frothing milk. It has been descaled to maintain optimal performance. There are no leaks in the unit. The appliance is ready for use in your home. It is a functional piece of kitchen equipment.",
+      "description": "The espresso machine features a steam wand for frothing milk. It has been descaled to maintain optimal performance. There are no leaks in the unit. The appliance is ready for use in your home. It is a functional piece of kitchen equipment.",
+      "trimmed": false,
+      "ms": 556,
+      "words": 42,
+      "wordsAfterTrim": 42,
+      "passed": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "length": "42 words"
+      }
+    },
+    {
+      "id": "d09",
+      "repeat": 1,
+      "input": {
+        "title": "Yamaha acoustic guitar",
+        "keywords": [
+          "gig bag",
+          "new strings"
+        ],
+        "categoryName": "Music"
+      },
+      "raw": "This listing features a Yamaha acoustic guitar, a reliable choice for musicians of various skill levels. The instrument comes with a dedicated gig bag, providing necessary protection during transport and storage. The strings have been replaced with new ones, ensuring a fresh and clear tone right out of the box. This setup is ideal for players who want to start playing immediately without additional setup costs. The guitar is ready for practice sessions, rehearsals, or casual jamming. All items described are included in the sale as detailed above.",
+      "description": "This listing features a Yamaha acoustic guitar, a reliable choice for musicians of various skill levels. The instrument comes with a dedicated gig bag, providing necessary protection during transport and storage. The strings have been replaced with new ones, ensuring a fresh and clear tone right out of the box. This setup is ideal for players who want to start playing immediately without additional setup costs. The guitar is ready for practice sessions, rehearsals, or casual jamming. All items described are included in the sale as detailed above.",
+      "trimmed": false,
+      "ms": 289,
+      "words": 88,
+      "wordsAfterTrim": 88,
+      "passed": {
+        "length": true,
+        "noPrice": false,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": false,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "noPrice": "costs"
+      }
+    },
+    {
+      "id": "d10",
+      "repeat": 1,
+      "input": {
+        "title": "Baby stroller, foldable",
+        "keywords": [
+          "rain cover",
+          "used for one child"
+        ],
+        "categoryName": "Kids"
+      },
+      "raw": "This baby stroller is designed to fold easily for convenient storage and transport. It includes a rain cover to keep your child dry during wet weather. The stroller has been used for one child, so it shows signs of normal wear consistent with its history. All moving parts function as intended, allowing for smooth navigation on various surfaces. The frame remains sturdy, providing a stable base for daily use. This item offers a practical solution for parents needing a reliable piece of gear. The included rain cover adds versatility for different seasonal conditions.",
+      "description": "This baby stroller is designed to fold easily for convenient storage and transport. It includes a rain cover to keep your child dry during wet weather. The stroller has been used for one child, so it shows signs of normal wear consistent with its history. All moving parts function as intended, allowing for smooth navigation on various surfaces. The frame remains sturdy, providing a stable base for daily use. This item offers a practical solution for parents needing a reliable piece of gear. The included rain cover adds versatility for different seasonal conditions.",
+      "trimmed": false,
+      "ms": 316,
+      "words": 93,
+      "wordsAfterTrim": 93,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d11",
+      "repeat": 1,
+      "input": {
+        "title": "Old phone",
+        "keywords": [],
+        "categoryName": "Smartphones"
+      },
+      "raw": "The seller lists an old phone under the smartphones category. The item is described simply as an old phone without further specification. No brand, model, or condition details are provided in the listing. The description remains limited to the basic identification of the device. There are no additional features or specifications mentioned by the seller. The listing focuses solely on the general nature of the item as an older mobile phone.",
+      "description": "The seller lists an old phone under the smartphones category. The item is described simply as an old phone without further specification. No brand, model, or condition details are provided in the listing. The description remains limited to the basic identification of the device. There are no additional features or specifications mentioned by the seller. The listing focuses solely on the general nature of the item as an older mobile phone.",
+      "trimmed": false,
+      "ms": 240,
+      "words": 71,
+      "wordsAfterTrim": 71,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d12",
+      "repeat": 1,
+      "input": {
+        "title": "Golf 5 alloy wheels, set of four",
+        "keywords": [
+          "16 inch",
+          "tyres included"
+        ],
+        "categoryName": "Car parts"
+      },
+      "raw": "This listing features a complete set of four alloy wheels designed for the Volkswagen Golf 5. The wheels measure 16 inches in diameter, providing a standard fitment option for this model. Each wheel comes with a tyre already mounted, ensuring the set is ready for immediate installation. The seller includes all four units, creating a full matching set for the vehicle. These components are sold as a group rather than individually. The listing focuses on the wheel and tyre combination for the specified car model.",
+      "description": "This listing features a complete set of four alloy wheels designed for the Volkswagen Golf 5. The wheels measure 16 inches in diameter, providing a standard fitment option for this model. Each wheel comes with a tyre already mounted, ensuring the set is ready for immediate installation. The seller includes all four units, creating a full matching set for the vehicle. These components are sold as a group rather than individually. The listing focuses on the wheel and tyre combination for the specified car model.",
+      "trimmed": false,
+      "ms": 275,
+      "words": 85,
+      "wordsAfterTrim": 85,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d13",
+      "repeat": 1,
+      "input": {
+        "title": "Gaming PC, RTX 3060",
+        "keywords": [
+          "custom build",
+          "runs everything"
+        ],
+        "categoryName": "Computers"
+      },
+      "raw": "This custom-built gaming PC centers around an RTX 3060 graphics card. The seller notes that the system runs everything, indicating broad compatibility with modern titles. As a hand-assembled machine, it offers a tailored configuration suitable for various gaming needs. The listing highlights the specific GPU model to help buyers assess performance capabilities. No other component details or specifications are provided in the seller's description. This setup is presented as a functional unit ready for immediate use. The focus remains on the core hardware mentioned by the owner.",
+      "description": "This custom-built gaming PC centers around an RTX 3060 graphics card. The seller notes that the system runs everything, indicating broad compatibility with modern titles. As a hand-assembled machine, it offers a tailored configuration suitable for various gaming needs. The listing highlights the specific GPU model to help buyers assess performance capabilities. No other component details or specifications are provided in the seller's description. This setup is presented as a functional unit ready for immediate use. The focus remains on the core hardware mentioned by the owner.",
+      "trimmed": false,
+      "ms": 346,
+      "words": 87,
+      "wordsAfterTrim": 87,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d14",
+      "repeat": 1,
+      "input": {
+        "title": "Kitchen table with four chairs",
+        "keywords": [
+          "solid wood",
+          "quick sale"
+        ],
+        "categoryName": "Furniture"
+      },
+      "raw": "This listing features a kitchen table accompanied by four matching chairs. The set is constructed from solid wood, providing a sturdy and durable foundation for daily dining. It is suitable for various kitchen or dining room settings where reliable seating is required. The seller indicates a motivation for a quick sale, suggesting the items are available for immediate removal. No specific dimensions or condition details were provided by the seller. The furniture is described simply as a complete set ready for its next home.",
+      "description": "This listing features a kitchen table accompanied by four matching chairs. The set is constructed from solid wood, providing a sturdy and durable foundation for daily dining. It is suitable for various kitchen or dining room settings where reliable seating is required. The seller indicates a motivation for a quick sale, suggesting the items are available for immediate removal. No specific dimensions or condition details were provided by the seller. The furniture is described simply as a complete set ready for its next home.",
+      "trimmed": false,
+      "ms": 295,
+      "words": 84,
+      "wordsAfterTrim": 84,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d15",
+      "repeat": 1,
+      "input": {
+        "title": "Textbooks for first year economics",
+        "keywords": [
+          "FON",
+          "complete set",
+          "message me for the list"
+        ],
+        "categoryName": "Books"
+      },
+      "raw": "This listing covers a complete set of textbooks intended for first-year economics students. The collection includes materials specifically associated with the FON curriculum. The full set is available for purchase as a single bundle rather than individually. To ensure you receive the correct titles, please message the seller to request the detailed list of included books. This resource is suitable for those beginning their academic studies in economics. The items are grouped together to provide a comprehensive starting point for the course.",
+      "description": "This listing covers a complete set of textbooks intended for first-year economics students. The collection includes materials specifically associated with the FON curriculum. The full set is available for purchase as a single bundle rather than individually. To ensure you receive the correct titles, please message the seller to request the detailed list of included books. This resource is suitable for those beginning their academic studies in economics. The items are grouped together to provide a comprehensive starting point for the course.",
+      "trimmed": false,
+      "ms": 438,
+      "words": 82,
+      "wordsAfterTrim": 82,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d01",
+      "repeat": 2,
+      "input": {
+        "title": "iPhone 13, 128 GB, unlocked",
+        "keywords": [
+          "battery 89%",
+          "no scratches",
+          "charging cable"
+        ],
+        "categoryName": "Smartphones"
+      },
+      "raw": "This iPhone 13 is unlocked and features 128 GB of storage. The device shows no scratches on its surface. Current battery health stands at 89 percent. A charging cable is included with the sale. The phone is ready for immediate use with any carrier. No additional accessories are provided beyond the cable.",
+      "description": "This iPhone 13 is unlocked and features 128 GB of storage. The device shows no scratches on its surface. Current battery health stands at 89 percent. A charging cable is included with the sale. The phone is ready for immediate use with any carrier. No additional accessories are provided beyond the cable.",
+      "trimmed": false,
+      "ms": 239,
+      "words": 52,
+      "wordsAfterTrim": 52,
+      "passed": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "length": "52 words"
+      }
+    },
+    {
+      "id": "d02",
+      "repeat": 2,
+      "input": {
+        "title": "ThinkPad T480 business laptop",
+        "keywords": [
+          "i5",
+          "16 GB RAM",
+          "256 GB SSD"
+        ],
+        "categoryName": "Laptops"
+      },
+      "raw": "This listing features a ThinkPad T480 business laptop. The machine is powered by an Intel Core i5 processor. It includes 16 GB of RAM to handle multitasking. Storage is provided by a 256 GB SSD. These components make it suitable for general office work. The laptop is ready for immediate use. No additional accessories are included in this sale.",
+      "description": "This listing features a ThinkPad T480 business laptop. The machine is powered by an Intel Core i5 processor. It includes 16 GB of RAM to handle multitasking. Storage is provided by a 256 GB SSD. These components make it suitable for general office work. The laptop is ready for immediate use. No additional accessories are included in this sale.",
+      "trimmed": false,
+      "ms": 1223,
+      "words": 59,
+      "wordsAfterTrim": 59,
+      "passed": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "length": "59 words"
+      }
+    },
+    {
+      "id": "d03",
+      "repeat": 2,
+      "input": {
+        "title": "Mountain bike, 26 inch",
+        "keywords": [
+          "aluminium frame",
+          "21 gears",
+          "front suspension"
+        ],
+        "categoryName": "Bicycles"
+      },
+      "raw": "This mountain bike features a durable aluminium frame designed for outdoor cycling. It is equipped with a 21 gear system, providing versatile options for various terrains and riding conditions. The front suspension helps absorb shocks, contributing to a smoother ride on uneven paths. The wheels measure 26 inches, a standard size for this type of bicycle. These components work together to offer a balanced setup for recreational mountain biking. The listing covers the essential mechanical and structural details provided by the seller.",
+      "description": "This mountain bike features a durable aluminium frame designed for outdoor cycling. It is equipped with a 21 gear system, providing versatile options for various terrains and riding conditions. The front suspension helps absorb shocks, contributing to a smoother ride on uneven paths. The wheels measure 26 inches, a standard size for this type of bicycle. These components work together to offer a balanced setup for recreational mountain biking. The listing covers the essential mechanical and structural details provided by the seller.",
+      "trimmed": false,
+      "ms": 563,
+      "words": 82,
+      "wordsAfterTrim": 82,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d04",
+      "repeat": 2,
+      "input": {
+        "title": "IKEA Kallax shelf, 4x4",
+        "keywords": [
+          "white",
+          "disassembled",
+          "pickup only"
+        ],
+        "categoryName": "Furniture"
+      },
+      "raw": "This listing features an IKEA Kallax shelf unit configured in a 4x4 grid. The piece is finished in white. It has been fully disassembled for transport. The item is available for local pickup only. No shipping or delivery options are offered. Please arrange to collect the unit directly from the seller. All components are included as part of the sale.",
+      "description": "This listing features an IKEA Kallax shelf unit configured in a 4x4 grid. The piece is finished in white. It has been fully disassembled for transport. The item is available for local pickup only. No shipping or delivery options are offered. Please arrange to collect the unit directly from the seller. All components are included as part of the sale.",
+      "trimmed": false,
+      "ms": 245,
+      "words": 60,
+      "wordsAfterTrim": 60,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d05",
+      "repeat": 2,
+      "input": {
+        "title": "Winter jacket, men's size L",
+        "keywords": [
+          "down filling",
+          "worn one season"
+        ],
+        "categoryName": "Clothing"
+      },
+      "raw": "This men's winter jacket is available in size L. It features down filling for warmth during cold weather. The item has been worn for one season. It is listed in the clothing category. The seller describes it as a standard winter coat. No specific brand or model details are provided. The jacket is offered as a used garment. It is suitable for typical winter conditions. The listing focuses on the basic attributes of the outerwear.",
+      "description": "This men's winter jacket is available in size L. It features down filling for warmth during cold weather. The item has been worn for one season. It is listed in the clothing category. The seller describes it as a standard winter coat. No specific brand or model details are provided. The jacket is offered as a used garment. It is suitable for typical winter conditions. The listing focuses on the basic attributes of the outerwear.",
+      "trimmed": false,
+      "ms": 251,
+      "words": 75,
+      "wordsAfterTrim": 75,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d06",
+      "repeat": 2,
+      "input": {
+        "title": "Canon EOS 250D with 18-55 kit lens",
+        "keywords": [
+          "shutter count 4000",
+          "two batteries"
+        ],
+        "categoryName": "Cameras"
+      },
+      "raw": "This listing features a Canon EOS 250D camera body paired with its original 18-55 kit lens. The seller reports the shutter count is currently at 4000 actuations. The package includes two batteries, allowing for extended shooting sessions without needing to wait for a charge. Both the camera and lens are presented as part of this specific bundle. No other accessories or items are mentioned in the provided details. The description reflects only the information supplied by the seller regarding the equipment included.",
+      "description": "This listing features a Canon EOS 250D camera body paired with its original 18-55 kit lens. The seller reports the shutter count is currently at 4000 actuations. The package includes two batteries, allowing for extended shooting sessions without needing to wait for a charge. Both the camera and lens are presented as part of this specific bundle. No other accessories or items are mentioned in the provided details. The description reflects only the information supplied by the seller regarding the equipment included.",
+      "trimmed": false,
+      "ms": 492,
+      "words": 82,
+      "wordsAfterTrim": 82,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d07",
+      "repeat": 2,
+      "input": {
+        "title": "PlayStation 4 Slim 500 GB",
+        "keywords": [
+          "two controllers",
+          "three games"
+        ],
+        "categoryName": "Gaming"
+      },
+      "raw": "This listing features a PlayStation 4 Slim console with 500 GB of storage capacity. The package includes the main unit along with two controllers for shared gaming sessions. Three games are also part of this bundle, providing immediate entertainment options for the buyer. The system is ready for use with the included accessories. All items are grouped together for a complete gaming setup. This combination offers a straightforward entry point into the PlayStation 4 library.",
+      "description": "This listing features a PlayStation 4 Slim console with 500 GB of storage capacity. The package includes the main unit along with two controllers for shared gaming sessions. Three games are also part of this bundle, providing immediate entertainment options for the buyer. The system is ready for use with the included accessories. All items are grouped together for a complete gaming setup. This combination offers a straightforward entry point into the PlayStation 4 library.",
+      "trimmed": false,
+      "ms": 814,
+      "words": 75,
+      "wordsAfterTrim": 75,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d08",
+      "repeat": 2,
+      "input": {
+        "title": "Espresso machine with steam wand",
+        "keywords": [
+          "descaled",
+          "no leaks"
+        ],
+        "categoryName": "Home appliances"
+      },
+      "raw": "This espresso machine features a steam wand for creating microfoam. The unit has been fully descaled to remove mineral buildup. There are no leaks present in the system. It is ready for immediate use in your kitchen. The appliance maintains consistent pressure during brewing. All standard components are included with the sale.",
+      "description": "This espresso machine features a steam wand for creating microfoam. The unit has been fully descaled to remove mineral buildup. There are no leaks present in the system. It is ready for immediate use in your kitchen. The appliance maintains consistent pressure during brewing. All standard components are included with the sale.",
+      "trimmed": false,
+      "ms": 2731,
+      "words": 52,
+      "wordsAfterTrim": 52,
+      "passed": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": false,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {
+        "length": "52 words"
+      }
+    },
+    {
+      "id": "d09",
+      "repeat": 2,
+      "input": {
+        "title": "Yamaha acoustic guitar",
+        "keywords": [
+          "gig bag",
+          "new strings"
+        ],
+        "categoryName": "Music"
+      },
+      "raw": "This listing features a Yamaha acoustic guitar. The instrument is accompanied by a gig bag for convenient transport and storage. It comes equipped with new strings, ensuring a fresh and clear sound from the start. These details reflect the current state of the item as provided by the seller. The guitar is ready for immediate use by the next owner. No additional specifications or condition details are included in the original description.",
+      "description": "This listing features a Yamaha acoustic guitar. The instrument is accompanied by a gig bag for convenient transport and storage. It comes equipped with new strings, ensuring a fresh and clear sound from the start. These details reflect the current state of the item as provided by the seller. The guitar is ready for immediate use by the next owner. No additional specifications or condition details are included in the original description.",
+      "trimmed": false,
+      "ms": 725,
+      "words": 72,
+      "wordsAfterTrim": 72,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d10",
+      "repeat": 2,
+      "input": {
+        "title": "Baby stroller, foldable",
+        "keywords": [
+          "rain cover",
+          "used for one child"
+        ],
+        "categoryName": "Kids"
+      },
+      "raw": "This foldable baby stroller is ready for its next family. It has been used for one child and remains in good condition. A rain cover is included to protect the little one during wet weather. The frame folds easily for compact storage or transport. All wheels are intact and roll smoothly. The fabric shows no significant wear or stains. This practical piece of equipment is suitable for daily walks and errands.",
+      "description": "This foldable baby stroller is ready for its next family. It has been used for one child and remains in good condition. A rain cover is included to protect the little one during wet weather. The frame folds easily for compact storage or transport. All wheels are intact and roll smoothly. The fabric shows no significant wear or stains. This practical piece of equipment is suitable for daily walks and errands.",
+      "trimmed": false,
+      "ms": 761,
+      "words": 71,
+      "wordsAfterTrim": 71,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d11",
+      "repeat": 2,
+      "input": {
+        "title": "Old phone",
+        "keywords": [],
+        "categoryName": "Smartphones"
+      },
+      "raw": "The seller lists an old phone under the smartphones category. The item is described simply as an old phone. No specific brand, model, or technical specifications are provided in the listing details. The condition of the device is not explicitly stated beyond the age implied by the title. There is no information regarding battery life, screen size, or storage capacity. The seller has not included any additional features or accessories with this unit. This listing focuses solely on the basic identification of the device as an older smartphone model.",
+      "description": "The seller lists an old phone under the smartphones category. The item is described simply as an old phone. No specific brand, model, or technical specifications are provided in the listing details. The condition of the device is not explicitly stated beyond the age implied by the title. There is no information regarding battery life, screen size, or storage capacity. The seller has not included any additional features or accessories with this unit. This listing focuses solely on the basic identification of the device as an older smartphone model.",
+      "trimmed": false,
+      "ms": 287,
+      "words": 89,
+      "wordsAfterTrim": 89,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d12",
+      "repeat": 2,
+      "input": {
+        "title": "Golf 5 alloy wheels, set of four",
+        "keywords": [
+          "16 inch",
+          "tyres included"
+        ],
+        "categoryName": "Car parts"
+      },
+      "raw": "This listing features a complete set of four alloy wheels for a Volkswagen Golf 5. Each wheel measures 16 inches in diameter, providing a standard fitment for the vehicle. The tires are included with the rims, so you do not need to purchase separate rubber. This combination offers a ready-to-install upgrade for your car. The set is sold as a group, ensuring all four corners match. These components are suitable for owners looking to replace their current wheel and tire assembly.",
+      "description": "This listing features a complete set of four alloy wheels for a Volkswagen Golf 5. Each wheel measures 16 inches in diameter, providing a standard fitment for the vehicle. The tires are included with the rims, so you do not need to purchase separate rubber. This combination offers a ready-to-install upgrade for your car. The set is sold as a group, ensuring all four corners match. These components are suitable for owners looking to replace their current wheel and tire assembly.",
+      "trimmed": false,
+      "ms": 2755,
+      "words": 81,
+      "wordsAfterTrim": 81,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d13",
+      "repeat": 2,
+      "input": {
+        "title": "Gaming PC, RTX 3060",
+        "keywords": [
+          "custom build",
+          "runs everything"
+        ],
+        "categoryName": "Computers"
+      },
+      "raw": "This custom-built gaming PC is ready for immediate use. The system features an RTX 3060 graphics card as its primary hardware component. It is designed to run a wide variety of modern titles smoothly. The build reflects a personalized approach to assembling the internal components. No specific measurements or additional specifications were provided by the seller. The unit is listed under the computers category for potential buyers. This description covers the stated facts without adding unverified details. The focus remains strictly on the provided information regarding the build and performance.",
+      "description": "This custom-built gaming PC is ready for immediate use. The system features an RTX 3060 graphics card as its primary hardware component. It is designed to run a wide variety of modern titles smoothly. The build reflects a personalized approach to assembling the internal components. No specific measurements or additional specifications were provided by the seller. The unit is listed under the computers category for potential buyers. This description covers the stated facts without adding unverified details. The focus remains strictly on the provided information regarding the build and performance.",
+      "trimmed": false,
+      "ms": 289,
+      "words": 90,
+      "wordsAfterTrim": 90,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d14",
+      "repeat": 2,
+      "input": {
+        "title": "Kitchen table with four chairs",
+        "keywords": [
+          "solid wood",
+          "quick sale"
+        ],
+        "categoryName": "Furniture"
+      },
+      "raw": "This listing features a kitchen table accompanied by four matching chairs. The furniture set is constructed from solid wood, providing a durable and sturdy foundation for daily use. It is currently available for a quick sale, indicating the seller is eager to find a new home for the piece. The table and chairs are offered together as a complete set, making it convenient for those looking to furnish a dining area. The solid wood material ensures the items are built to last, avoiding the fragility often associated with composite materials. This set is suitable for various interior styles, from traditional to modern, thanks to the natural aesthetic of the wood.",
+      "description": "This listing features a kitchen table accompanied by four matching chairs. The furniture set is constructed from solid wood, providing a durable and sturdy foundation for daily use. It is currently available for a quick sale, indicating the seller is eager to find a new home for the piece. The table and chairs are offered together as a complete set, making it convenient for those looking to furnish a dining area. The solid wood material ensures the items are built to last, avoiding the fragility often associated with composite materials. This set is suitable for various interior styles, from traditional to modern, thanks to the natural aesthetic of the wood.",
+      "trimmed": false,
+      "ms": 358,
+      "words": 110,
+      "wordsAfterTrim": 110,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    },
+    {
+      "id": "d15",
+      "repeat": 2,
+      "input": {
+        "title": "Textbooks for first year economics",
+        "keywords": [
+          "FON",
+          "complete set",
+          "message me for the list"
+        ],
+        "categoryName": "Books"
+      },
+      "raw": "This listing offers a complete set of textbooks intended for first year economics students. The collection includes materials from the Faculty of Economics and Business, commonly referred to as FON. These resources are suitable for anyone beginning their academic journey in this field. The seller has compiled the necessary reading into one package for convenience. Specific titles and details are not listed in the description. Interested buyers should send a message to the seller to receive the full list of included books. This arrangement allows for a direct inquiry regarding the specific contents of the set.",
+      "description": "This listing offers a complete set of textbooks intended for first year economics students. The collection includes materials from the Faculty of Economics and Business, commonly referred to as FON. These resources are suitable for anyone beginning their academic journey in this field. The seller has compiled the necessary reading into one package for convenience. Specific titles and details are not listed in the description. Interested buyers should send a message to the seller to receive the full list of included books. This arrangement allows for a direct inquiry regarding the specific contents of the set.",
+      "trimmed": false,
+      "ms": 1880,
+      "words": 96,
+      "wordsAfterTrim": 96,
+      "passed": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "passedAfterTrim": {
+        "length": true,
+        "noPrice": true,
+        "noContact": true,
+        "plainText": true
+      },
+      "evidence": {}
+    }
+  ]
+}
