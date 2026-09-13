@@ -336,6 +336,16 @@ describe("C2C-AI-5 — AC8: defensive truncation", () => {
     expect(body.description!.length).toBe(2000);
   });
 
+  it("a response over the word budget is cut at the last full sentence within 120 words", async () => {
+    const seller = await makeUser({ role: "seller" });
+    // Three 50-word sentences: the first two fit the budget of 120, the third does not.
+    const sentence = Array.from({ length: 50 }, (_, i) => (i === 0 ? "Word" : "w")).join(" ") + ".";
+    control.reply = `${sentence} ${sentence} ${sentence}`;
+
+    const { body } = await generate({ title: "Mountain bike" }, authHeaderFor(seller));
+    expect(body.description).toBe(`${sentence} ${sentence}`);
+  });
+
   it("AC8: a short response is untouched", async () => {
     const seller = await makeUser({ role: "seller" });
     control.reply = "A tidy little description.";

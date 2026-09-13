@@ -11,7 +11,11 @@
  * A thesis reporting "the model produced this" must be able to say which prompt produced
  * it; a template edited in place silently invalidates every earlier result.
  */
-export const DESCRIPTION_PROMPT_VERSION = "v1";
+export const DESCRIPTION_PROMPT_VERSION = "v3";
+
+/** The word budget the prompt states and `trimToWordBudget` enforces. */
+export const MIN_DESCRIPTION_WORDS = 60;
+export const MAX_DESCRIPTION_WORDS = 120;
 
 export type DescriptionPromptInput = {
   title: string;
@@ -23,6 +27,40 @@ export type DescriptionPromptInput = {
 export type BuiltPrompt = { system: string; user: string };
 
 const LANGUAGE_NAME = { en: "English", sr: "Serbian" } as const;
+
+function countWords(text: string): number {
+  const trimmed = text.trim();
+  return trimmed ? trimmed.split(/\s+/).length : 0;
+}
+
+/**
+ * Cuts a description that overran the word budget at the last full sentence that fits.
+ *
+ * Prompt v1 asked for 60–120 words and the model exceeded 120 in 14 of 30 evaluated
+ * generations (eval/results/descriptions.v1.md), always by overshooting, never by falling
+ * short. The prompt was tightened in v2, and this is the guarantee behind it: whatever the
+ * model does, the client receives at most `maxWords`, ending on a sentence rather than
+ * mid-clause the way a `max_tokens` cut would.
+ *
+ * A sentence ends at `.`, `!` or `?` followed by whitespace and a capital letter, or by
+ * the end of the text. Requiring the capital is what keeps "89.5" and "approx. one" from
+ * counting as ends. If not even the first sentence fits, the first `maxWords` words are
+ * kept as-is — an unsentenced cut is still better than an over-length one.
+ */
+export function trimToWordBudget(text: string, maxWords: number = MAX_DESCRIPTION_WORDS): string {
+  const trimmed = text.trim();
+  if (countWords(trimmed) <= maxWords) return trimmed;
+
+  const boundary = /[.!?]["”')\]]?(?=\s+\p{Lu}|\s*$)/gu;
+  let best = "";
+  for (const match of trimmed.matchAll(boundary)) {
+    const candidate = trimmed.slice(0, (match.index ?? 0) + match[0].length);
+    if (countWords(candidate) > maxWords) break;
+    best = candidate;
+  }
+
+  return best || trimmed.split(/\s+/).slice(0, maxWords).join(" ");
+}
 
 /**
  * Builds the system and user messages for a listing description.
@@ -38,7 +76,11 @@ export function buildDescriptionPrompt(input: DescriptionPromptInput): BuiltProm
     `You write product descriptions for a second-hand marketplace. Reply in ${language}.`,
     "",
     "Rules:",
-    "- Between 60 and 120 words.",
+    `- Between ${MIN_DESCRIPTION_WORDS} and ${MAX_DESCRIPTION_WORDS} words, in 5 to 7 sentences; about 90 words is ideal.`,
+    "- Cover every fact the seller gave, each once. If that leaves the text short, add what",
+    "  kind of use or buyer the item suits, or what a buyer may want to check on pickup —",
+    "  never a detail about this particular item that the seller did not state.",
+    "- No sales clichés, no calls to action, no filler.",
     "- Plain text only. No markdown, no headings, no bullet points.",
     "- Describe only what the seller stated. Never invent specifications, measurements,",
     "  condition details, brands or model numbers.",
