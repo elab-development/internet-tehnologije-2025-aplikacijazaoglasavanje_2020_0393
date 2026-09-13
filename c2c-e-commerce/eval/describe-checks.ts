@@ -63,7 +63,7 @@ const MARKUP_PATTERNS: RegExp[] = [
   /^\s*#{1,6}\s/mu,
   /^\s*(?:[-*•]|\d+\.)\s+/mu,
   /\*\*[^*]+\*\*/u,
-  /^["“].*["”]$/su,
+  /^["“][\s\S]*["”]$/u,
 ];
 
 function firstMatch(text: string, patterns: RegExp[]): string | undefined {
